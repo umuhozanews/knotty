@@ -12,8 +12,13 @@ const app = express();
 
 // ─── Security & Parsing ───
 app.use(helmet());
+const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000')
+  .split(',').map(o => o.trim());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: (origin, cb) => {
+    if (!origin || allowedOrigins.some(o => origin.startsWith(o))) return cb(null, true);
+    cb(new Error('Not allowed by CORS'));
+  },
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));

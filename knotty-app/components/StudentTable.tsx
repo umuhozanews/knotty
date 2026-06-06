@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Search, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import { students, Student } from "@/lib/api";
+import { isDemoMode, DEMO_STUDENTS } from "@/lib/demo";
 
 function ScoreBadge({ score, total }: { score: number; total: number }) {
   const pct = (score / total) * 100;
@@ -44,8 +45,14 @@ export default function StudentTable() {
       const res = await students.list({ page, limit, search: query || undefined });
       setData(res.data);
       setTotal(res.pagination.total);
-    } catch (err) {
-      console.error(err);
+    } catch {
+      if (isDemoMode()) {
+        const filtered = DEMO_STUDENTS.filter((s) =>
+          !query || `${s.user.first_name} ${s.user.last_name}`.toLowerCase().includes(query.toLowerCase())
+        );
+        setData(filtered);
+        setTotal(filtered.length);
+      }
     } finally {
       setLoading(false);
     }

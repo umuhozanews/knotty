@@ -2,12 +2,15 @@
 import { useEffect, useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { schools, DashboardStats } from "@/lib/api";
+import { isDemoMode, DEMO_STATS } from "@/lib/demo";
 
 export default function CourseStatistics({ schoolId }: { schoolId: string }) {
   const [data, setData] = useState<DashboardStats | null>(null);
 
   useEffect(() => {
-    schools.stats(schoolId).then((r) => setData(r.data)).catch(console.error);
+    schools.stats(schoolId).then((r) => setData(r.data)).catch(() => {
+      if (isDemoMode()) setData(DEMO_STATS);
+    });
   }, [schoolId]);
 
   const attendancePct = data

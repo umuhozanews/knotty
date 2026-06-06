@@ -4,6 +4,16 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 
+const DEMO_ACCOUNTS = [
+  { email: "admin@knottyschool.rw",       password: "Admin@2024",   role: "ADMIN",      first_name: "School",   last_name: "Admin"  },
+  { email: "teacher@knottyschool.rw",     password: "Staff@2024",   role: "TEACHER",    first_name: "Kagabo",   last_name: "Robert" },
+  { email: "bursar@knottyschool.rw",      password: "Staff@2024",   role: "BURSAR",     first_name: "Nshimiye", last_name: "Paul"   },
+  { email: "nurse@knottyschool.rw",       password: "Staff@2024",   role: "NURSE",      first_name: "Mutoni",   last_name: "Diane"  },
+  { email: "discipline@knottyschool.rw",  password: "Staff@2024",   role: "DISCIPLINE", first_name: "Rugamba",  last_name: "Victor" },
+  { email: "canteen@knottyschool.rw",     password: "Staff@2024",   role: "CANTEEN",    first_name: "Umutoni",  last_name: "Claire" },
+  { email: "hirwa.jean@knotty.rw",        password: "Student@2024", role: "STUDENT",    first_name: "Hirwa",    last_name: "Jean"   },
+];
+
 export default function LoginPage() {
   const { login, user, loading } = useAuth();
   const router = useRouter();
@@ -21,12 +31,32 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     setSubmitting(true);
+
+    // Demo credentials — bypass the backend entirely
+    const demo = DEMO_ACCOUNTS.find((a) => a.email === email && a.password === password);
+    if (demo) {
+      const demoUser = {
+        id: `demo-${demo.role.toLowerCase()}`,
+        role: demo.role,
+        school_id: "demo-school-id",
+        first_name: demo.first_name,
+        last_name: demo.last_name,
+        email: demo.email,
+        profile_photo: null,
+      };
+      localStorage.setItem("knotty_demo", "true");
+      localStorage.setItem("knotty_demo_user", JSON.stringify(demoUser));
+      // Hard reload so AuthContext re-runs and picks up the new localStorage state
+      window.location.replace("/");
+      return;
+    }
+
+    // Real login (only used when backend is running)
     try {
       await login(email, password);
       router.replace("/");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");
-    } finally {
       setSubmitting(false);
     }
   }
@@ -42,7 +72,6 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#f0f2f5] px-4">
       <div className="w-full max-w-sm">
-        {/* Logo */}
         <div className="flex items-center justify-center gap-2 mb-8">
           <div className="w-10 h-10 bg-[#e8f5e9] rounded-xl flex items-center justify-center">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none">

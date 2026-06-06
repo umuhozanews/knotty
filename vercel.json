@@ -1,0 +1,6 @@
+{
+  "buildCommand": "npm --prefix knotty-app install && npm --prefix knotty-app run build",
+  "outputDirectory": "knotty-app/.next",
+  "framework": "nextjs",
+  "installCommand": "npm --prefix knotty-app install"
+}

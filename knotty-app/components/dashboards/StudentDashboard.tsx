@@ -19,7 +19,7 @@ export default function StudentDashboard() {
       materials.list({ page: 1 }),
       myAccount.attendance(1, 30),
     ]).then(([p, m, a]) => {
-      setProfile(p.data as Record<string, unknown>);
+      setProfile(p.data as unknown as Record<string, unknown>);
       setRecentMaterials((m.data as Material[]).slice(0, 4));
       const records = a.data as Array<{ status: string }>;
       const present = records.filter((r) => r.status === "PRESENT" || r.status === "LATE").length;

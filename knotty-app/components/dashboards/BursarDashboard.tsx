@@ -20,7 +20,7 @@ export default function BursarDashboard() {
     Promise.all([
       fees.schoolReport(),
     ]).then(([rep]) => {
-      setSummary(rep.data as { total_collected: number; pending: number; total_students: number });
+      setSummary(rep.data as unknown as { total_collected: number; pending: number; total_students: number });
     }).catch(console.error).finally(() => setLoading(false));
   }, [authLoading]);
 

@@ -12,7 +12,7 @@ export default function MyCardPage() {
 
   useEffect(() => {
     if (authLoading) return;
-    myAccount.profile().then((r) => setProfile(r.data as Record<string, unknown>)).catch(console.error).finally(() => setLoading(false));
+    myAccount.profile().then((r) => setProfile(r.data as unknown as Record<string, unknown>)).catch(console.error).finally(() => setLoading(false));
   }, [authLoading]);
 
   const card = profile?.card as {

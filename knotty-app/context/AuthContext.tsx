@@ -22,11 +22,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const refreshToken = localStorage.getItem("knotty_refresh");
     if (!token && !refreshToken) { setLoading(false); return; }
 
-    auth.me()
-      .then((res) => setUser(res.user))
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("timeout")), 5000)
+    );
+
+    Promise.race([auth.me(), timeout])
+      .then((res) => setUser((res as Awaited<ReturnType<typeof auth.me>>).user))
       .catch(() => {
-        // Token expired — api.ts already attempted refresh automatically inside auth.me().
-        // If it succeeded, user was set; if it failed (redirect happened), clear storage.
         localStorage.removeItem("knotty_token");
         localStorage.removeItem("knotty_refresh");
       })

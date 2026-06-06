@@ -12,6 +12,14 @@ function getRefreshToken(): string | null {
 
 let _refreshing: Promise<string | null> | null = null;
 
+async function safeJson(res: Response): Promise<unknown> {
+  const ct = res.headers.get("content-type") ?? "";
+  if (!ct.includes("application/json")) {
+    throw new Error(`Server returned non-JSON response (HTTP ${res.status}). Is the backend running?`);
+  }
+  return res.json();
+}
+
 async function refreshAccessToken(): Promise<string | null> {
   const refreshToken = getRefreshToken();
   if (!refreshToken) return null;
@@ -21,11 +29,11 @@ async function refreshAccessToken(): Promise<string | null> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken }),
     });
-    const json = await res.json();
+    const json = await safeJson(res) as Record<string, string>;
     if (!res.ok) return null;
     localStorage.setItem("knotty_token", json.accessToken);
     localStorage.setItem("knotty_refresh", json.refreshToken);
-    return json.accessToken as string;
+    return json.accessToken;
   } catch {
     return null;
   }
@@ -69,13 +77,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       ...options,
       headers: buildHeaders(newToken, options.headers),
     });
-    const retryJson = await retry.json();
-    if (!retry.ok) throw new Error(retryJson.message || `Request failed: ${retry.status}`);
+    const retryJson = await safeJson(retry) as Record<string, unknown>;
+    if (!retry.ok) throw new Error((retryJson.message as string) || `Request failed: ${retry.status}`);
     return retryJson as T;
   }
 
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.message || `Request failed: ${res.status}`);
+  const json = await safeJson(res) as Record<string, unknown>;
+  if (!res.ok) throw new Error((json.message as string) || `Request failed: ${res.status}`);
   return json as T;
 }
 
@@ -537,7 +545,7 @@ export const materials = {
       method: "POST",
       headers: { ...(localStorage.getItem("knotty_token") ? { Authorization: `Bearer ${localStorage.getItem("knotty_token")}` } : {}) },
       body: formData,
-    }).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.message); return j as { success: boolean; data: Material }; }),
+    }).then(async (r) => { const j = await safeJson(r) as { success: boolean; data: Material; message?: string }; if (!r.ok) throw new Error(j.message); return j; }),
   remove: (id: string) => request(`/materials/${id}`, { method: "DELETE" }),
 };
 

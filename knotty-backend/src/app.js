@@ -7,6 +7,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const errorHandler = require('./middleware/errorHandler');
 
+const path = require('path');
 const app = express();
 
 // ─── Security & Parsing ───
@@ -37,6 +38,9 @@ app.use(`${API}/teachers`, require('./modules/teachers/routes'));
 app.use(`${API}/structure`, require('./modules/levels/routes'));
 app.use(`${API}/notifications`, require('./modules/notifications/routes'));
 app.use(`${API}/materials`, require('./modules/materials/routes'));
+
+// ─── Static uploads (local dev fallback) ───
+app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
 
 // ─── Health check ───
 app.get('/health', (req, res) => res.json({ status: 'ok', service: 'KNOTTY Backend', timestamp: new Date() }));

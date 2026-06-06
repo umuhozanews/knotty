@@ -1,22 +1,38 @@
+const path = require('path');
+const fs = require('fs');
 const prisma = require('../../config/database');
 const cloudinary = require('../../integrations/cloudinary');
 const { paginate, paginatedResponse } = require('../../utils/helpers');
+
+const CLOUDINARY_CONFIGURED =
+  process.env.CLOUDINARY_CLOUD_NAME &&
+  process.env.CLOUDINARY_CLOUD_NAME !== 'your-cloud-name';
+
+const UPLOADS_DIR = path.join(__dirname, '../../../../uploads/materials');
 
 async function uploadMaterial(schoolId, uploadedBy, { title, description, subject, classId, levelId }, file) {
   let file_url = '';
   let file_name = file.originalname;
 
-  try {
-    const result = await new Promise((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream(
-        { folder: `knotty/${schoolId}/materials`, resource_type: 'auto', use_filename: true },
-        (err, res) => (err ? reject(err) : resolve(res))
-      );
-      stream.end(file.buffer);
-    });
-    file_url = result.secure_url;
-  } catch {
-    throw Object.assign(new Error('File upload failed'), { status: 500 });
+  if (CLOUDINARY_CONFIGURED) {
+    try {
+      const result = await new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { folder: `knotty/${schoolId}/materials`, resource_type: 'auto', use_filename: true },
+          (err, res) => (err ? reject(err) : resolve(res))
+        );
+        stream.end(file.buffer);
+      });
+      file_url = result.secure_url;
+    } catch {
+      throw Object.assign(new Error('File upload failed'), { status: 500 });
+    }
+  } else {
+    // Local disk fallback for development
+    if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    const safe = `${Date.now()}-${file_name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    fs.writeFileSync(path.join(UPLOADS_DIR, safe), file.buffer);
+    file_url = `/uploads/materials/${safe}`;
   }
 
   return prisma.material.create({

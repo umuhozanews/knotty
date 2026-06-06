@@ -4,6 +4,7 @@ const { authenticate } = require('../../middleware/auth');
 const { authorize } = require('../../middleware/rbac');
 
 router.use(authenticate);
+router.get('/', authorize('ADMIN', 'NURSE'), ctrl.listSchool);
 router.post('/', authorize('ADMIN', 'NURSE'), ctrl.create);
 router.get('/student/:studentId', authorize('ADMIN', 'NURSE', 'PARENT'), ctrl.list);
 router.put('/:id', authorize('ADMIN', 'NURSE'), ctrl.update);

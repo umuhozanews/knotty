@@ -22,6 +22,24 @@ async function list(studentId, { page, limit }) {
   return paginatedResponse(data, total, page, limit);
 }
 
+async function listSchool(schoolId, { page, limit } = {}) {
+  const { skip, take } = paginate(null, page || 1, limit || 30);
+  const [data, total] = await Promise.all([
+    prisma.healthRecord.findMany({
+      where: { school_id: schoolId },
+      skip,
+      take,
+      orderBy: { recorded_at: 'desc' },
+      include: {
+        recorder: { select: { first_name: true, last_name: true } },
+        student: { include: { user: { select: { first_name: true, last_name: true } } } },
+      },
+    }),
+    prisma.healthRecord.count({ where: { school_id: schoolId } }),
+  ]);
+  return paginatedResponse(data, total, page || 1, limit || 30);
+}
+
 async function update(id, schoolId, data) {
   return prisma.healthRecord.updateMany({ where: { id, school_id: schoolId }, data });
 }
@@ -30,4 +48,4 @@ async function remove(id, schoolId) {
   return prisma.healthRecord.deleteMany({ where: { id, school_id: schoolId } });
 }
 
-module.exports = { create, list, update, remove };
+module.exports = { create, list, listSchool, update, remove };

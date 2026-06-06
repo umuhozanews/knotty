@@ -42,6 +42,32 @@ async function main() {
     },
   });
 
+  // ─── Staff users ───
+  const staffPassword = await bcrypt.hash('Staff@2024', 10);
+  const staffUsers = [
+    { role: 'TEACHER',    first: 'Kagabo',   last: 'Robert',  email: 'teacher@knottyschool.rw',    phone: '+250788100001' },
+    { role: 'NURSE',      first: 'Mutoni',   last: 'Diane',   email: 'nurse@knottyschool.rw',      phone: '+250788100002' },
+    { role: 'BURSAR',     first: 'Nshimiye', last: 'Paul',    email: 'bursar@knottyschool.rw',     phone: '+250788100003' },
+    { role: 'DISCIPLINE', first: 'Rugamba',  last: 'Victor',  email: 'discipline@knottyschool.rw', phone: '+250788100004' },
+    { role: 'CANTEEN',    first: 'Umutoni',  last: 'Claire',  email: 'canteen@knottyschool.rw',    phone: '+250788100005' },
+  ];
+  for (const s of staffUsers) {
+    await prisma.user.upsert({
+      where: { email: s.email },
+      update: { password_hash: staffPassword, is_active: true },
+      create: {
+        school_id: school.id,
+        role: s.role,
+        first_name: s.first,
+        last_name: s.last,
+        email: s.email,
+        phone: s.phone,
+        password_hash: staffPassword,
+      },
+    });
+  }
+  console.log('Staff users seeded');
+
   // ─── Levels ───
   const s5 = await prisma.level.upsert({
     where: { id: 'level-s5-seed' },
@@ -133,7 +159,14 @@ async function main() {
   }
 
   console.log(`Seeded ${seq - 1} students with cards`);
-  console.log('\nAdmin login: admin@knottyschool.rw / Admin@2024');
+  console.log('\n=== LOGIN CREDENTIALS ===');
+  console.log('ADMIN      admin@knottyschool.rw      Admin@2024');
+  console.log('TEACHER    teacher@knottyschool.rw    Staff@2024');
+  console.log('NURSE      nurse@knottyschool.rw      Staff@2024');
+  console.log('BURSAR     bursar@knottyschool.rw     Staff@2024');
+  console.log('DISCIPLINE discipline@knottyschool.rw Staff@2024');
+  console.log('CANTEEN    canteen@knottyschool.rw    Staff@2024');
+  console.log('STUDENT    hirwa.jean@knotty.rw       Student@2024');
 }
 
 main()

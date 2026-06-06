@@ -414,8 +414,10 @@ export interface DisciplineRecord {
   description: string | null;
   action_taken: string | null;
   severity: string;
+  status: string;
   parent_notified: boolean;
   recorded_at: string;
+  created_at: string;
   student?: { user: { first_name: string; last_name: string } };
   recorder?: { first_name: string; last_name: string; role: string };
 }
@@ -442,10 +444,19 @@ export interface HealthRecord {
   treatment_given: string | null;
   severity: string;
   follow_up_required: boolean;
+  resolved_at: string | null;
   recorded_at: string;
+  student?: { user: { first_name: string; last_name: string } };
+  recorder?: { first_name: string; last_name: string; role: string };
 }
 
 export const health = {
+  schoolRecords: (params?: { page?: number; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.page)  qs.set("page",  String(params.page));
+    if (params?.limit) qs.set("limit", String(params.limit));
+    return request<{ success: boolean; data: HealthRecord[]; pagination: unknown }>(`/health?${qs}`);
+  },
   studentList: (studentId: string) =>
     request<{ success: boolean; data: HealthRecord[] }>(`/health/student/${studentId}`),
   create: (data: { student_id: string; type: string; title: string; description?: string; treatment_given?: string; severity: string; follow_up_required?: boolean }) =>

@@ -15,6 +15,14 @@ async function list(req, res, next) {
   } catch (err) { next(err); }
 }
 
+async function listSchool(req, res, next) {
+  try {
+    const { page = 1, limit = 30 } = req.query;
+    const result = await service.listSchool(req.user.school_id, { page: Number(page), limit: Number(limit) });
+    res.json({ success: true, ...result });
+  } catch (err) { next(err); }
+}
+
 async function update(req, res, next) {
   try {
     await service.update(req.params.id, req.user.school_id, req.body);
@@ -29,4 +37,4 @@ async function remove(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { create, list, update, remove };
+module.exports = { create, list, listSchool, update, remove };

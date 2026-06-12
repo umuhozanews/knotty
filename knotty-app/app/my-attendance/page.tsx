@@ -28,12 +28,12 @@ export default function MyAttendancePage() {
 
   return (
     <DashboardShell>
-      <div className="p-4 overflow-y-auto h-full space-y-4">
+      <div className="p-2 sm:p-4 space-y-4">
         <h1 className="text-xl font-bold text-gray-800">My Attendance</h1>
 
         {/* Summary */}
-        <div className="grid grid-cols-5 gap-3">
-          <div className="col-span-1 bg-gradient-to-br from-blue-600 to-green-600 rounded-2xl p-4 text-white text-center">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-2 md:gap-3">
+          <div className="col-span-2 md:col-span-1 bg-gradient-to-br from-blue-600 to-green-600 rounded-2xl p-4 text-white text-center flex flex-col justify-center">
             <p className="text-3xl font-bold">{pct}%</p>
             <p className="text-xs opacity-80 mt-1">Attendance Rate</p>
           </div>

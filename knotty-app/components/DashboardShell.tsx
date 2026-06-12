@@ -36,12 +36,20 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
   if (!resolvedUser) return null;
 
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   return (
-    <div className="flex h-screen p-3 gap-3 overflow-hidden" style={{ background: "var(--bg)" }}>
-      <Sidebar />
+    <div className="flex h-screen p-2 md:p-3 gap-2 md:gap-3 overflow-hidden relative" style={{ background: "var(--bg)" }}>
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/40 z-40 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <Header />
-        <main className="flex-1 overflow-auto mt-3">{children}</main>
+        <Header onMenuClick={() => setSidebarOpen(true)} />
+        <main className="flex-1 overflow-auto mt-2 md:mt-3">{children}</main>
       </div>
     </div>
   );

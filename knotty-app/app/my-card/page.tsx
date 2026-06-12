@@ -57,7 +57,7 @@ export default function MyCardPage() {
 
   return (
     <DashboardShell>
-      <div className="p-4 overflow-y-auto h-full space-y-4 max-w-md mx-auto">
+      <div className="p-2 sm:p-4 space-y-4 max-w-md mx-auto">
         <h1 className="text-xl font-bold text-gray-800">My Card & Wallet</h1>
 
         {loading ? (
@@ -143,7 +143,7 @@ export default function MyCardPage() {
             </div>
 
             {/* Info */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
               <div className="bg-white rounded-2xl shadow-sm p-4 text-center">
                 <TrendingUp size={20} className="mx-auto text-blue-500 mb-1" />
                 <p className="text-xl font-bold text-gray-800">{(card.wallet_balance ?? 0).toLocaleString()}</p>

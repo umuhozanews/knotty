@@ -43,7 +43,7 @@ export default function MyReportsPage() {
 
   return (
     <DashboardShell>
-      <div className="p-4 overflow-y-auto h-full space-y-4">
+      <div className="p-2 sm:p-4 space-y-4">
         <h1 className="text-xl font-bold text-gray-800">My Academic Reports</h1>
 
         {loading ? (

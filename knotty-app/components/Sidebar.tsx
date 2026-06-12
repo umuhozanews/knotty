@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, Users, ClipboardCheck, CreditCard, ShoppingCart,
   Banknote, FileText, AlertTriangle, Settings, LogOut, ChevronRight,
-  Heart, BookOpen, User, CalendarDays, GraduationCap, Wallet,
+  Heart, BookOpen, User, CalendarDays, GraduationCap, Wallet, X,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
@@ -45,7 +45,12 @@ const ROLE_LABELS: Record<string, string> = {
   PARENT:     "Parent",
 };
 
-export default function Sidebar() {
+interface SidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
   const router   = useRouter();
   const { user, logout } = useAuth();
@@ -58,11 +63,28 @@ export default function Sidebar() {
   function handleLogout() { logout(); router.replace("/login"); }
 
   return (
-    <aside className="w-56 flex-shrink-0 bg-white rounded-3xl flex flex-col h-full shadow-sm overflow-hidden">
-      {/* Logo */}
-      <div className="flex items-center gap-2 px-5 pt-6 pb-4">
-        <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+    <aside className={`w-56 flex-shrink-0 bg-white rounded-3xl flex flex-col h-[calc(100vh-24px)] md:h-full shadow-sm overflow-hidden
+      fixed md:static top-3 left-3 z-50 transition-transform duration-300 ease-in-out
+      ${isOpen ? "translate-x-0" : "-translate-x-[calc(100%+24px)] md:translate-x-0"}`}
+    >
+      {/* Logo & Close */}
+      <div className="flex items-center justify-between px-5 pt-6 pb-4">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2L2 7l10 5 10-5-10-5z" fill="#1d4ed8" />
+              <path d="M2 17l10 5 10-5" stroke="#1d4ed8" strokeWidth="2" strokeLinecap="round" />
+              <path d="M2 12l10 5 10-5" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </div>
+          <span className="font-bold text-lg text-gray-800">KNOTTY</span>
+        </div>
+        {onClose && (
+          <button onClick={onClose} className="md:hidden p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
+            <X size={18} />
+          </button>
+        )}
+      </div>
             <path d="M12 2L2 7l10 5 10-5-10-5z" fill="#1d4ed8" />
             <path d="M2 17l10 5 10-5" stroke="#1d4ed8" strokeWidth="2" strokeLinecap="round" />
             <path d="M2 12l10 5 10-5" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" />

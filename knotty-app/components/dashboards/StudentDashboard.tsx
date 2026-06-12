@@ -34,7 +34,7 @@ export default function StudentDashboard() {
   const student = profile as { user?: { first_name?: string; last_name?: string }; level?: { name?: string }; class?: { name?: string }; student_code?: string } | null;
 
   return (
-    <div className="space-y-4 overflow-y-auto h-full pr-1">
+    <div className="space-y-4 pr-1">
       <div className="bg-gradient-to-r from-blue-600 to-green-600 rounded-2xl p-5 text-white">
         <p className="text-sm opacity-80">Good day,</p>
         <h1 className="text-2xl font-bold">{student?.user?.first_name} {student?.user?.last_name}</h1>
@@ -42,7 +42,7 @@ export default function StudentDashboard() {
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
         <div className="bg-white rounded-2xl shadow-sm p-4 text-center">
           <CreditCard size={20} className="mx-auto text-blue-500 mb-1" />
           <p className="text-xl font-bold text-gray-800">{card ? ((card.wallet_balance as number) ?? 0).toLocaleString() : "—"}</p>
@@ -61,7 +61,7 @@ export default function StudentDashboard() {
       </div>
 
       {/* Quick nav */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {[
           { href: "/my-profile",    icon: User,          label: "My Profile",    sub: "Personal info & contacts",   color: "bg-blue-500" },
           { href: "/my-attendance", icon: CalendarDays,  label: "Attendance",    sub: "Daily check-in history",      color: "bg-green-500" },

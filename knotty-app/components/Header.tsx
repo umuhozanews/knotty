@@ -1,5 +1,5 @@
 "use client";
-import { Search, Sun, Moon, Bell, X, CheckCircle, User } from "lucide-react";
+import { Menu, Search, Sun, Moon, Bell, X, CheckCircle, User } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useRouter, usePathname } from "next/navigation";
@@ -18,7 +18,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/settings": "Settings",
 };
 
-export default function Header() {
+export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const { user, logout } = useAuth();
   const { theme, toggle } = useTheme();
   const router = useRouter();
@@ -88,23 +88,33 @@ export default function Header() {
   }
 
   return (
-    <header className="flex items-center justify-between mb-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-800">{title}</h1>
-        <p className="text-sm text-gray-400">{today}</p>
+    <header className="flex items-center justify-between mb-4 md:mb-6 gap-2">
+      <div className="flex items-center gap-2 md:gap-3">
+        {onMenuClick && (
+          <button 
+            onClick={onMenuClick} 
+            className="md:hidden p-2 bg-white rounded-2xl shadow-sm text-gray-600 hover:bg-gray-50 transition"
+          >
+            <Menu size={18} />
+          </button>
+        )}
+        <div>
+          <h1 className="text-lg md:text-2xl font-bold text-gray-800 leading-tight md:leading-normal">{title}</h1>
+          <p className="text-[10px] md:text-sm text-gray-400">{today}</p>
+        </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-1.5 md:gap-3">
         {/* Search */}
         <div ref={searchRef} className="relative">
-          <div className="flex items-center gap-2 bg-white rounded-2xl px-4 py-2.5 shadow-sm w-64">
+          <div className="flex items-center gap-1.5 md:gap-2 bg-white rounded-2xl px-2.5 md:px-4 py-1.5 md:py-2.5 shadow-sm w-28 sm:w-44 md:w-64 transition-all">
             <Search size={16} className="text-gray-400 shrink-0" />
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search students…"
-              className="flex-1 text-sm outline-none text-gray-600 placeholder-gray-400 bg-transparent"
+              className="flex-1 text-[11px] md:text-sm outline-none text-gray-600 placeholder-gray-400 bg-transparent min-w-0"
             />
             {query && (
               <button onClick={() => { setQuery(""); setSearchResults([]); }} className="text-gray-300 hover:text-gray-500">
@@ -202,7 +212,7 @@ export default function Header() {
                 {user?.first_name?.[0]}{user?.last_name?.[0]}
               </div>
             )}
-            <div className="text-left">
+            <div className="text-left hidden md:block">
               <p className="text-sm font-semibold text-gray-800 leading-tight">{user?.first_name} {user?.last_name}</p>
               <p className="text-xs text-gray-400 leading-tight capitalize">{user?.role?.toLowerCase().replace("_", " ")}</p>
             </div>

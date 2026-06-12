@@ -1,7 +1,7 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { myAccount } from "@/lib/api";
+import { myAccount, cards } from "@/lib/api";
 import DashboardShell from "@/components/DashboardShell";
 import { Loader2, CreditCard, ArrowUpRight, ArrowDownLeft, TrendingUp } from "lucide-react";
 
@@ -9,6 +9,9 @@ export default function MyCardPage() {
   const { loading: authLoading } = useAuth();
   const [profile, setProfile] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [qrData, setQrData] = useState<{ qr_code: string; expires_at: string } | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(30);
 
   useEffect(() => {
     if (authLoading) return;
@@ -19,9 +22,42 @@ export default function MyCardPage() {
     card_number?: string; wallet_balance?: number; is_active?: boolean; is_frozen?: boolean; expires_at?: string;
   } | null;
 
+  const fetchQR = useCallback(() => {
+    if (!card) return;
+    setQrLoading(true);
+    cards.getSecureQR()
+      .then((res) => {
+        setQrData({ qr_code: res.qr_code, expires_at: res.expires_at });
+        const expires = new Date(res.expires_at).getTime();
+        const diff = Math.max(0, Math.round((expires - Date.now()) / 1000));
+        setTimeLeft(diff);
+      })
+      .catch(console.error)
+      .finally(() => setQrLoading(false));
+  }, [card]);
+
+  useEffect(() => {
+    if (authLoading || !card) return;
+    fetchQR();
+  }, [authLoading, card, fetchQR]);
+
+  useEffect(() => {
+    if (!qrData) return;
+    const interval = setInterval(() => {
+      const expires = new Date(qrData.expires_at).getTime();
+      const diff = Math.max(0, Math.round((expires - Date.now()) / 1000));
+      setTimeLeft(diff);
+      if (diff <= 0) {
+        clearInterval(interval);
+        fetchQR();
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [qrData, fetchQR]);
+
   return (
     <DashboardShell>
-      <div className="p-4 overflow-y-auto h-full space-y-4">
+      <div className="p-4 overflow-y-auto h-full space-y-4 max-w-md mx-auto">
         <h1 className="text-xl font-bold text-gray-800">My Card & Wallet</h1>
 
         {loading ? (
@@ -60,6 +96,50 @@ export default function MyCardPage() {
                   <p className="text-xs mt-0.5">{card.expires_at ? new Date(card.expires_at).toLocaleDateString("en-GB", { month: "short", year: "numeric" }) : "—"}</p>
                 </div>
               </div>
+            </div>
+
+            {/* Secure Dynamic QR Code Section */}
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col items-center text-center space-y-4">
+              <div className="space-y-1">
+                <h3 className="font-bold text-gray-800 text-sm">Dynamic Attendance QR Pass</h3>
+                <p className="text-xs text-gray-400">Scan at the school gate to record check-in/out</p>
+              </div>
+
+              {qrLoading && !qrData ? (
+                <div className="w-48 h-48 rounded-2xl border border-gray-100 flex items-center justify-center">
+                  <Loader2 className="animate-spin text-blue-500" size={24} />
+                </div>
+              ) : qrData ? (
+                <div className="relative">
+                  <img src={qrData.qr_code} className="w-48 h-48 object-contain rounded-2xl border border-gray-100 p-3" alt="Attendance Pass" />
+                  {qrLoading && (
+                    <div className="absolute inset-0 bg-white/70 flex items-center justify-center rounded-2xl">
+                      <Loader2 className="animate-spin text-blue-500" size={20} />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-red-500">Failed to load attendance pass</p>
+              )}
+
+              {qrData && (
+                <div className="w-full max-w-xs space-y-2">
+                  <div className="flex justify-between items-center text-xs text-gray-400">
+                    <span>Regenerating in {timeLeft}s</span>
+                    <button onClick={fetchQR} className="text-blue-500 hover:text-blue-700 font-semibold">Refresh Now</button>
+                  </div>
+                  <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-blue-500 transition-all duration-1000"
+                      style={{ width: `${(timeLeft / 30) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <p className="text-xs text-gray-400 bg-gray-50 px-3 py-2 rounded-xl border border-gray-100">
+                🔒 Protected by KNOTTY Secure-Scan Algorithm: refreshes automatically to prevent screenshot sharing or attendance fraud.
+              </p>
             </div>
 
             {/* Info */}

@@ -13,3 +13,8 @@ next-env.d.ts
 .vercel
 coverage/
 generated/
+covered/
+madeof/ .next
+pg_data/
+.env*
+.gemini/

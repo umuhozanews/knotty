@@ -4,4 +4,4 @@
   "devCommand": "cd knotty-app && npm run dev",
   "installCommand": "cd knotty-app && npm install",
   "framework": "nextjs"
-}
+} 

@@ -45,28 +45,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    // Demo mode — no backend needed
-    const demo = DEMO_ACCOUNTS.find((a) => a.email === email && a.password === password);
-    if (demo) {
-      const demoUser: User = {
-        id: `demo-${demo.role.toLowerCase()}`,
-        role: demo.role,
-        school_id: DEMO_SCHOOL_ID,
-        first_name: demo.first_name,
-        last_name: demo.last_name,
-        email: demo.email,
-        profile_photo: null,
-      };
-      localStorage.setItem("knotty_demo", "true");
-      localStorage.setItem("knotty_demo_user", JSON.stringify(demoUser));
-      setUser(demoUser);
-      return;
-    }
+    try {
+      const res = await auth.login(email, password);
+      localStorage.removeItem("knotty_demo");
+      localStorage.removeItem("knotty_demo_user");
+      localStorage.setItem("knotty_token", res.accessToken);
+      localStorage.setItem("knotty_refresh", res.refreshToken);
+      setUser(res.user);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      const isConnectionError = msg.includes("non-JSON") || msg.includes("fetch") || msg.includes("Failed to fetch");
+      const demo = DEMO_ACCOUNTS.find((a) => a.email === email && a.password === password);
 
-    const res = await auth.login(email, password);
-    localStorage.setItem("knotty_token", res.accessToken);
-    localStorage.setItem("knotty_refresh", res.refreshToken);
-    setUser(res.user);
+      if (isConnectionError && demo) {
+        console.log("Backend offline. Falling back to frontend demo mode.");
+        const demoUser: User = {
+          id: `demo-${demo.role.toLowerCase()}`,
+          role: demo.role,
+          school_id: DEMO_SCHOOL_ID,
+          first_name: demo.first_name,
+          last_name: demo.last_name,
+          email: demo.email,
+          profile_photo: null,
+        };
+        localStorage.setItem("knotty_demo", "true");
+        localStorage.setItem("knotty_demo_user", JSON.stringify(demoUser));
+        setUser(demoUser);
+      } else {
+        throw err;
+      }
+    }
   }, []);
 
   const logout = useCallback(() => {

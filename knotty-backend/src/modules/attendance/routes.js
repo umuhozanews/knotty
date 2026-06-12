@@ -7,6 +7,7 @@ router.use(authenticate);
 
 router.post('/scan', ctrl.scan);
 router.post('/scan-nfc', ctrl.scanNFC);
+router.post('/scan-secure', ctrl.scanSecure);
 router.post('/bulk', authorize('ADMIN', 'TEACHER'), ctrl.bulk);
 router.get('/today-summary', authorize('ADMIN', 'TEACHER', 'DISCIPLINE'), ctrl.todaySummary);
 router.get('/me', authorize('STUDENT'), ctrl.myAttendance);

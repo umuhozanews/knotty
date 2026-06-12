@@ -32,26 +32,6 @@ export default function LoginPage() {
     setError("");
     setSubmitting(true);
 
-    // Demo credentials — bypass the backend entirely
-    const demo = DEMO_ACCOUNTS.find((a) => a.email === email && a.password === password);
-    if (demo) {
-      const demoUser = {
-        id: `demo-${demo.role.toLowerCase()}`,
-        role: demo.role,
-        school_id: "demo-school-id",
-        first_name: demo.first_name,
-        last_name: demo.last_name,
-        email: demo.email,
-        profile_photo: null,
-      };
-      localStorage.setItem("knotty_demo", "true");
-      localStorage.setItem("knotty_demo_user", JSON.stringify(demoUser));
-      // Hard reload so AuthContext re-runs and picks up the new localStorage state
-      window.location.replace("/");
-      return;
-    }
-
-    // Real login (only used when backend is running)
     try {
       await login(email, password);
       router.replace("/");

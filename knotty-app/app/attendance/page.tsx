@@ -122,15 +122,64 @@ export default function AttendancePage() {
     }).catch(() => {});
   }
 
-  async function lookupCard(num: string) {
+  async function lookupCard(num: string, isNfc = false) {
     const n = num.trim();
     if (!n) return;
     setCardLoading(true);
     setCardData(null);
     setTapResult(null);
     setGlowColor(null);
+
+    if (n.startsWith("eyJ")) {
+      try {
+        const res = await attendance.scanSecure(n);
+        const rec = res.data;
+        const action = rec.action ?? "TAP_IN";
+        const card_number = rec.card_number;
+        if (!card_number) {
+          throw new Error("No card number returned from secure scan.");
+        }
+
+        // Fetch fresh card detail for visual presentation
+        const fresh = await cards.scan(card_number);
+        setCardData(fresh.data);
+        setGlowColor(ACTION_CFG[action].glow);
+        setTapResult({
+          action,
+          message:
+            action === "TAP_IN"
+              ? `Tapped in at ${fmtTime(rec.check_in_time)}. Tap-out available after ${fmtTime(rec.tap_out_available_at)}.`
+              : action === "TAP_OUT"
+              ? `Tapped out at ${fmtTime(rec.check_out_time)}.`
+              : "Already tapped out for today.",
+        });
+
+        const name = `${fresh.data.student.name}`;
+        const logEntry: ScanLogEntry = {
+          id: Date.now().toString(),
+          name,
+          className: fresh.data.student.class,
+          action,
+          time: fmtTime(new Date().toISOString()),
+          photo: fresh.data.student.photo,
+        };
+        setScanLog((l) => [logEntry, ...l.slice(0, 49)]);
+        loadTodaySummary();
+        toast(`${name} — ${ACTION_CFG[action].label} (Secure Pass)`, action === "TAP_IN" ? "success" : "info");
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Secure Scan failed";
+        setGlowColor("red");
+        toast(msg, "error");
+      } finally {
+        setCardLoading(false);
+      }
+      return;
+    }
+
     try {
-      const res = await cards.scan(n);
+      const res = isNfc
+        ? (await cards.scanNFC(n)) as unknown as { success: boolean; data: CardScanFull }
+        : await cards.scan(n);
       setCardData(res.data);
       if (res.data.check_in_time && !res.data.check_out_time) setGlowColor("blue");
     } catch (err) {
@@ -200,7 +249,7 @@ export default function AttendancePage() {
     const ok = await startListen(async (result) => {
       const num = result.value;
       setCardInput(num);
-      await lookupCard(num);
+      await lookupCard(num, result.type === "uid");
     });
     if (ok) toast("NFC scanner active — tap a KNOTTY card", "info");
   }

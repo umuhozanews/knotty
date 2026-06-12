@@ -254,4 +254,31 @@ async function listCards(schoolId, { page, limit, search }) {
   return paginatedResponse(data, total, page, limit);
 }
 
-module.exports = { issueCard, scanCard, freezeCard, unfreezeCard, topUpWallet, confirmTopUp, getTransactions, linkNFC, scanByNFC, cashTopUp, listCards };
+async function generateSecureQR(userId) {
+  const jwt = require('jsonwebtoken');
+  const student = await prisma.student.findUnique({
+    where: { user_id: userId },
+    include: { card: true },
+  });
+  if (!student) throw Object.assign(new Error('Student profile not found'), { status: 404 });
+  if (!student.card) throw Object.assign(new Error('KNOTTY Card not issued yet'), { status: 404 });
+  if (!student.card.is_active || student.card.is_frozen) {
+    throw Object.assign(new Error('KNOTTY Card is inactive or frozen'), { status: 403 });
+  }
+
+  const payload = {
+    card_number: student.card.card_number,
+    type: 'virtual_card_attendance',
+  };
+
+  const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '30s' });
+  const qr_code = await generateQRCode(token);
+
+  return {
+    token,
+    qr_code,
+    expires_at: new Date(Date.now() + 30000).toISOString(),
+  };
+}
+
+module.exports = { issueCard, scanCard, freezeCard, unfreezeCard, topUpWallet, confirmTopUp, getTransactions, linkNFC, scanByNFC, cashTopUp, listCards, generateSecureQR };

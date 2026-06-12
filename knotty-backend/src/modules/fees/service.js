@@ -67,7 +67,7 @@ async function getStudentFees(studentId, { page, limit }) {
 }
 
 async function getSchoolFeeReport(schoolId) {
-  const [total_collected, pending, by_type] = await Promise.all([
+  const [total_collected, pending, by_type, total_students] = await Promise.all([
     prisma.feePayment.aggregate({
       where: { school_id: schoolId, status: 'COMPLETED' },
       _sum: { amount: true },
@@ -82,8 +82,16 @@ async function getSchoolFeeReport(schoolId) {
       _sum: { amount: true },
       _count: true,
     }),
+    prisma.student.count({
+      where: { school_id: schoolId, is_active: true },
+    }),
   ]);
-  return { total_collected: total_collected._sum.amount || 0, pending: pending._sum.amount || 0, by_type };
+  return {
+    total_collected: total_collected._sum.amount || 0,
+    pending: pending._sum.amount || 0,
+    by_type,
+    total_students,
+  };
 }
 
 module.exports = { initiatePayment, verifyMomoPayment, getStudentFees, getSchoolFeeReport };

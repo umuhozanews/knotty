@@ -303,6 +303,8 @@ export const attendance = {
     const qs = new URLSearchParams({ ...(from ? { from } : {}), ...(to ? { to } : {}) }).toString();
     return request<{ success: boolean; records: AttendanceRecord[]; summary: Record<string, number>; total: number }>(`/attendance/report/${studentId}${qs ? `?${qs}` : ""}`);
   },
+  scanSecure: (token: string) =>
+    request<{ success: boolean; data: AttendanceRecord }>("/attendance/scan-secure", { method: "POST", body: JSON.stringify({ token }) }),
 };
 
 // ─── Cards ────────────────────────────────────────────────
@@ -353,6 +355,8 @@ export const cards = {
     request(`/cards/${id}/top-up`, { method: "POST", body: JSON.stringify({ amount, phone }) }),
   transactions: (id: string, page = 1, limit = 20) =>
     request<{ success: boolean; data: WalletTransaction[]; pagination: unknown }>(`/cards/${id}/transactions?page=${page}&limit=${limit}`),
+  getSecureQR: () =>
+    request<{ success: boolean; token: string; qr_code: string; expires_at: string }>("/cards/me/secure-qr"),
 };
 
 // ─── Wallet Transactions ──────────────────────────────────

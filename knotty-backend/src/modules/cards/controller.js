@@ -83,4 +83,11 @@ async function list(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { issue, scan, freeze, unfreeze, topUp, momoWebhook, transactions, linkNFC, scanNFC, cashTopUp, list };
+async function mySecureQR(req, res, next) {
+  try {
+    const result = await service.generateSecureQR(req.user.id);
+    res.json({ success: true, ...result });
+  } catch (err) { next(err); }
+}
+
+module.exports = { issue, scan, freeze, unfreeze, topUp, momoWebhook, transactions, linkNFC, scanNFC, cashTopUp, list, mySecureQR };

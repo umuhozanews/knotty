@@ -65,4 +65,11 @@ async function myAttendance(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { scan, bulk, student, byClass, report, scanNFC, todaySummary, myAttendance };
+async function scanSecure(req, res, next) {
+  try {
+    const result = await service.scanAttendanceSecure(req.body.token, req.user.id);
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
+module.exports = { scan, bulk, student, byClass, report, scanNFC, todaySummary, myAttendance, scanSecure };

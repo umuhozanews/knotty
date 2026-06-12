@@ -223,4 +223,21 @@ async function getTodaySummary(schoolId) {
   return { summary, total: records.length, recent: records.slice(0, 10) };
 }
 
-module.exports = { scanAttendance, bulkMarkAttendance, getStudentAttendance, getClassAttendance, getAttendanceReport, scanAttendanceByNFC, getTodaySummary };
+async function scanAttendanceSecure(token, recordedBy) {
+  const jwt = require('jsonwebtoken');
+  if (!token) throw Object.assign(new Error('Token is required'), { status: 400 });
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    if (payload.type !== 'virtual_card_attendance') {
+      throw new Error('Invalid token type');
+    }
+    return scanAttendance(payload.card_number, recordedBy);
+  } catch (err) {
+    if (err.name === 'TokenExpiredError') {
+      throw Object.assign(new Error('Secure scan token expired. Please refresh QR code.'), { status: 400 });
+    }
+    throw Object.assign(new Error('Invalid or corrupted security token.'), { status: 400 });
+  }
+}
+
+module.exports = { scanAttendance, bulkMarkAttendance, getStudentAttendance, getClassAttendance, getAttendanceReport, scanAttendanceByNFC, getTodaySummary, scanAttendanceSecure };

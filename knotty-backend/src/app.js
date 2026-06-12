@@ -56,9 +56,11 @@ app.use((req, res) => res.status(404).json({ success: false, message: `Route ${r
 // ─── Error Handler ───
 app.use(errorHandler);
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`KNOTTY Backend running on port ${PORT} [${process.env.NODE_ENV}]`);
-});
+if (!process.env.VERCEL) {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => {
+    console.log(`KNOTTY Backend running on port ${PORT} [${process.env.NODE_ENV}]`);
+  });
+}
 
 module.exports = app;

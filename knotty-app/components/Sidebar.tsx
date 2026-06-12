@@ -85,13 +85,6 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           </button>
         )}
       </div>
-            <path d="M12 2L2 7l10 5 10-5-10-5z" fill="#1d4ed8" />
-            <path d="M2 17l10 5 10-5" stroke="#1d4ed8" strokeWidth="2" strokeLinecap="round" />
-            <path d="M2 12l10 5 10-5" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-        </div>
-        <span className="font-bold text-lg text-gray-800">KNOTTY</span>
-      </div>
 
       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-5 mb-2">Menu</p>
 

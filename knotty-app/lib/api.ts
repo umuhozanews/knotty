@@ -283,10 +283,10 @@ export interface AttendanceTodaySummary {
 }
 
 export const attendance = {
-  scan: (card_number: string) =>
-    request<{ success: boolean; data: AttendanceRecord }>("/attendance/scan", { method: "POST", body: JSON.stringify({ card_number }) }),
-  scanNFC: (nfc_uid: string) =>
-    request<{ success: boolean; data: AttendanceRecord }>("/attendance/scan-nfc", { method: "POST", body: JSON.stringify({ nfc_uid }) }),
+  scan: (card_number: string, options?: Record<string, unknown>) =>
+    request<{ success: boolean; data: AttendanceRecord }>("/attendance/scan", { method: "POST", body: JSON.stringify({ card_number, ...options }) }),
+  scanNFC: (nfc_uid: string, options?: Record<string, unknown>) =>
+    request<{ success: boolean; data: AttendanceRecord }>("/attendance/scan-nfc", { method: "POST", body: JSON.stringify({ nfc_uid, ...options }) }),
   getSettings: () =>
     request<{ success: boolean; data: AttendanceSettings }>("/schools/settings/attendance"),
   updateSettings: (data: Partial<AttendanceSettings>) =>
@@ -303,8 +303,8 @@ export const attendance = {
     const qs = new URLSearchParams({ ...(from ? { from } : {}), ...(to ? { to } : {}) }).toString();
     return request<{ success: boolean; records: AttendanceRecord[]; summary: Record<string, number>; total: number }>(`/attendance/report/${studentId}${qs ? `?${qs}` : ""}`);
   },
-  scanSecure: (token: string) =>
-    request<{ success: boolean; data: AttendanceRecord }>("/attendance/scan-secure", { method: "POST", body: JSON.stringify({ token }) }),
+  scanSecure: (token: string, options?: Record<string, unknown>) =>
+    request<{ success: boolean; data: AttendanceRecord }>("/attendance/scan-secure", { method: "POST", body: JSON.stringify({ token, ...options }) }),
 };
 
 // ─── Cards ────────────────────────────────────────────────

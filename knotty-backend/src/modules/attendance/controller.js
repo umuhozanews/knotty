@@ -2,7 +2,7 @@ const service = require('./service');
 
 async function scan(req, res, next) {
   try {
-    const result = await service.scanAttendance(req.body.card_number, req.user.id);
+    const result = await service.scanAttendance(req.body.card_number, req.user.id, req.body);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }
@@ -40,7 +40,7 @@ async function report(req, res, next) {
 
 async function scanNFC(req, res, next) {
   try {
-    const result = await service.scanAttendanceByNFC(req.body.nfc_uid, req.user.id);
+    const result = await service.scanAttendanceByNFC(req.body.nfc_uid, req.user.id, req.body);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }
@@ -67,7 +67,7 @@ async function myAttendance(req, res, next) {
 
 async function scanSecure(req, res, next) {
   try {
-    const result = await service.scanAttendanceSecure(req.body.token, req.user.id);
+    const result = await service.scanAttendanceSecure(req.body.token, req.user.id, req.body);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }

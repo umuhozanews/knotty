@@ -2,7 +2,16 @@ const prisma = require('../../config/database');
 const { sendAttendanceAlert } = require('../../integrations/africas-talking');
 const { paginate, paginatedResponse } = require('../../utils/helpers');
 
-async function scanAttendance(cardNumber, recordedBy) {
+async function scanAttendance(cardNumber, recordedBy, options = {}) {
+  const {
+    type,
+    date,
+    tapInStart,
+    tapInEnd,
+    tapOutStart,
+    tapOutEnd,
+  } = options;
+
   const card = await prisma.knottyCard.findUnique({
     where: { card_number: cardNumber },
     include: {
@@ -23,19 +32,22 @@ async function scanAttendance(cardNumber, recordedBy) {
 
   const student = card.student;
   const now = new Date();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  
+  let targetDate = new Date();
+  if (date) {
+    targetDate = new Date(date);
+  }
+  targetDate.setHours(0, 0, 0, 0);
 
-  // Load school settings for tap-out window and late threshold
+  // Load school settings for late threshold
   const school = await prisma.school.findUnique({
     where: { id: student.school_id },
-    select: { tap_out_after_minutes: true, school_start_time: true },
+    select: { school_start_time: true },
   });
-  const tapOutMinutes   = school?.tap_out_after_minutes ?? 180;
   const [lateHr, lateMn] = (school?.school_start_time ?? '08:30').split(':').map(Number);
 
   const existing = await prisma.attendance.findUnique({
-    where: { student_id_date: { student_id: student.id, date: today } },
+    where: { student_id_date: { student_id: student.id, date: targetDate } },
   });
 
   const studentInclude = {
@@ -48,23 +60,85 @@ async function scanAttendance(cardNumber, recordedBy) {
     },
   };
 
-  // ── TAP OUT ──────────────────────────────────────────────────────────────────
-  if (existing) {
-    if (existing.check_out_time) {
-      // Already fully tapped out today
-      return { ...existing, action: 'ALREADY_OUT', card_number: card.card_number };
+  const nowTimeStr = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+
+  const isInRange = (timeStr, startStr, endStr) => {
+    if (!startStr || !endStr) return true;
+    return timeStr >= startStr && timeStr <= endStr;
+  };
+
+  const isTapIn = type ? (type === 'IN') : (!existing);
+
+  // ── TAP IN ───────────────────────────────────────────────────────────────────
+  if (isTapIn) {
+    if (tapInStart && tapInEnd) {
+      if (!isInRange(nowTimeStr, tapInStart, tapInEnd)) {
+        throw Object.assign(
+          new Error(`Tap-in not allowed. Current time (${nowTimeStr}) is outside the tap-in window (${tapInStart} - ${tapInEnd})`),
+          { status: 400 }
+        );
+      }
     }
 
-    const checkIn = new Date(existing.check_in_time);
-    const tapOutAvailableAt = new Date(checkIn.getTime() + tapOutMinutes * 60 * 1000);
+    const lateThreshold = new Date();
+    lateThreshold.setHours(lateHr, lateMn, 0, 0);
+    const status = now > lateThreshold ? 'LATE' : 'PRESENT';
 
-    if (now < tapOutAvailableAt) {
-      // Too early — return friendly error with countdown
-      const err = Object.assign(
-        new Error(`Tap-out not available yet. Come back at ${tapOutAvailableAt.toLocaleTimeString('en-RW', { hour: '2-digit', minute: '2-digit' })}`),
-        { status: 400, tap_out_available_at: tapOutAvailableAt.toISOString() }
-      );
-      throw err;
+    if (existing) {
+      const updated = await prisma.attendance.update({
+        where: { id: existing.id },
+        data: { check_in_time: now, check_out_time: null, status },
+        include: studentInclude,
+      });
+      return { ...updated, action: 'TAP_IN', card_number: card.card_number };
+    }
+
+    const created = await prisma.attendance.create({
+      data: {
+        student_id: student.id,
+        class_id:   student.class_id,
+        school_id:  student.school_id,
+        date: targetDate,
+        check_in_time: now,
+        status,
+        recorded_by: recordedBy,
+      },
+      include: studentInclude,
+    });
+
+    if (status === 'LATE' && student.parent?.phone) {
+      sendAttendanceAlert(
+        student.parent.phone,
+        `${student.user.first_name} ${student.user.last_name}`,
+        'LATE',
+        now.toLocaleTimeString('en-RW', { timeZone: 'Africa/Kigali' })
+      ).catch(console.error);
+    }
+
+    return {
+      ...created,
+      action: 'TAP_IN',
+      card_number: card.card_number,
+    };
+  }
+
+  // ── TAP OUT ──────────────────────────────────────────────────────────────────
+  else {
+    if (tapOutStart && tapOutEnd) {
+      if (!isInRange(nowTimeStr, tapOutStart, tapOutEnd)) {
+        throw Object.assign(
+          new Error(`Tap-out not allowed. Current time (${nowTimeStr}) is outside the tap-out window (${tapOutStart} - ${tapOutEnd})`),
+          { status: 400 }
+        );
+      }
+    }
+
+    if (!existing) {
+      throw Object.assign(new Error('Cannot Tap Out without checking in first'), { status: 400 });
+    }
+
+    if (existing.check_out_time) {
+      return { ...existing, action: 'ALREADY_OUT', card_number: card.card_number };
     }
 
     const updated = await prisma.attendance.update({
@@ -75,42 +149,6 @@ async function scanAttendance(cardNumber, recordedBy) {
 
     return { ...updated, action: 'TAP_OUT', card_number: card.card_number };
   }
-
-  // ── TAP IN ───────────────────────────────────────────────────────────────────
-  const lateThreshold = new Date();
-  lateThreshold.setHours(lateHr, lateMn, 0, 0);
-  const status = now > lateThreshold ? 'LATE' : 'PRESENT';
-
-  const tapOutAvailableAt = new Date(now.getTime() + tapOutMinutes * 60 * 1000);
-
-  const created = await prisma.attendance.create({
-    data: {
-      student_id: student.id,
-      class_id:   student.class_id,
-      school_id:  student.school_id,
-      date: today,
-      check_in_time: now,
-      status,
-      recorded_by: recordedBy,
-    },
-    include: studentInclude,
-  });
-
-  if (status === 'LATE' && student.parent?.phone) {
-    sendAttendanceAlert(
-      student.parent.phone,
-      `${student.user.first_name} ${student.user.last_name}`,
-      'LATE',
-      now.toLocaleTimeString('en-RW', { timeZone: 'Africa/Kigali' })
-    ).catch(console.error);
-  }
-
-  return {
-    ...created,
-    action: 'TAP_IN',
-    card_number: card.card_number,
-    tap_out_available_at: tapOutAvailableAt.toISOString(),
-  };
 }
 
 async function bulkMarkAttendance(classId, records, schoolId, recordedBy) {
@@ -205,10 +243,10 @@ async function getAttendanceReport(studentId, { from, to }) {
   return { records, summary, total: records.length };
 }
 
-async function scanAttendanceByNFC(nfcUid, recordedBy) {
+async function scanAttendanceByNFC(nfcUid, recordedBy, options = {}) {
   const card = await prisma.knottyCard.findFirst({ where: { nfc_uid: nfcUid } });
   if (!card) throw Object.assign(new Error('NFC tag not linked to any card'), { status: 404 });
-  return scanAttendance(card.card_number, recordedBy);
+  return scanAttendance(card.card_number, recordedBy, options);
 }
 
 async function getTodaySummary(schoolId) {
@@ -223,7 +261,7 @@ async function getTodaySummary(schoolId) {
   return { summary, total: records.length, recent: records.slice(0, 10) };
 }
 
-async function scanAttendanceSecure(token, recordedBy) {
+async function scanAttendanceSecure(token, recordedBy, options = {}) {
   const jwt = require('jsonwebtoken');
   if (!token) throw Object.assign(new Error('Token is required'), { status: 400 });
   try {
@@ -231,7 +269,7 @@ async function scanAttendanceSecure(token, recordedBy) {
     if (payload.type !== 'virtual_card_attendance') {
       throw new Error('Invalid token type');
     }
-    return scanAttendance(payload.card_number, recordedBy);
+    return scanAttendance(payload.card_number, recordedBy, options);
   } catch (err) {
     if (err.name === 'TokenExpiredError') {
       throw Object.assign(new Error('Secure scan token expired. Please refresh QR code.'), { status: 400 });

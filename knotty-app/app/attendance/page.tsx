@@ -93,6 +93,13 @@ export default function AttendancePage() {
   const [classes, setClasses]             = useState<Class[]>([]);
   const [selectedClass, setSelectedClass] = useState("");
   const [date, setDate]                   = useState(new Date().toISOString().slice(0, 10));
+  const [scanType, setScanType]           = useState<"IN" | "OUT">("IN");
+  const [tapInStart, setTapInStart]       = useState("07:00");
+  const [tapInEnd, setTapInEnd]           = useState("08:30");
+  const [tapOutStart, setTapOutStart]     = useState("15:00");
+  const [tapOutEnd, setTapOutEnd]         = useState("17:00");
+  const [scanning, setScanning]           = useState(false);
+  const qrScannerRef = useRef<any | null>(null);
   const [classStudents, setClassStudents] = useState<ClassStudent[]>([]);
   const [statuses, setStatuses]           = useState<Record<string, AttStatus>>({});
   const [loadingStudents, setLoadingStudents] = useState(false);
@@ -122,6 +129,60 @@ export default function AttendancePage() {
     }).catch(() => {});
   }
 
+  async function executeScan(cardNumber: string) {
+    setCardLoading(true);
+    setCardData(null);
+    setTapResult(null);
+    setGlowColor(null);
+
+    const scanOptions = {
+      type: scanType,
+      date,
+      tapInStart,
+      tapInEnd,
+      tapOutStart,
+      tapOutEnd,
+    };
+
+    try {
+      const res = await attendance.scan(cardNumber, scanOptions);
+      const rec = res.data;
+      const action = rec.action ?? "TAP_IN";
+
+      const fresh = await cards.scan(cardNumber);
+      setCardData(fresh.data);
+      setGlowColor(ACTION_CFG[action].glow);
+      setTapResult({
+        action,
+        message:
+          action === "TAP_IN"
+            ? `Tapped in at ${fmtTime(rec.check_in_time)}.`
+            : action === "TAP_OUT"
+            ? `Tapped out at ${fmtTime(rec.check_out_time)}.`
+            : "Already tapped out for today.",
+      });
+
+      const name = fresh.data.student.name;
+      const logEntry: ScanLogEntry = {
+        id: Date.now().toString(),
+        name,
+        className: fresh.data.student.class,
+        action,
+        time: fmtTime(new Date().toISOString()),
+        photo: fresh.data.student.photo,
+      };
+      setScanLog((l) => [logEntry, ...l.slice(0, 49)]);
+      loadTodaySummary();
+      toast(`${name} — ${ACTION_CFG[action].label}`, action === "TAP_IN" ? "success" : "info");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Scan failed";
+      setGlowColor("red");
+      toast(msg, "error");
+    } finally {
+      setCardLoading(false);
+    }
+  }
+
   async function lookupCard(num: string, isNfc = false) {
     const n = num.trim();
     if (!n) return;
@@ -130,9 +191,18 @@ export default function AttendancePage() {
     setTapResult(null);
     setGlowColor(null);
 
+    const scanOptions = {
+      type: scanType,
+      date,
+      tapInStart,
+      tapInEnd,
+      tapOutStart,
+      tapOutEnd,
+    };
+
     if (n.startsWith("eyJ")) {
       try {
-        const res = await attendance.scanSecure(n);
+        const res = await attendance.scanSecure(n, scanOptions);
         const rec = res.data;
         const action = rec.action ?? "TAP_IN";
         const card_number = rec.card_number;
@@ -148,7 +218,7 @@ export default function AttendancePage() {
           action,
           message:
             action === "TAP_IN"
-              ? `Tapped in at ${fmtTime(rec.check_in_time)}. Tap-out available after ${fmtTime(rec.tap_out_available_at)}.`
+              ? `Tapped in at ${fmtTime(rec.check_in_time)}.`
               : action === "TAP_OUT"
               ? `Tapped out at ${fmtTime(rec.check_out_time)}.`
               : "Already tapped out for today.",
@@ -182,6 +252,9 @@ export default function AttendancePage() {
         : await cards.scan(n);
       setCardData(res.data);
       if (res.data.check_in_time && !res.data.check_out_time) setGlowColor("blue");
+      if (isNfc) {
+        await executeScan(res.data.card_number);
+      }
     } catch (err) {
       toast(err instanceof Error ? err.message : "Card not found", "error");
     } finally {
@@ -196,8 +269,17 @@ export default function AttendancePage() {
     setTapResult(null);
     await new Promise((r) => setTimeout(r, 120));
 
+    const scanOptions = {
+      type: scanType,
+      date,
+      tapInStart,
+      tapInEnd,
+      tapOutStart,
+      tapOutEnd,
+    };
+
     try {
-      const res = await attendance.scan(cardData.card_number);
+      const res = await attendance.scan(cardData.card_number, scanOptions);
       const rec = res.data;
       const action = rec.action ?? "TAP_IN";
 
@@ -206,7 +288,7 @@ export default function AttendancePage() {
         action,
         message:
           action === "TAP_IN"
-            ? `Tapped in at ${fmtTime(rec.check_in_time)}. Tap-out available after ${fmtTime(rec.tap_out_available_at)}.`
+            ? `Tapped in at ${fmtTime(rec.check_in_time)}.`
             : action === "TAP_OUT"
             ? `Tapped out at ${fmtTime(rec.check_out_time)}.`
             : "Already tapped out for today.",
@@ -243,6 +325,70 @@ export default function AttendancePage() {
       glowTimer.current = setTimeout(() => setGlowColor(null), 4000);
     }
   }
+
+  const handleScanResult = useCallback(async (decodedText: string) => {
+    const n = decodedText.trim();
+    if (!n) return;
+    if (n.startsWith("eyJ")) {
+      await lookupCard(n);
+    } else {
+      await executeScan(n);
+    }
+  }, [scanType, date, tapInStart, tapInEnd, tapOutStart, tapOutEnd]);
+
+  const startScanner = async () => {
+    setScanning(true);
+    if (qrScannerRef.current) {
+      try {
+        await qrScannerRef.current.stop();
+      } catch { /* ignore */ }
+    }
+    const { Html5Qrcode } = await import("html5-qrcode");
+    const html5Qrcode = new Html5Qrcode("reader");
+    qrScannerRef.current = html5Qrcode;
+
+    try {
+      await html5Qrcode.start(
+        { facingMode: "environment" },
+        {
+          fps: 10,
+          qrbox: (width, height) => {
+            const size = Math.min(width, height) * 0.7;
+            return { width: size, height: size };
+          }
+        },
+        async (decodedText) => {
+          await handleScanResult(decodedText);
+        },
+        () => { /* ignore normal fail frames */ }
+      );
+    } catch (err) {
+      toast("Camera access failed", "error");
+      setScanning(false);
+    }
+  };
+
+  const stopScanner = async () => {
+    if (qrScannerRef.current) {
+      try {
+        if (qrScannerRef.current.isScanning) {
+          await qrScannerRef.current.stop();
+        }
+      } catch (err) {
+        console.error(err);
+      }
+      qrScannerRef.current = null;
+    }
+    setScanning(false);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (qrScannerRef.current) {
+        qrScannerRef.current.stop().catch(() => {});
+      }
+    };
+  }, []);
 
   async function toggleNFCListen() {
     if (listening) { stopListen(); toast("NFC scanner stopped", "info"); return; }
@@ -296,7 +442,7 @@ export default function AttendancePage() {
 
   return (
     <DashboardShell>
-      <div className="p-4 space-y-4 h-full overflow-y-auto">
+      <div className="p-2 sm:p-4 space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -360,11 +506,101 @@ export default function AttendancePage() {
           </div>
         )}
 
-        <div className="flex gap-4">
+        <div className="flex gap-4 flex-col lg:flex-row">
           {/* Left panel */}
           <div className="flex-1 min-w-0">
             {mode === "tap" ? (
               <div className="space-y-3">
+                {/* Gate scan config controls */}
+                <div className="bg-white rounded-2xl shadow-sm p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 mb-1 block">Attendance Date</label>
+                    <input
+                      type="date"
+                      value={date}
+                      onChange={(e) => setDate(e.target.value)}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Active Scan Mode</label>
+                    <div className="flex bg-gray-100 rounded-xl p-1">
+                      <button
+                        onClick={() => setScanType("IN")}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${scanType === "IN" ? "bg-blue-600 text-white shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                      >
+                        TAP IN
+                      </button>
+                      <button
+                        onClick={() => setScanType("OUT")}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${scanType === "OUT" ? "bg-blue-500 text-white shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                      >
+                        TAP OUT
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-end">
+                    <button
+                      onClick={scanning ? stopScanner : startScanner}
+                      className={`w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all border
+                        ${scanning 
+                          ? "bg-red-50 border-red-200 text-red-500 hover:bg-red-100" 
+                          : "bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100"}`}
+                    >
+                      <div className={`w-2 h-2 rounded-full ${scanning ? "bg-red-500 animate-ping" : "bg-blue-500"}`} />
+                      {scanning ? "STOP WEBCAM SCANNER" : "START WEBCAM SCANNER"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-sm p-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Tap-In Start</label>
+                    <input
+                      type="time"
+                      value={tapInStart}
+                      onChange={(e) => setTapInStart(e.target.value)}
+                      className="w-full border border-gray-150 rounded-xl px-2.5 py-1.5 text-xs outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Tap-In End</label>
+                    <input
+                      type="time"
+                      value={tapInEnd}
+                      onChange={(e) => setTapInEnd(e.target.value)}
+                      className="w-full border border-gray-150 rounded-xl px-2.5 py-1.5 text-xs outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Tap-Out Start</label>
+                    <input
+                      type="time"
+                      value={tapOutStart}
+                      onChange={(e) => setTapOutStart(e.target.value)}
+                      className="w-full border border-gray-150 rounded-xl px-2.5 py-1.5 text-xs outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Tap-Out End</label>
+                    <input
+                      type="time"
+                      value={tapOutEnd}
+                      onChange={(e) => setTapOutEnd(e.target.value)}
+                      className="w-full border border-gray-150 rounded-xl px-2.5 py-1.5 text-xs outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {scanning && (
+                  <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col items-center gap-3">
+                    <p className="text-xs font-semibold text-gray-500">Hold QR Pass up to the Camera</p>
+                    <div id="reader" className="w-full max-w-sm overflow-hidden rounded-2xl border border-gray-100" />
+                  </div>
+                )}
+
                 {/* Card search bar */}
                 <div className="bg-white rounded-2xl shadow-sm p-4">
                   <p className="text-xs font-medium text-gray-400 mb-2">Scan or enter card number</p>

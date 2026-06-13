@@ -282,6 +282,7 @@ export default function SettingsPage() {
   const [modal, setModal] = useState<null | "level" | "class" | "staff">(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [assignTeacher, setAssignTeacher] = useState<Teacher | null>(null);
+  const [togglingStaff, setTogglingStaff] = useState<string | null>(null);
 
   async function loadAll() {
     setLoading(true);
@@ -319,10 +320,16 @@ export default function SettingsPage() {
   }
 
   async function toggleStaff(id: string) {
+    if (id === user?.id) {
+      alert("You cannot deactivate or modify your own active status to prevent accidental lockout.");
+      return;
+    }
+    setTogglingStaff(id);
     try {
       const r = await structure.toggleStaff(id);
       setStaff((s) => s.map((x) => x.id === id ? { ...x, is_active: r.data.is_active } : x));
     } catch (err) { alert(err instanceof Error ? err.message : "Error"); }
+    finally { setTogglingStaff(null); }
   }
 
   const TABS: { key: SettingsTab; label: string; icon: React.ElementType }[] = [
@@ -463,8 +470,14 @@ export default function SettingsPage() {
                         {s.last_login ? new Date(s.last_login).toLocaleDateString() : "Never"}
                       </td>
                       <td className="px-5 py-3.5 text-center">
-                        <button onClick={() => toggleStaff(s.id)} title={s.is_active ? "Deactivate" : "Activate"} className="text-gray-400 hover:text-blue-600 transition">
-                          {s.is_active ? <ToggleRight size={22} className="text-blue-600" /> : <ToggleLeft size={22} />}
+                        <button onClick={() => toggleStaff(s.id)} disabled={togglingStaff === s.id} title={s.is_active ? "Deactivate" : "Activate"} className="text-gray-400 hover:text-blue-600 transition disabled:opacity-50">
+                          {togglingStaff === s.id ? (
+                            <Loader2 size={22} className="animate-spin text-blue-600" />
+                          ) : s.is_active ? (
+                            <ToggleRight size={22} className="text-blue-600" />
+                          ) : (
+                            <ToggleLeft size={22} />
+                          )}
                         </button>
                       </td>
                     </tr>

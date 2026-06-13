@@ -68,6 +68,9 @@ async function createStaff(req, res, next) {
 
 async function toggleStaffActive(req, res, next) {
   try {
+    if (req.params.id === req.user.id) {
+      return res.status(400).json({ success: false, message: 'You cannot deactivate your own account to prevent accidental lockout.' });
+    }
     const result = await service.toggleStaffActive(req.params.id, req.user.school_id);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }

@@ -58,6 +58,9 @@ async function getStaff(req, res, next) {
 
 async function createStaff(req, res, next) {
   try {
+    if (req.user.role === 'TEACHER' && req.body.role !== 'PARENT') {
+      return res.status(403).json({ success: false, message: 'Teachers can only create parent accounts' });
+    }
     const user = await service.createStaff(req.body, req.user.school_id);
     res.status(201).json({ success: true, data: user });
   } catch (err) { next(err); }

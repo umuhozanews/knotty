@@ -7,7 +7,7 @@ router.get('/', authenticate, authorize('ADMIN', 'BURSAR', 'TEACHER', 'CANTEEN')
 router.get('/me/secure-qr', authenticate, authorize('STUDENT'), ctrl.mySecureQR);
 router.get('/nfc/:nfcUid', authenticate, ctrl.scanNFC);
 router.get('/:cardNumber/scan', authenticate, ctrl.scan);
-router.post('/issue/:studentId', authenticate, authorize('ADMIN'), ctrl.issue);
+router.post('/issue/:studentId', authenticate, authorize('ADMIN', 'TEACHER'), ctrl.issue);
 router.put('/:id/freeze', authenticate, authorize('ADMIN'), ctrl.freeze);
 router.put('/:id/unfreeze', authenticate, authorize('ADMIN'), ctrl.unfreeze);
 router.put('/:id/nfc', authenticate, authorize('ADMIN'), ctrl.linkNFC);

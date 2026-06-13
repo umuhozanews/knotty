@@ -12,7 +12,7 @@ router.get('/classes', ctrl.getClasses);
 router.delete('/classes/:id', authorize('ADMIN'), ctrl.deleteClass);
 router.get('/classes/:id/students', ctrl.classStudents);
 router.get('/staff', authorize('ADMIN'), ctrl.getStaff);
-router.post('/staff', authorize('ADMIN'), ctrl.createStaff);
+router.post('/staff', authorize('ADMIN', 'TEACHER'), ctrl.createStaff);
 router.put('/staff/:id/toggle', authorize('ADMIN'), ctrl.toggleStaffActive);
 
 module.exports = router;

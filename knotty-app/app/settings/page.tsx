@@ -8,13 +8,13 @@ import { useAuth } from "@/context/AuthContext";
 type SettingsTab = "levels" | "classes" | "staff" | "teachers";
 
 function CreateLevelModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const [form, setForm] = useState({ name: "", description: "", order_index: "" });
+  const [form, setForm] = useState({ name: "", description: "" });
   const [loading, setLoading] = useState(false);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     try {
-      await structure.createLevel({ name: form.name, description: form.description || undefined, order_index: form.order_index ? parseInt(form.order_index) : undefined });
+      await structure.createLevel({ name: form.name, description: form.description || undefined });
       onSuccess(); onClose();
     } catch (err) { alert(err instanceof Error ? err.message : "Error"); }
     finally { setLoading(false); }
@@ -31,10 +31,6 @@ function CreateLevelModal({ onClose, onSuccess }: { onClose: () => void; onSucce
           <div>
             <label className="text-xs text-gray-500 mb-1 block">Description (optional)</label>
             <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500" />
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 mb-1 block">Order (optional)</label>
-            <input type="number" value={form.order_index} onChange={(e) => setForm({ ...form, order_index: e.target.value })} placeholder="e.g. 1" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500" />
           </div>
           <div className="flex gap-3 pt-1">
             <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600">Cancel</button>

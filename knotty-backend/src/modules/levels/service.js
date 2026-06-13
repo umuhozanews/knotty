@@ -8,7 +8,10 @@ async function getLevels(schoolId) {
   return prisma.level.findMany({
     where: { school_id: schoolId },
     include: { _count: { select: { classes: true, students: true } } },
-    orderBy: { order_index: 'asc' },
+    orderBy: [
+      { order_index: 'asc' },
+      { name: 'asc' },
+    ],
   });
 }
 

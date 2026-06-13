@@ -47,7 +47,8 @@ async function scanNFC(req, res, next) {
 
 async function todaySummary(req, res, next) {
   try {
-    const result = await service.getTodaySummary(req.user.school_id);
+    const { classId } = req.query;
+    const result = await service.getTodaySummary(req.user.school_id, classId);
     res.json({ success: true, ...result });
   } catch (err) { next(err); }
 }

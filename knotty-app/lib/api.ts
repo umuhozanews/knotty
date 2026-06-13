@@ -293,8 +293,8 @@ export const attendance = {
     request<{ success: boolean; data: AttendanceSettings }>("/schools/settings/attendance", { method: "PUT", body: JSON.stringify(data) }),
   bulk: (class_id: string, records: { student_id: string; status: string; note?: string }[]) =>
     request<{ success: boolean; data: AttendanceRecord[]; count: number }>("/attendance/bulk", { method: "POST", body: JSON.stringify({ class_id, records }) }),
-  todaySummary: () =>
-    request<{ success: boolean } & AttendanceTodaySummary>("/attendance/today-summary"),
+  todaySummary: (classId?: string) =>
+    request<{ success: boolean } & AttendanceTodaySummary>(`/attendance/today-summary${classId ? `?classId=${classId}` : ""}`),
   byStudent: (studentId: string, page = 1, limit = 30) =>
     request<{ success: boolean; data: AttendanceRecord[]; pagination: unknown }>(`/attendance/student/${studentId}?page=${page}&limit=${limit}`),
   byClass: (classId: string, date?: string) =>

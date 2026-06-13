@@ -10,6 +10,7 @@ async function scanAttendance(cardNumber, recordedBy, options = {}) {
     tapInEnd,
     tapOutStart,
     tapOutEnd,
+    classId,
   } = options;
 
   const card = await prisma.knottyCard.findUnique({
@@ -31,6 +32,13 @@ async function scanAttendance(cardNumber, recordedBy, options = {}) {
   }
 
   const student = card.student;
+
+  if (classId && student.class_id !== classId) {
+    throw Object.assign(
+      new Error(`Student is not in the selected class (${student.class?.name || 'different class'})`),
+      { status: 400 }
+    );
+  }
   const now = new Date();
   
   let targetDate;
@@ -256,17 +264,40 @@ async function scanAttendanceByNFC(nfcUid, recordedBy, options = {}) {
   return scanAttendance(card.card_number, recordedBy, options);
 }
 
-async function getTodaySummary(schoolId) {
+async function getTodaySummary(schoolId, classId) {
   const now = new Date();
   const kigaliDateStr = now.toLocaleDateString('en-ZA', { timeZone: 'Africa/Kigali' });
   const today = new Date(kigaliDateStr.replace(/\//g, '-'));
   today.setUTCHours(0, 0, 0, 0);
+
+  const where = { school_id: schoolId, date: today };
+  if (classId) {
+    where.class_id = classId;
+  }
+
   const records = await prisma.attendance.findMany({
-    where: { school_id: schoolId, date: today },
-    select: { status: true, check_in_time: true, student: { select: { user: { select: { first_name: true, last_name: true, profile_photo: true } }, class: { select: { name: true } } } } },
+    where,
+    select: { id: true, status: true, check_in_time: true, check_out_time: true, student: { select: { user: { select: { first_name: true, last_name: true, profile_photo: true } }, class: { select: { name: true } } } } },
     orderBy: { check_in_time: 'desc' },
   });
-  const summary = records.reduce((acc, r) => { acc[r.status] = (acc[r.status] || 0) + 1; return acc; }, { PRESENT: 0, ABSENT: 0, LATE: 0, EXCUSED: 0 });
+
+  const studentCountWhere = { school_id: schoolId };
+  if (classId) {
+    studentCountWhere.class_id = classId;
+  }
+  const totalStudents = await prisma.student.count({ where: studentCountWhere });
+
+  const summary = records.reduce((acc, r) => {
+    // Only count active check-ins for the active categories
+    if (r.status === 'PRESENT' || r.status === 'LATE' || r.status === 'EXCUSED') {
+      acc[r.status] = (acc[r.status] || 0) + 1;
+    }
+    return acc;
+  }, { PRESENT: 0, ABSENT: 0, LATE: 0, EXCUSED: 0 });
+
+  const checkedIn = summary.PRESENT + summary.LATE + summary.EXCUSED;
+  summary.ABSENT = Math.max(0, totalStudents - checkedIn);
+
   return { summary, total: records.length, recent: records.slice(0, 10) };
 }
 

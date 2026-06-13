@@ -106,28 +106,45 @@ export default function AttendancePage() {
   const [submitting, setSubmitting]       = useState(false);
   const [submitted, setSubmitted]         = useState(false);
 
+  const loadTodaySummary = useCallback((classId?: string) => {
+    attendance.todaySummary(classId).then((r) => {
+      setTodaySummary(r.summary);
+      setTotalToday(r.total);
+      if (r.recent) {
+        const logs: ScanLogEntry[] = r.recent.map((rec: any) => ({
+          id: rec.id || Math.random().toString(),
+          name: `${rec.student.user.first_name} ${rec.student.user.last_name}`,
+          className: rec.student.class?.name || "",
+          action: rec.check_out_time ? "TAP_OUT" : "TAP_IN",
+          time: fmtTime(rec.check_out_time || rec.check_in_time),
+          photo: rec.student.user.profile_photo,
+        }));
+        setScanLog(logs);
+      }
+    }).catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (authLoading) return;
     structure.classes().then((r) => setClasses(r.data)).catch(console.error);
-    loadTodaySummary();
     attendance.getSettings().then((r) => setSettings(r.data)).catch(() => {});
   }, [authLoading]);
 
   useEffect(() => {
-    if (!selectedClass) return;
+    loadTodaySummary(selectedClass);
+  }, [selectedClass, loadTodaySummary]);
+
+  useEffect(() => {
+    if (!selectedClass) {
+      setClassStudents([]);
+      return;
+    }
     setLoadingStudents(true);
     structure.classStudents(selectedClass)
       .then((r) => { setClassStudents(r.data as ClassStudent[]); setStatuses({}); setSubmitted(false); })
       .catch(console.error)
       .finally(() => setLoadingStudents(false));
   }, [selectedClass]);
-
-  function loadTodaySummary() {
-    attendance.todaySummary().then((r) => {
-      setTodaySummary(r.summary);
-      setTotalToday(r.total);
-    }).catch(() => {});
-  }
 
   async function executeScan(cardNumber: string) {
     setCardLoading(true);
@@ -142,6 +159,7 @@ export default function AttendancePage() {
       tapInEnd,
       tapOutStart,
       tapOutEnd,
+      classId: selectedClass,
     };
 
     try {
@@ -172,7 +190,7 @@ export default function AttendancePage() {
         photo: fresh.data.student.photo,
       };
       setScanLog((l) => [logEntry, ...l.slice(0, 49)]);
-      loadTodaySummary();
+      loadTodaySummary(selectedClass);
       toast(`${name} — ${ACTION_CFG[action].label}`, action === "TAP_IN" ? "success" : "info");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Scan failed";
@@ -198,6 +216,7 @@ export default function AttendancePage() {
       tapInEnd,
       tapOutStart,
       tapOutEnd,
+      classId: selectedClass,
     };
 
     if (n.startsWith("eyJ") || n.startsWith("KS:")) {
@@ -234,7 +253,7 @@ export default function AttendancePage() {
           photo: fresh.data.student.photo,
         };
         setScanLog((l) => [logEntry, ...l.slice(0, 49)]);
-        loadTodaySummary();
+        loadTodaySummary(selectedClass);
         toast(`${name} — ${ACTION_CFG[action].label} (Secure Pass)`, action === "TAP_IN" ? "success" : "info");
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Secure Scan failed";
@@ -276,6 +295,7 @@ export default function AttendancePage() {
       tapInEnd,
       tapOutStart,
       tapOutEnd,
+      classId: selectedClass,
     };
 
     try {
@@ -306,7 +326,7 @@ export default function AttendancePage() {
         photo: cardData.student.photo,
       };
       setScanLog((l) => [logEntry, ...l.slice(0, 49)]);
-      loadTodaySummary();
+      loadTodaySummary(selectedClass);
       toast(`${cardData.student.name} — ${ACTION_CFG[action].label}`, action === "TAP_IN" ? "success" : "info");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Tap failed";
@@ -337,9 +357,13 @@ export default function AttendancePage() {
     } else {
       await executeScan(n);
     }
-  }, [scanType, date, tapInStart, tapInEnd, tapOutStart, tapOutEnd]);
+  }, [scanType, date, tapInStart, tapInEnd, tapOutStart, tapOutEnd, selectedClass]);
 
   const startScanner = async () => {
+    if (!selectedClass) {
+      toast("Please select a class first", "error");
+      return;
+    }
     setScanning(true);
     if (qrScannerRef.current) {
       try {
@@ -425,7 +449,7 @@ export default function AttendancePage() {
       const res = await attendance.bulk(selectedClass, records);
       setSubmitted(true);
       toast(`Attendance saved — ${res.count} students marked`, "success");
-      loadTodaySummary();
+      loadTodaySummary(selectedClass);
     } catch (err) {
       toast(err instanceof Error ? err.message : "Submit failed", "error");
     } finally {
@@ -484,6 +508,34 @@ export default function AttendancePage() {
           </div>
         </div>
 
+        {/* Global Class & Date Selector Panel */}
+        <div className="bg-white rounded-2xl shadow-sm p-4 grid grid-cols-1 md:grid-cols-2 gap-4 border border-blue-50/50">
+          <div>
+            <label className="text-xs font-semibold text-gray-500 mb-1 block">Class Selection (Required)</label>
+            <select
+              value={selectedClass}
+              onChange={(e) => setSelectedClass(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-500 font-medium text-gray-700 bg-white"
+            >
+              <option value="">Select a class to take attendance...</option>
+              {classes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.level?.name} {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-gray-500 mb-1 block">Attendance Date</label>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-500 text-gray-700 bg-white"
+            />
+          </div>
+        </div>
+
         {/* Settings panel */}
         {showSettings && (
           <div className="bg-white rounded-2xl shadow-sm p-4 border border-blue-200/60">
@@ -529,17 +581,8 @@ export default function AttendancePage() {
             {mode === "tap" ? (
               <div className="space-y-3">
                 {/* Gate scan config controls */}
-                <div className="bg-white rounded-2xl shadow-sm p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 mb-1 block">Attendance Date</label>
-                    <input
-                      type="date"
-                      value={date}
-                      onChange={(e) => setDate(e.target.value)}
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500"
-                    />
-                  </div>
-
+                {/* Gate scan config controls */}
+                <div className="bg-white rounded-2xl shadow-sm p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Active Scan Mode</label>
                     <div className="flex bg-gray-100 rounded-xl p-1">
@@ -561,12 +604,15 @@ export default function AttendancePage() {
                   <div className="flex items-end">
                     <button
                       onClick={scanning ? stopScanner : startScanner}
+                      disabled={!selectedClass}
                       className={`w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all border
-                        ${scanning 
+                        ${!selectedClass
+                          ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed"
+                          : scanning 
                           ? "bg-red-50 border-red-200 text-red-500 hover:bg-red-100" 
                           : "bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100"}`}
                     >
-                      <div className={`w-2 h-2 rounded-full ${scanning ? "bg-red-500 animate-ping" : "bg-blue-500"}`} />
+                      <div className={`w-2 h-2 rounded-full ${!selectedClass ? "bg-gray-400" : scanning ? "bg-red-500 animate-ping" : "bg-blue-500"}`} />
                       {scanning ? "STOP WEBCAM SCANNER" : "START WEBCAM SCANNER"}
                     </button>
                   </div>
@@ -618,18 +664,30 @@ export default function AttendancePage() {
                   </div>
                 )}
 
+                {/* Class validation warning banner */}
+                {!selectedClass && (
+                  <div className="bg-blue-50 border border-blue-200/50 rounded-2xl p-4 flex items-start gap-3">
+                    <AlertTriangle className="text-blue-500 flex-shrink-0 mt-0.5" size={16} />
+                    <div>
+                      <p className="text-sm font-semibold text-blue-800">Class Selection Required</p>
+                      <p className="text-xs text-blue-600 mt-0.5">Please select a class from the top panel before scanning or looking up student cards.</p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Card search bar */}
-                <div className="bg-white rounded-2xl shadow-sm p-4">
+                <div className={`bg-white rounded-2xl shadow-sm p-4 transition-all duration-200 ${!selectedClass ? "opacity-60" : "opacity-100"}`}>
                   <p className="text-xs font-medium text-gray-400 mb-2">Scan or enter card number</p>
                   <form onSubmit={(e) => { e.preventDefault(); lookupCard(cardInput); }} className="flex gap-2">
                     <input
                       value={cardInput}
                       onChange={(e) => setCardInput(e.target.value)}
-                      placeholder="KNT-XXX-2026-00001"
-                      className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:border-blue-500"
+                      disabled={!selectedClass}
+                      placeholder={selectedClass ? "KNT-XXX-2026-00001" : "Select a class first..."}
+                      className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
                     />
                     <button
-                      type="submit" disabled={cardLoading || !cardInput.trim()}
+                      type="submit" disabled={cardLoading || !cardInput.trim() || !selectedClass}
                       className="px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium disabled:opacity-50 flex items-center gap-1.5"
                     >
                       {cardLoading ? <Loader2 size={14} className="animate-spin" /> : <CreditCard size={14} />}
@@ -638,6 +696,7 @@ export default function AttendancePage() {
                     {isSupported && (
                       <button
                         type="button" onClick={toggleNFCListen}
+                        disabled={!selectedClass}
                         className={`px-3 py-2.5 rounded-xl text-sm font-medium flex items-center gap-1.5 border transition
                           ${listening
                             ? "bg-red-50 text-red-500 border-red-200"
@@ -745,21 +804,6 @@ export default function AttendancePage() {
             ) : (
               /* Bulk mark mode */
               <div className="bg-white rounded-2xl shadow-sm p-4 space-y-4">
-                <div className="flex gap-3">
-                  <select
-                    value={selectedClass}
-                    onChange={(e) => setSelectedClass(e.target.value)}
-                    className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500"
-                  >
-                    <option value="">Select class...</option>
-                    {classes.map((c) => <option key={c.id} value={c.id}>{c.level?.name} {c.name}</option>)}
-                  </select>
-                  <input
-                    type="date" value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500"
-                  />
-                </div>
 
                 {loadingStudents ? (
                   <div className="flex justify-center py-8"><Loader2 className="animate-spin text-blue-600" size={24} /></div>

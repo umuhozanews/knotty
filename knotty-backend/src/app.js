@@ -1,4 +1,5 @@
 require('dotenv').config();
+require('./utils/fix-teachers')().catch(console.error);
 process.on('uncaughtException', (e) => process.stderr.write('[UNCAUGHT] ' + e.stack + '\n'));
 process.on('unhandledRejection', (e) => process.stderr.write('[UNHANDLED] ' + e + '\n'));
 const express = require('express');

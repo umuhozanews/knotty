@@ -117,7 +117,7 @@ function CreateStaffModal({ onClose, onSuccess }: { onClose: () => void; onSucce
           </div>
           <div>
             <label className="text-xs text-gray-500 mb-1 block">Email</label>
-            <input type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500" />
+            <input type="text" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500" />
           </div>
           <div>
             <label className="text-xs text-gray-500 mb-1 block">Role</label>

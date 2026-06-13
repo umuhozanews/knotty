@@ -86,6 +86,21 @@ function StudentModal({
   const [showPass, setShowPass] = useState(false);
   const [tab, setTab] = useState<"basic" | "guardian" | "medical">("basic");
 
+  useEffect(() => {
+    if (isEdit && existing) {
+      students.getOne(existing.id).then((res) => {
+        const fullStudent = res.data as any;
+        if (fullStudent.parent) {
+          setForm((f) => ({
+            ...f,
+            guardian_name: `${fullStudent.parent.first_name} ${fullStudent.parent.last_name}`.trim(),
+            guardian_phone: fullStudent.parent.phone ?? "",
+          }));
+        }
+      }).catch(console.error);
+    }
+  }, [existing, isEdit]);
+
   const filteredClasses = form.level_id ? classes.filter((c) => c.level.id === form.level_id) : classes;
   const set = (k: keyof StudentForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -117,6 +132,8 @@ function StudentModal({
           nationality: form.nationality || undefined,
           level_id: form.level_id, class_id: form.class_id,
           profile_photo: form.profile_photo || undefined,
+          guardian_name: form.guardian_name || undefined,
+          guardian_phone: form.guardian_phone || undefined,
         });
         if (form.medical_notes.trim()) {
           await health.create({
@@ -135,23 +152,9 @@ function StudentModal({
           date_of_birth: form.date_of_birth || undefined,
           nationality: form.nationality || undefined,
           profile_photo: form.profile_photo || undefined,
+          guardian_name: form.guardian_name || undefined,
+          guardian_phone: form.guardian_phone || undefined,
         };
-
-        // If guardian info provided, create parent user first
-        if (form.guardian_email.trim()) {
-          try {
-            const parentRes = await structure.createStaff({
-              email: form.guardian_email.trim(),
-              first_name: form.guardian_name.split(" ")[0] || "Guardian",
-              last_name: form.guardian_name.split(" ").slice(1).join(" ") || "Parent",
-              role: "PARENT",
-              password: "Parent@2024",
-            });
-            payload.parent_id = (parentRes.data as { id: string }).id;
-          } catch {
-            // If guardian already exists, skip linking
-          }
-        }
 
         const created = await students.create(payload);
         const studentId = created.data.id;
@@ -305,16 +308,13 @@ function StudentModal({
             {tab === "guardian" && (
               <>
                 <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 text-xs text-blue-600 dark:text-blue-400">
-                  A parent account will be created automatically if email is provided. Default password: <strong>Parent@2024</strong>
+                  A parent account will be created automatically. Parents will use the student credentials to log in.
                 </div>
                 <Field label="Guardian Full Name">
                   <input value={form.guardian_name} onChange={set("guardian_name")} className={inp} placeholder="e.g. Jean Baptiste Nkusi" />
                 </Field>
                 <Field label="Guardian Phone">
                   <input value={form.guardian_phone} onChange={set("guardian_phone")} className={inp} placeholder="+250 7XX XXX XXX" />
-                </Field>
-                <Field label="Guardian Email">
-                  <input type="email" value={form.guardian_email} onChange={set("guardian_email")} className={inp} placeholder="parent@email.com" />
                 </Field>
               </>
             )}
@@ -435,7 +435,7 @@ function StudentRow({ s, idx, onEdit, onDelete, onIssue, issuing }: {
         <button onClick={onEdit} title="Edit" className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 transition">
           <Edit2 size={12} />
         </button>
-        {user?.role === "ADMIN" && (
+        {(user?.role === "ADMIN" || user?.role === "TEACHER") && (
           <button onClick={onDelete} title="Remove" className="p-1.5 rounded-lg border border-red-200 text-red-400 hover:bg-red-50 transition">
             <Trash2 size={12} />
           </button>

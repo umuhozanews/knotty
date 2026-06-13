@@ -16,6 +16,6 @@ router.get('/', authorize('ADMIN', 'TEACHER', 'NURSE', 'BURSAR', 'DISCIPLINE'), 
 router.get('/:id', authorize('ADMIN', 'TEACHER', 'NURSE', 'BURSAR', 'DISCIPLINE', 'PARENT', 'STUDENT'), ctrl.getOne);
 router.get('/:id/full-profile', authorize('ADMIN', 'TEACHER'), ctrl.fullProfile);
 router.put('/:id', authorize('ADMIN', 'TEACHER', 'PARENT', 'STUDENT'), validate(updateStudentSchema), ctrl.update);
-router.delete('/:id', authorize('ADMIN'), ctrl.remove);
+router.delete('/:id', authorize('ADMIN', 'TEACHER'), ctrl.remove);
 
 module.exports = router;

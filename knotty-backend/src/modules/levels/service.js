@@ -130,17 +130,44 @@ async function getStaff(schoolId) {
 
 async function createStaff({ email, first_name, last_name, role, password }, schoolId) {
   const bcrypt = require('bcryptjs');
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) {
-    if (role === 'PARENT' && existing.role === 'PARENT') {
-      return existing;
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.user.findUnique({ where: { email } });
+    if (existing) {
+      if (role === 'PARENT' && existing.role === 'PARENT') {
+        return existing;
+      }
+      throw Object.assign(new Error('Email already in use'), { status: 409 });
     }
-    throw Object.assign(new Error('Email already in use'), { status: 409 });
-  }
-  const password_hash = await bcrypt.hash(password, 10);
-  return prisma.user.create({
-    data: { email, first_name, last_name, role, password_hash, school_id: schoolId, is_active: true },
-    select: { id: true, first_name: true, last_name: true, email: true, role: true, is_active: true, created_at: true },
+    const password_hash = await bcrypt.hash(password, 10);
+    const user = await tx.user.create({
+      data: { email, first_name, last_name, role, password_hash, school_id: schoolId, is_active: true },
+      select: { id: true, first_name: true, last_name: true, email: true, role: true, is_active: true, created_at: true },
+    });
+
+    if (role === 'TEACHER') {
+      let count = await tx.teacher.count({ where: { school_id: schoolId } });
+      let employee_code;
+      let exists = true;
+      while (exists) {
+        employee_code = `TCH-${schoolId.slice(0, 4).toUpperCase()}-${String(count + 1).padStart(4, '0')}`;
+        const existingCode = await tx.teacher.findUnique({ where: { employee_code } });
+        if (!existingCode) {
+          exists = false;
+        } else {
+          count++;
+        }
+      }
+      await tx.teacher.create({
+        data: {
+          user_id: user.id,
+          school_id: schoolId,
+          employee_code,
+          is_active: true,
+        }
+      });
+    }
+
+    return user;
   });
 }
 

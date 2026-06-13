@@ -13,6 +13,8 @@ const createStudentSchema = Joi.object({
   class_id: Joi.string().optional().allow(''),
   parent_id: Joi.string().optional().allow(''),
   profile_photo: Joi.string().optional().allow('', null),
+  guardian_name: Joi.string().optional().allow(''),
+  guardian_phone: Joi.string().optional().allow(''),
 });
 
 const updateStudentSchema = Joi.object({
@@ -27,6 +29,8 @@ const updateStudentSchema = Joi.object({
   parent_id: Joi.string().allow(''),
   profile_photo: Joi.string().optional().allow('', null),
   is_active: Joi.boolean(),
+  guardian_name: Joi.string().optional().allow(''),
+  guardian_phone: Joi.string().optional().allow(''),
 });
 
 module.exports = { createStudentSchema, updateStudentSchema };

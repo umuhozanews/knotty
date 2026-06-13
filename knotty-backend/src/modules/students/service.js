@@ -54,28 +54,54 @@ async function handleProfilePhotoUpload(base64Data, schoolId, userId) {
 }
 
 async function createStudent(data, schoolId) {
+  const { guardian_name, guardian_phone, ...studentDetails } = data;
   const school = await prisma.school.findUnique({ where: { id: schoolId } });
   if (!school) throw Object.assign(new Error('School not found'), { status: 404 });
 
   const student_code = await generateStudentCode(school.code);
-  const password_hash = await bcrypt.hash(data.password, 10);
+  const password_hash = await bcrypt.hash(studentDetails.password || 'Knotty@2024', 10);
 
   return prisma.$transaction(async (tx) => {
+    let parentId = studentDetails.parent_id;
+    if (!parentId && (guardian_name || guardian_phone)) {
+      const gName = guardian_name || '';
+      const gPhone = guardian_phone || '';
+      const phoneClean = gPhone.trim().replace(/[+\s]+/g, '');
+      const tempEmail = phoneClean ? `${phoneClean}@parent.school` : `parent-${Math.random().toString(36).substring(2, 9)}@parent.school`;
+      
+      let existingParent = await tx.user.findUnique({ where: { email: tempEmail } });
+      if (!existingParent) {
+        existingParent = await tx.user.create({
+          data: {
+            email: tempEmail,
+            first_name: gName.split(' ')[0] || 'Guardian',
+            last_name: gName.split(' ').slice(1).join(' ') || 'Parent',
+            phone: gPhone,
+            role: 'PARENT',
+            password_hash: await bcrypt.hash('Parent@2024', 10),
+            school_id: schoolId,
+            is_active: true,
+          },
+        });
+      }
+      parentId = existingParent.id;
+    }
+
     const user = await tx.user.create({
       data: {
         school_id: schoolId,
         role: 'STUDENT',
-        first_name: data.first_name,
-        last_name: data.last_name,
-        email: data.email,
-        phone: data.phone,
+        first_name: studentDetails.first_name,
+        last_name: studentDetails.last_name,
+        email: studentDetails.email,
+        phone: studentDetails.phone,
         password_hash,
       },
     });
 
     let profile_photo = null;
-    if (data.profile_photo) {
-      profile_photo = await handleProfilePhotoUpload(data.profile_photo, schoolId, user.id);
+    if (studentDetails.profile_photo) {
+      profile_photo = await handleProfilePhotoUpload(studentDetails.profile_photo, schoolId, user.id);
       await tx.user.update({
         where: { id: user.id },
         data: { profile_photo },
@@ -87,17 +113,18 @@ async function createStudent(data, schoolId) {
         user_id: user.id,
         school_id: schoolId,
         student_code,
-        date_of_birth: data.date_of_birth,
-        gender: data.gender,
-        nationality: data.nationality,
-        level_id: data.level_id,
-        class_id: data.class_id,
-        parent_id: data.parent_id,
+        date_of_birth: studentDetails.date_of_birth,
+        gender: studentDetails.gender,
+        nationality: studentDetails.nationality,
+        level_id: studentDetails.level_id,
+        class_id: studentDetails.class_id,
+        parent_id: parentId || undefined,
       },
       include: {
         user: { select: { id: true, first_name: true, last_name: true, email: true, phone: true, profile_photo: true } },
         level: true,
         class: true,
+        parent: { select: { first_name: true, last_name: true, phone: true, email: true } },
       },
     });
 
@@ -190,7 +217,7 @@ async function getFullProfile(id, schoolId) {
 }
 
 async function updateStudent(id, schoolId, data) {
-  const { first_name, last_name, phone, profile_photo, ...studentData } = data;
+  const { first_name, last_name, phone, profile_photo, guardian_name, guardian_phone, ...studentData } = data;
 
   return prisma.$transaction(async (tx) => {
     const student = await tx.student.findFirst({ where: { id, school_id: schoolId } });
@@ -213,11 +240,55 @@ async function updateStudent(id, schoolId, data) {
       });
     }
 
+    // Handle guardian creation/update
+    let parentId = student.parent_id;
+    if (guardian_name !== undefined || guardian_phone !== undefined) {
+      const gName = guardian_name || '';
+      const gPhone = guardian_phone || '';
+      
+      if (parentId) {
+        await tx.user.update({
+          where: { id: parentId },
+          data: {
+            ...(guardian_name !== undefined && {
+              first_name: gName.split(' ')[0] || 'Guardian',
+              last_name: gName.split(' ').slice(1).join(' ') || 'Parent',
+            }),
+            ...(guardian_phone !== undefined && { phone: gPhone }),
+          },
+        });
+      } else if (gName.trim() || gPhone.trim()) {
+        const phoneClean = gPhone.trim().replace(/[+\s]+/g, '');
+        const tempEmail = phoneClean ? `${phoneClean}@parent.school` : `parent-${Math.random().toString(36).substring(2, 9)}@parent.school`;
+        
+        let existingParent = await tx.user.findUnique({ where: { email: tempEmail } });
+        if (!existingParent) {
+          existingParent = await tx.user.create({
+            data: {
+              email: tempEmail,
+              first_name: gName.split(' ')[0] || 'Guardian',
+              last_name: gName.split(' ').slice(1).join(' ') || 'Parent',
+              phone: gPhone,
+              role: 'PARENT',
+              password_hash: await bcrypt.hash('Parent@2024', 10),
+              school_id: schoolId,
+              is_active: true,
+            },
+          });
+        }
+        parentId = existingParent.id;
+        studentData.parent_id = parentId;
+      }
+    }
+
     return tx.student.update({
       where: { id },
       data: studentData,
       include: {
         user: { select: { first_name: true, last_name: true, email: true, phone: true, profile_photo: true } },
+        level: { select: { id: true, name: true } },
+        class: { select: { id: true, name: true } },
+        parent: { select: { first_name: true, last_name: true, phone: true, email: true } },
       },
     });
   });

@@ -327,7 +327,10 @@ export default function AttendancePage() {
   }
 
   const handleScanResult = useCallback(async (decodedText: string) => {
-    const n = decodedText.trim();
+    let n = decodedText.trim();
+    if (n.startsWith('"') && n.endsWith('"')) {
+      n = n.slice(1, -1);
+    }
     if (!n) return;
     if (n.startsWith("eyJ")) {
       await lookupCard(n);

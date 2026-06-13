@@ -62,7 +62,6 @@ async function deleteLevel(id, schoolId) {
 
     if (studentIds.length > 0) {
       await tx.attendance.deleteMany({ where: { student_id: { in: studentIds } } });
-      await tx.knottyCard.deleteMany({ where: { student_id: { in: studentIds } } });
       await tx.feePayment.deleteMany({ where: { student_id: { in: studentIds } } });
       await tx.canteenTransaction.deleteMany({ where: { student_id: { in: studentIds } } });
       await tx.walletTransaction.deleteMany({ where: { student_id: { in: studentIds } } });
@@ -70,6 +69,7 @@ async function deleteLevel(id, schoolId) {
       await tx.disciplineRecord.deleteMany({ where: { student_id: { in: studentIds } } });
       await tx.achievement.deleteMany({ where: { student_id: { in: studentIds } } });
       await tx.academicReport.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.knottyCard.deleteMany({ where: { student_id: { in: studentIds } } });
       await tx.student.deleteMany({ where: { id: { in: studentIds } } });
       await tx.user.deleteMany({ where: { id: { in: userIds } } });
     }
@@ -100,7 +100,6 @@ async function deleteClass(id, schoolId) {
 
     if (studentIds.length > 0) {
       await tx.attendance.deleteMany({ where: { student_id: { in: studentIds } } });
-      await tx.knottyCard.deleteMany({ where: { student_id: { in: studentIds } } });
       await tx.feePayment.deleteMany({ where: { student_id: { in: studentIds } } });
       await tx.canteenTransaction.deleteMany({ where: { student_id: { in: studentIds } } });
       await tx.walletTransaction.deleteMany({ where: { student_id: { in: studentIds } } });
@@ -108,6 +107,7 @@ async function deleteClass(id, schoolId) {
       await tx.disciplineRecord.deleteMany({ where: { student_id: { in: studentIds } } });
       await tx.achievement.deleteMany({ where: { student_id: { in: studentIds } } });
       await tx.academicReport.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.knottyCard.deleteMany({ where: { student_id: { in: studentIds } } });
       await tx.student.deleteMany({ where: { id: { in: studentIds } } });
       await tx.user.deleteMany({ where: { id: { in: userIds } } });
     }

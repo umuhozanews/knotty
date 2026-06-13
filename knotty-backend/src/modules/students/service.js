@@ -221,7 +221,6 @@ async function deleteStudent(id, schoolId) {
 
   return prisma.$transaction(async (tx) => {
     await tx.attendance.deleteMany({ where: { student_id: id } });
-    await tx.knottyCard.deleteMany({ where: { student_id: id } });
     await tx.feePayment.deleteMany({ where: { student_id: id } });
     await tx.canteenTransaction.deleteMany({ where: { student_id: id } });
     await tx.walletTransaction.deleteMany({ where: { student_id: id } });
@@ -229,6 +228,7 @@ async function deleteStudent(id, schoolId) {
     await tx.disciplineRecord.deleteMany({ where: { student_id: id } });
     await tx.achievement.deleteMany({ where: { student_id: id } });
     await tx.academicReport.deleteMany({ where: { student_id: id } });
+    await tx.knottyCard.deleteMany({ where: { student_id: id } });
     
     await tx.student.delete({ where: { id } });
     await tx.user.delete({ where: { id: student.user_id } });

@@ -200,7 +200,7 @@ export default function AttendancePage() {
       tapOutEnd,
     };
 
-    if (n.startsWith("eyJ")) {
+    if (n.startsWith("eyJ") || n.startsWith("KS:")) {
       try {
         const res = await attendance.scanSecure(n, scanOptions);
         const rec = res.data;
@@ -332,7 +332,7 @@ export default function AttendancePage() {
       n = n.slice(1, -1);
     }
     if (!n) return;
-    if (n.startsWith("eyJ")) {
+    if (n.startsWith("eyJ") || n.startsWith("KS:")) {
       await lookupCard(n);
     } else {
       await executeScan(n);
@@ -368,7 +368,10 @@ export default function AttendancePage() {
         cameraId,
         {
           fps: 15,
-          // Omitting qrbox to scan full frame for maximum scannability and ease of use
+          qrbox: (width, height) => {
+            const size = Math.min(width, height) * 0.75;
+            return { width: size, height: size };
+          }
         },
         async (decodedText) => {
           await handleScanResult(decodedText);

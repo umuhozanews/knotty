@@ -255,7 +255,6 @@ async function listCards(schoolId, { page, limit, search }) {
 }
 
 async function generateSecureQR(userId) {
-  const jwt = require('jsonwebtoken');
   const student = await prisma.student.findUnique({
     where: { user_id: userId },
     include: { card: true },
@@ -266,18 +265,22 @@ async function generateSecureQR(userId) {
     throw Object.assign(new Error('KNOTTY Card is inactive or frozen'), { status: 403 });
   }
 
-  const payload = {
-    card_number: student.card.card_number,
-    type: 'virtual_card_attendance',
-  };
+  const crypto = require('crypto');
+  const cardNumber = student.card.card_number;
+  const expiryTime = Date.now() + 30000; // 30 seconds
+  const message = `${cardNumber}:${expiryTime}`;
+  
+  const signature = crypto.createHmac('sha256', process.env.JWT_SECRET)
+    .update(message)
+    .digest('base64url');
 
-  const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '30s' });
+  const token = `KS:${cardNumber}:${expiryTime}:${signature}`;
   const qr_code = await generateQRCode(token);
 
   return {
     token,
     qr_code,
-    expires_at: new Date(Date.now() + 30000).toISOString(),
+    expires_at: new Date(expiryTime).toISOString(),
   };
 }
 

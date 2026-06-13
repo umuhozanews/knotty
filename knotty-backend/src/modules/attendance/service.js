@@ -262,8 +262,32 @@ async function getTodaySummary(schoolId) {
 }
 
 async function scanAttendanceSecure(token, recordedBy, options = {}) {
-  const jwt = require('jsonwebtoken');
   if (!token) throw Object.assign(new Error('Token is required'), { status: 400 });
+
+  if (token.startsWith('KS:')) {
+    const crypto = require('crypto');
+    const parts = token.split(':');
+    if (parts.length !== 4) {
+      throw Object.assign(new Error('Invalid or corrupted security token.'), { status: 400 });
+    }
+    const [prefix, cardNumber, expiryStr, signature] = parts;
+    const expiry = parseInt(expiryStr, 10);
+    if (isNaN(expiry) || Date.now() > expiry) {
+      throw Object.assign(new Error('Secure scan token expired. Please refresh QR code.'), { status: 400 });
+    }
+    // Verify signature
+    const message = `${cardNumber}:${expiryStr}`;
+    const expectedSig = crypto.createHmac('sha256', process.env.JWT_SECRET)
+      .update(message)
+      .digest('base64url');
+    
+    if (signature !== expectedSig) {
+      throw Object.assign(new Error('Invalid or corrupted security token.'), { status: 400 });
+    }
+    return scanAttendance(cardNumber, recordedBy, options);
+  }
+
+  const jwt = require('jsonwebtoken');
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
     if (payload.type !== 'virtual_card_attendance') {

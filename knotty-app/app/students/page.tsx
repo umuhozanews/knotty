@@ -282,9 +282,13 @@ function StudentModal({
                 </div>
                 {!isEdit && (
                   <div className="grid grid-cols-2 gap-3">
-                    <Field label="Initial Wallet Balance (RWF)">
-                      <input type="number" min="0" value={form.initial_balance} onChange={set("initial_balance")} className={inp} placeholder="0" />
-                    </Field>
+                    {(user?.role === "ADMIN" || user?.role === "BURSAR") ? (
+                      <Field label="Initial Wallet Balance (RWF)">
+                        <input type="number" min="0" value={form.initial_balance} onChange={set("initial_balance")} className={inp} placeholder="0" />
+                      </Field>
+                    ) : (
+                      <div />
+                    )}
                     <Field label="Login Password">
                       <div className="relative">
                         <input type={showPass ? "text" : "password"} value={form.password} onChange={set("password")} className={`${inp} pr-10`} />
@@ -393,6 +397,7 @@ function StudentRow({ s, idx, onEdit, onDelete, onIssue, issuing }: {
   onIssue: () => void; issuing: boolean;
 }) {
   const router = useRouter();
+  const { user } = useAuth();
   const name = `${s.user.first_name} ${s.user.last_name}`;
   const dob = s.date_of_birth ? new Date(s.date_of_birth) : null;
   const age = dob ? Math.floor((Date.now() - dob.getTime()) / (365.25 * 24 * 3600 * 1000)) : null;
@@ -430,9 +435,11 @@ function StudentRow({ s, idx, onEdit, onDelete, onIssue, issuing }: {
         <button onClick={onEdit} title="Edit" className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 transition">
           <Edit2 size={12} />
         </button>
-        <button onClick={onDelete} title="Remove" className="p-1.5 rounded-lg border border-red-200 text-red-400 hover:bg-red-50 transition">
-          <Trash2 size={12} />
-        </button>
+        {user?.role === "ADMIN" && (
+          <button onClick={onDelete} title="Remove" className="p-1.5 rounded-lg border border-red-200 text-red-400 hover:bg-red-50 transition">
+            <Trash2 size={12} />
+          </button>
+        )}
         <button onClick={() => router.push(`/students/${s.id}`)} title="Profile" className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 transition">
           <User size={12} />
         </button>

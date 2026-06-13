@@ -36,12 +36,20 @@ async function handleProfilePhotoUpload(base64Data, schoolId, userId) {
       stream.end(buffer);
     });
     return result.secure_url;
+  } else if (process.env.VERCEL) {
+    // Vercel read-only filesystem: store base64 data directly
+    return base64Data;
   } else {
-    const UPLOADS_DIR = path.join(__dirname, '../../../../uploads/profiles');
-    if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-    const filename = `${userId}-${Date.now()}.${extension}`;
-    fs.writeFileSync(path.join(UPLOADS_DIR, filename), buffer);
-    return `/uploads/profiles/${filename}`;
+    try {
+      const UPLOADS_DIR = path.join(__dirname, '../../../../uploads/profiles');
+      if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+      const filename = `${userId}-${Date.now()}.${extension}`;
+      fs.writeFileSync(path.join(UPLOADS_DIR, filename), buffer);
+      return `/uploads/profiles/${filename}`;
+    } catch (err) {
+      console.error('Failed to write profile photo to disk, storing base64 instead:', err);
+      return base64Data;
+    }
   }
 }
 

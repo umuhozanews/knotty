@@ -343,7 +343,9 @@ export default function AttendancePage() {
     setScanning(true);
     if (qrScannerRef.current) {
       try {
-        await qrScannerRef.current.stop();
+        if (qrScannerRef.current.isScanning) {
+          await qrScannerRef.current.stop();
+        }
       } catch { /* ignore */ }
     }
     const { Html5Qrcode } = await import("html5-qrcode");
@@ -351,14 +353,22 @@ export default function AttendancePage() {
     qrScannerRef.current = html5Qrcode;
 
     try {
+      const devices = await Html5Qrcode.getCameras();
+      if (!devices || devices.length === 0) {
+        throw new Error("No camera devices found.");
+      }
+
+      // Find back/rear camera or default to the first camera
+      const backCam = devices.find(d => 
+        /back|rear|environment|camera2\s+0/i.test(d.label)
+      );
+      const cameraId = backCam ? backCam.id : devices[0].id;
+
       await html5Qrcode.start(
-        { facingMode: "environment" },
+        cameraId,
         {
-          fps: 10,
-          qrbox: (width, height) => {
-            const size = Math.min(width, height) * 0.7;
-            return { width: size, height: size };
-          }
+          fps: 15,
+          // Omitting qrbox to scan full frame for maximum scannability and ease of use
         },
         async (decodedText) => {
           await handleScanResult(decodedText);
@@ -366,7 +376,8 @@ export default function AttendancePage() {
         () => { /* ignore normal fail frames */ }
       );
     } catch (err) {
-      toast("Camera access failed", "error");
+      const msg = err instanceof Error ? err.message : "Camera access failed";
+      toast(msg, "error");
       setScanning(false);
     }
   };

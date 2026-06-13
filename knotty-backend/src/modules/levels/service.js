@@ -64,7 +64,12 @@ async function getStaff(schoolId) {
 async function createStaff({ email, first_name, last_name, role, password }, schoolId) {
   const bcrypt = require('bcryptjs');
   const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) throw Object.assign(new Error('Email already in use'), { status: 409 });
+  if (existing) {
+    if (role === 'PARENT' && existing.role === 'PARENT') {
+      return existing;
+    }
+    throw Object.assign(new Error('Email already in use'), { status: 409 });
+  }
   const password_hash = await bcrypt.hash(password, 10);
   return prisma.user.create({
     data: { email, first_name, last_name, role, password_hash, school_id: schoolId, is_active: true },

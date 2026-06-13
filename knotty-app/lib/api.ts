@@ -78,12 +78,18 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       headers: buildHeaders(newToken, options.headers),
     });
     const retryJson = await safeJson(retry) as Record<string, unknown>;
-    if (!retry.ok) throw new Error((retryJson.message as string) || `Request failed: ${retry.status}`);
+    if (!retry.ok) {
+      const details = Array.isArray(retryJson.details) ? `: ${retryJson.details.join(", ")}` : "";
+      throw new Error(((retryJson.message as string) || `Request failed: ${retry.status}`) + details);
+    }
     return retryJson as T;
   }
 
   const json = await safeJson(res) as Record<string, unknown>;
-  if (!res.ok) throw new Error((json.message as string) || `Request failed: ${res.status}`);
+  if (!res.ok) {
+    const details = Array.isArray(json.details) ? `: ${json.details.join(", ")}` : "";
+    throw new Error(((json.message as string) || `Request failed: ${res.status}`) + details);
+  }
   return json as T;
 }
 
@@ -559,6 +565,7 @@ export const myAccount = {
   attendance: (page = 1, limit = 60) => request<{ success: boolean; data: AttendanceRecord[]; pagination: unknown }>(`/attendance/me?page=${page}&limit=${limit}`),
   reports: (page = 1, limit = 10) => request<{ success: boolean; data: AcademicReport[]; pagination: unknown }>(`/reports/student/me?page=${page}&limit=${limit}`),
   fees: (page = 1) => request<{ success: boolean; data: FeePayment[]; pagination: unknown }>(`/fees/student/me?page=${page}`),
+  parentChildren: () => request<{ success: boolean; data: any[] }>("/students/parent/me"),
 };
 
 // ─── Notifications ────────────────────────────────────────
@@ -575,3 +582,31 @@ export const notifications = {
   list: () => request<{ success: boolean; data: Notification[]; pagination: unknown }>("/notifications"),
   markRead: (id: string) => request(`/notifications/${id}/read`, { method: "PUT" }),
 };
+
+export interface Teacher {
+  id: string;
+  user_id: string;
+  employee_code: string;
+  qualification: string | null;
+  specialization: string | null;
+  subjects_taught: Array<{ class_id: string; class_name: string; subject: string }> | null;
+  user: {
+    first_name: string;
+    last_name: string;
+    email: string;
+    phone: string | null;
+  };
+}
+
+export const teachers = {
+  list: (params?: { page?: number; limit?: number }) => {
+    const qs = new URLSearchParams(
+      Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))
+    ).toString();
+    return request<{ success: boolean; data: Teacher[]; pagination: unknown }>(`/teachers${qs ? `?${qs}` : ""}`);
+  },
+  getOne: (id: string) => request<{ success: boolean; data: Teacher }>(`/teachers/${id}`),
+  update: (id: string, data: Record<string, unknown>) =>
+    request<{ success: boolean; data: Teacher }>(`/teachers/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+};
+

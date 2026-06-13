@@ -14,7 +14,7 @@ const ALL_NAV = [
   { icon: LayoutDashboard, label: "Dashboard",    href: "/",              roles: ["ADMIN","TEACHER","CANTEEN","NURSE","BURSAR","DISCIPLINE"] },
 
   // ── Student self-service ──
-  { icon: LayoutDashboard, label: "My Dashboard", href: "/",              roles: ["STUDENT"] },
+  { icon: LayoutDashboard, label: "My Dashboard", href: "/",              roles: ["STUDENT", "PARENT"] },
   { icon: User,            label: "My Profile",   href: "/my-profile",    roles: ["STUDENT"] },
   { icon: CalendarDays,    label: "My Attendance",href: "/my-attendance", roles: ["STUDENT"] },
   { icon: GraduationCap,   label: "My Reports",   href: "/my-reports",    roles: ["STUDENT"] },

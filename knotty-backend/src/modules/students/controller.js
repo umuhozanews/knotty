@@ -31,8 +31,32 @@ async function fullProfile(req, res, next) {
 
 async function update(req, res, next) {
   try {
-    const student = await service.updateStudent(req.params.id, req.user.school_id, req.body);
-    res.json({ success: true, data: student });
+    const prisma = require('../../config/database');
+    const student = await prisma.student.findFirst({
+      where: { id: req.params.id, school_id: req.user.school_id }
+    });
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student not found' });
+    }
+
+    if (req.user.role === 'STUDENT' && student.user_id !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'You can only edit your own profile' });
+    }
+    if (req.user.role === 'PARENT' && student.parent_id !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'You can only edit your own child\'s profile' });
+    }
+
+    if (req.user.role === 'STUDENT' || req.user.role === 'PARENT') {
+      const allowed = ['first_name', 'last_name', 'phone', 'date_of_birth', 'gender', 'nationality', 'profile_photo'];
+      for (const k of Object.keys(req.body)) {
+        if (!allowed.includes(k)) {
+          return res.status(403).json({ success: false, message: `You are not allowed to update ${k}` });
+        }
+      }
+    }
+
+    const updatedStudent = await service.updateStudent(req.params.id, req.user.school_id, req.body);
+    res.json({ success: true, data: updatedStudent });
   } catch (err) { next(err); }
 }
 
@@ -61,4 +85,11 @@ async function myProfile(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { create, list, getOne, fullProfile, update, remove, myProfile };
+async function parentChildren(req, res, next) {
+  try {
+    const data = await service.getParentChildren(req.user.id, req.user.school_id);
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+}
+
+module.exports = { create, list, getOne, fullProfile, update, remove, myProfile, parentChildren };

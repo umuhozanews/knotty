@@ -44,13 +44,77 @@ async function getClassStudents(classId, schoolId) {
 async function deleteLevel(id, schoolId) {
   const level = await prisma.level.findFirst({ where: { id, school_id: schoolId } });
   if (!level) throw Object.assign(new Error('Level not found'), { status: 404 });
-  return prisma.level.delete({ where: { id } });
+
+  return prisma.$transaction(async (tx) => {
+    const classes = await tx.class.findMany({ where: { level_id: id } });
+    const classIds = classes.map((c) => c.id);
+
+    const students = await tx.student.findMany({
+      where: {
+        OR: [
+          { level_id: id },
+          { class_id: { in: classIds } }
+        ]
+      }
+    });
+    const studentIds = students.map((s) => s.id);
+    const userIds = students.map((s) => s.user_id);
+
+    if (studentIds.length > 0) {
+      await tx.attendance.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.knottyCard.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.feePayment.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.canteenTransaction.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.walletTransaction.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.healthRecord.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.disciplineRecord.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.achievement.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.academicReport.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.student.deleteMany({ where: { id: { in: studentIds } } });
+      await tx.user.deleteMany({ where: { id: { in: userIds } } });
+    }
+
+    await tx.material.deleteMany({
+      where: {
+        OR: [
+          { level_id: id },
+          { class_id: { in: classIds } }
+        ]
+      }
+    });
+
+    await tx.subject.deleteMany({ where: { level_id: id } });
+    await tx.class.deleteMany({ where: { level_id: id } });
+    return tx.level.delete({ where: { id } });
+  });
 }
 
 async function deleteClass(id, schoolId) {
   const cls = await prisma.class.findFirst({ where: { id, school_id: schoolId } });
   if (!cls) throw Object.assign(new Error('Class not found'), { status: 404 });
-  return prisma.class.delete({ where: { id } });
+
+  return prisma.$transaction(async (tx) => {
+    const students = await tx.student.findMany({ where: { class_id: id } });
+    const studentIds = students.map((s) => s.id);
+    const userIds = students.map((s) => s.user_id);
+
+    if (studentIds.length > 0) {
+      await tx.attendance.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.knottyCard.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.feePayment.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.canteenTransaction.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.walletTransaction.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.healthRecord.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.disciplineRecord.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.achievement.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.academicReport.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.student.deleteMany({ where: { id: { in: studentIds } } });
+      await tx.user.deleteMany({ where: { id: { in: userIds } } });
+    }
+
+    await tx.material.deleteMany({ where: { class_id: id } });
+    return tx.class.delete({ where: { id } });
+  });
 }
 
 async function getStaff(schoolId) {

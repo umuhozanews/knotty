@@ -3,7 +3,7 @@ const Joi = require('joi');
 const createStudentSchema = Joi.object({
   first_name: Joi.string().required(),
   last_name: Joi.string().required(),
-  email: Joi.string().email().required(),
+  email: Joi.string().required(),
   phone: Joi.string().optional().allow(''),
   password: Joi.string().min(8).default('Knotty@2024'),
   date_of_birth: Joi.date().optional().allow(null, ''),
@@ -12,6 +12,7 @@ const createStudentSchema = Joi.object({
   level_id: Joi.string().optional().allow(''),
   class_id: Joi.string().optional().allow(''),
   parent_id: Joi.string().optional().allow(''),
+  profile_photo: Joi.string().optional().allow('', null),
 });
 
 const updateStudentSchema = Joi.object({
@@ -24,6 +25,7 @@ const updateStudentSchema = Joi.object({
   level_id: Joi.string().allow(''),
   class_id: Joi.string().allow(''),
   parent_id: Joi.string().allow(''),
+  profile_photo: Joi.string().optional().allow('', null),
   is_active: Joi.boolean(),
 });
 

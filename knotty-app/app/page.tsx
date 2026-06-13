@@ -8,6 +8,7 @@ import DisciplineDashboard from "@/components/dashboards/DisciplineDashboard";
 import BursarDashboard from "@/components/dashboards/BursarDashboard";
 import CanteenDashboard from "@/components/dashboards/CanteenDashboard";
 import StudentDashboard from "@/components/dashboards/StudentDashboard";
+import ParentDashboard from "@/components/dashboards/ParentDashboard";
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -22,6 +23,7 @@ export default function DashboardPage() {
       {role === "BURSAR"     && <BursarDashboard />}
       {role === "CANTEEN"    && <CanteenDashboard />}
       {role === "STUDENT"    && <StudentDashboard />}
+      {role === "PARENT"     && <ParentDashboard />}
     </DashboardShell>
   );
 }

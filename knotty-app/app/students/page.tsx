@@ -41,11 +41,13 @@ interface StudentForm {
   date_of_birth: string; nationality: string;
   guardian_name: string; guardian_phone: string; guardian_email: string;
   medical_notes: string; initial_balance: string;
+  profile_photo: string;
 }
 const BLANK: StudentForm = {
   first_name: "", last_name: "", email: "", phone: "", password: "Knotty@2024",
   gender: "M", level_id: "", class_id: "", date_of_birth: "", nationality: "Rwandan",
   guardian_name: "", guardian_phone: "", guardian_email: "", medical_notes: "", initial_balance: "",
+  profile_photo: "",
 };
 
 function StudentModal({
@@ -74,6 +76,7 @@ function StudentModal({
         class_id: existing.class?.id ?? "",
         date_of_birth: existing.date_of_birth ? existing.date_of_birth.slice(0, 10) : "",
         nationality: existing.nationality ?? "Rwandan",
+        profile_photo: existing.user.profile_photo ?? "",
       };
     }
     return { ...BLANK };
@@ -86,6 +89,16 @@ function StudentModal({
   const filteredClasses = form.level_id ? classes.filter((c) => c.level.id === form.level_id) : classes;
   const set = (k: keyof StudentForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setForm((f) => ({ ...f, profile_photo: reader.result as string }));
+    };
+    reader.readAsDataURL(file);
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -103,6 +116,7 @@ function StudentModal({
           gender: form.gender, date_of_birth: form.date_of_birth || undefined,
           nationality: form.nationality || undefined,
           level_id: form.level_id, class_id: form.class_id,
+          profile_photo: form.profile_photo || undefined,
         });
         if (form.medical_notes.trim()) {
           await health.create({
@@ -116,10 +130,11 @@ function StudentModal({
         const payload: Record<string, unknown> = {
           first_name: form.first_name, last_name: form.last_name,
           email: form.email, phone: form.phone || undefined,
-          password: form.password, gender: form.gender,
+          password: form.password || undefined, gender: form.gender,
           level_id: form.level_id, class_id: form.class_id,
           date_of_birth: form.date_of_birth || undefined,
           nationality: form.nationality || undefined,
+          profile_photo: form.profile_photo || undefined,
         };
 
         // If guardian info provided, create parent user first
@@ -209,12 +224,27 @@ function StudentModal({
           <div className="p-6 space-y-4">
             {tab === "basic" && (
               <>
+                <div className="flex justify-center mb-4">
+                  <label className="relative cursor-pointer group">
+                    <div className="w-20 h-20 rounded-full border-2 border-dashed border-gray-300 dark:border-gray-700 flex items-center justify-center overflow-hidden hover:border-blue-500 transition">
+                      {form.profile_photo ? (
+                        <img src={form.profile_photo} className="w-full h-full object-cover" alt="Avatar" />
+                      ) : (
+                        <div className="text-center p-2">
+                          <User className="mx-auto text-gray-400 group-hover:text-blue-500 transition" size={24} />
+                          <span className="text-[10px] text-gray-400 block mt-0.5">Upload Photo</span>
+                        </div>
+                      )}
+                    </div>
+                    <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
+                  </label>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="First Name" required><input required value={form.first_name} onChange={set("first_name")} className={inp} placeholder="e.g. Ange" /></Field>
                   <Field label="Last Name" required><input required value={form.last_name} onChange={set("last_name")} className={inp} placeholder="e.g. Uwimana" /></Field>
                 </div>
                 <Field label="Email Address" required>
-                  <input type="email" required value={form.email} onChange={set("email")} className={inp} placeholder="student@school.rw" disabled={isEdit} />
+                  <input type="text" required value={form.email} onChange={set("email")} className={inp} placeholder="student@school.rw" disabled={isEdit} />
                 </Field>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Phone">

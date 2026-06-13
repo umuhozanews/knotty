@@ -12,6 +12,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   // Fallback: read demo user directly from localStorage so the dashboard
   // works even when AuthContext hasn't re-hydrated yet after a hard reload.
   const [demoUser, setDemoUser] = useState<{ role: string } | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (localStorage.getItem("knotty_demo") === "true") {
@@ -35,8 +36,6 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   }
 
   if (!resolvedUser) return null;
-
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <div className="flex h-screen p-2 md:p-3 gap-2 md:gap-3 overflow-hidden relative" style={{ background: "var(--bg)" }}>

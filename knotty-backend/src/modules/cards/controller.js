@@ -86,6 +86,7 @@ async function list(req, res, next) {
 async function mySecureQR(req, res, next) {
   try {
     const result = await service.generateSecureQR(req.user.id);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.json({ success: true, ...result });
   } catch (err) { next(err); }
 }

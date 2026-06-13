@@ -356,7 +356,7 @@ export const cards = {
   transactions: (id: string, page = 1, limit = 20) =>
     request<{ success: boolean; data: WalletTransaction[]; pagination: unknown }>(`/cards/${id}/transactions?page=${page}&limit=${limit}`),
   getSecureQR: () =>
-    request<{ success: boolean; token: string; qr_code: string; expires_at: string }>("/cards/me/secure-qr"),
+    request<{ success: boolean; token: string; qr_code: string; expires_at: string }>(`/cards/me/secure-qr?_t=${Date.now()}`),
 };
 
 // ─── Wallet Transactions ──────────────────────────────────

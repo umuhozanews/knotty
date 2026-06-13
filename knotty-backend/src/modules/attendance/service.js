@@ -33,11 +33,14 @@ async function scanAttendance(cardNumber, recordedBy, options = {}) {
   const student = card.student;
   const now = new Date();
   
-  let targetDate = new Date();
+  let targetDate;
   if (date) {
     targetDate = new Date(date);
+  } else {
+    const kigaliDateStr = now.toLocaleDateString('en-ZA', { timeZone: 'Africa/Kigali' });
+    targetDate = new Date(kigaliDateStr.replace(/\//g, '-'));
   }
-  targetDate.setHours(0, 0, 0, 0);
+  targetDate.setUTCHours(0, 0, 0, 0);
 
   // Load school settings for late threshold
   const school = await prisma.school.findUnique({
@@ -60,7 +63,10 @@ async function scanAttendance(cardNumber, recordedBy, options = {}) {
     },
   };
 
-  const nowTimeStr = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const nowKigali = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Kigali' }));
+  const kigaliHr = nowKigali.getHours();
+  const kigaliMn = nowKigali.getMinutes();
+  const nowTimeStr = `${String(kigaliHr).padStart(2, '0')}:${String(kigaliMn).padStart(2, '0')}`;
 
   const isInRange = (timeStr, startStr, endStr) => {
     if (!startStr || !endStr) return true;
@@ -80,9 +86,8 @@ async function scanAttendance(cardNumber, recordedBy, options = {}) {
       }
     }
 
-    const lateThreshold = new Date();
-    lateThreshold.setHours(lateHr, lateMn, 0, 0);
-    const status = now > lateThreshold ? 'LATE' : 'PRESENT';
+    const isLate = (kigaliHr > lateHr) || (kigaliHr === lateHr && kigaliMn > lateMn);
+    const status = isLate ? 'LATE' : 'PRESENT';
 
     if (existing) {
       const updated = await prisma.attendance.update({
@@ -152,8 +157,10 @@ async function scanAttendance(cardNumber, recordedBy, options = {}) {
 }
 
 async function bulkMarkAttendance(classId, records, schoolId, recordedBy) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const now = new Date();
+  const kigaliDateStr = now.toLocaleDateString('en-ZA', { timeZone: 'Africa/Kigali' });
+  const today = new Date(kigaliDateStr.replace(/\//g, '-'));
+  today.setUTCHours(0, 0, 0, 0);
 
   const ops = records.map(({ student_id, status, note }) =>
     prisma.attendance.upsert({
@@ -250,8 +257,10 @@ async function scanAttendanceByNFC(nfcUid, recordedBy, options = {}) {
 }
 
 async function getTodaySummary(schoolId) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const now = new Date();
+  const kigaliDateStr = now.toLocaleDateString('en-ZA', { timeZone: 'Africa/Kigali' });
+  const today = new Date(kigaliDateStr.replace(/\//g, '-'));
+  today.setUTCHours(0, 0, 0, 0);
   const records = await prisma.attendance.findMany({
     where: { school_id: schoolId, date: today },
     select: { status: true, check_in_time: true, student: { select: { user: { select: { first_name: true, last_name: true, profile_photo: true } }, class: { select: { name: true } } } } },

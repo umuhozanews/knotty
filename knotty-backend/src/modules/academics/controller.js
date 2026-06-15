@@ -62,7 +62,7 @@ async function deleteProgram(req, res, next) {
 async function listSections(req, res, next) {
   try {
     const { campusId, programId, academicTermId } = req.query;
-    const result = await service.listClassSections(req.user.school_id, { campusId, programId, academicTermId });
+    const result = await service.listClassSections(req.user.school_id, { campusId, programId, academicTermId }, req.user);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }
@@ -100,7 +100,7 @@ async function unenroll(req, res, next) {
 async function listTimetable(req, res, next) {
   try {
     const { classSectionId, teacherId } = req.query;
-    const result = await service.listTimetable(req.user.school_id, { classSectionId, teacherId });
+    const result = await service.listTimetable(req.user.school_id, { classSectionId, teacherId }, req.user);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }
@@ -123,7 +123,7 @@ async function deleteTimetableEntry(req, res, next) {
 async function listExams(req, res, next) {
   try {
     const { academicTermId, subjectId } = req.query;
-    const result = await service.listExams(req.user.school_id, { academicTermId, subjectId });
+    const result = await service.listExams(req.user.school_id, { academicTermId, subjectId }, req.user);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }

@@ -2,6 +2,21 @@ const service = require('./service');
 
 async function create(req, res, next) {
   try {
+    if (req.user.role === 'TEACHER') {
+      if (!req.body.class_id) {
+        return res.status(400).json({ success: false, message: 'Class ID is required.' });
+      }
+      const prisma = require('../../config/database');
+      const targetClass = await prisma.class.findFirst({
+        where: { id: req.body.class_id, school_id: req.user.school_id }
+      });
+      if (!targetClass) {
+        return res.status(404).json({ success: false, message: 'Class not found.' });
+      }
+      if (targetClass.class_teacher_id !== req.user.id) {
+        return res.status(403).json({ success: false, message: 'Access denied: Only the Class Teacher is authorized to add students to this class.' });
+      }
+    }
     const student = await service.createStudent(req.body, req.user.school_id);
     res.status(201).json({ success: true, data: student });
   } catch (err) { next(err); }
@@ -29,6 +44,16 @@ async function verifyTeacherStudentAccess(userId, studentId, schoolId) {
   const assignments = teacher.subjects_taught;
   if (!Array.isArray(assignments)) return false;
   return assignments.some(a => a.class_id === student.class_id);
+}
+
+async function verifyIsClassTeacher(userId, studentId, schoolId) {
+  const prisma = require('../../config/database');
+  const student = await prisma.student.findFirst({
+    where: { id: studentId, school_id: schoolId },
+    include: { class: true }
+  });
+  if (!student || !student.class) return false;
+  return student.class.class_teacher_id === userId;
 }
 
 async function getOne(req, res, next) {
@@ -74,9 +99,9 @@ async function update(req, res, next) {
       return res.status(403).json({ success: false, message: 'You can only edit your own child\'s profile' });
     }
     if (req.user.role === 'TEACHER') {
-      const hasAccess = await verifyTeacherStudentAccess(req.user.id, req.params.id, req.user.school_id);
-      if (!hasAccess) {
-        return res.status(403).json({ success: false, message: 'Access denied: You are not assigned to this student\'s class.' });
+      const isClassTeacher = await verifyIsClassTeacher(req.user.id, req.params.id, req.user.school_id);
+      if (!isClassTeacher) {
+        return res.status(403).json({ success: false, message: 'Access denied: Only the Class Teacher is authorized to update student profiles.' });
       }
     }
 
@@ -97,9 +122,9 @@ async function update(req, res, next) {
 async function remove(req, res, next) {
   try {
     if (req.user.role === 'TEACHER') {
-      const hasAccess = await verifyTeacherStudentAccess(req.user.id, req.params.id, req.user.school_id);
-      if (!hasAccess) {
-        return res.status(403).json({ success: false, message: 'Access denied: You are not assigned to this student\'s class.' });
+      const isClassTeacher = await verifyIsClassTeacher(req.user.id, req.params.id, req.user.school_id);
+      if (!isClassTeacher) {
+        return res.status(403).json({ success: false, message: 'Access denied: Only the Class Teacher is authorized to delete students.' });
       }
     }
     await service.deleteStudent(req.params.id, req.user.school_id);

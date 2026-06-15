@@ -163,7 +163,7 @@ export const schools = {
 
 // ─── Structure (Levels & Classes) ────────────────────────
 export interface Level { id: string; name: string; description?: string; _count?: { classes: number; students: number } }
-export interface Class { id: string; name: string; level: Level; academic_year?: string; _count?: { students: number } }
+export interface Class { id: string; name: string; level: Level; academic_year?: string; class_teacher_id?: string; _count?: { students: number } }
 
 export interface StaffMember {
   id: string;

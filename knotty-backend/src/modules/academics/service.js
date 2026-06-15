@@ -68,11 +68,26 @@ async function deleteProgram(id, schoolId) {
 }
 
 // ─── Class Sections ───
-async function listClassSections(schoolId, { campusId, programId, academicTermId } = {}) {
+async function listClassSections(schoolId, { campusId, programId, academicTermId } = {}, user) {
   const where = { school_id: schoolId };
   if (campusId) where.campus_id = campusId;
   if (programId) where.program_id = programId;
   if (academicTermId) where.academic_term_id = academicTermId;
+
+  if (user && user.role === 'TEACHER') {
+    const sections = await prisma.classSection.findMany({
+      where: {
+        school_id: schoolId,
+        OR: [
+          { homeroom_staff_id: user.id },
+          { timetable_entries: { some: { staff_id: user.id } } }
+        ]
+      },
+      select: { id: true }
+    });
+    const sectionIds = sections.map(s => s.id);
+    where.id = { in: sectionIds };
+  }
 
   return prisma.classSection.findMany({
     where,
@@ -193,10 +208,31 @@ async function unenrollStudent(schoolId, enrollmentId) {
 }
 
 // ─── Timetable Entries ───
-async function listTimetable(schoolId, { classSectionId, teacherId } = {}) {
+async function listTimetable(schoolId, { classSectionId, teacherId } = {}, user) {
   const where = { school_id: schoolId };
   if (classSectionId) where.class_section_id = classSectionId;
   if (teacherId) where.staff_id = teacherId;
+
+  if (user && user.role === 'TEACHER') {
+    const sections = await prisma.classSection.findMany({
+      where: {
+        school_id: schoolId,
+        OR: [
+          { homeroom_staff_id: user.id },
+          { timetable_entries: { some: { staff_id: user.id } } }
+        ]
+      },
+      select: { id: true }
+    });
+    const sectionIds = sections.map(s => s.id);
+    if (classSectionId) {
+      if (!sectionIds.includes(classSectionId)) {
+        return [];
+      }
+    } else {
+      where.class_section_id = { in: sectionIds };
+    }
+  }
 
   return prisma.timetableEntry.findMany({
     where,
@@ -262,10 +298,39 @@ async function deleteTimetableEntry(id, schoolId) {
 }
 
 // ─── Exams ───
-async function listExams(schoolId, { academicTermId, subjectId } = {}) {
+async function listExams(schoolId, { academicTermId, subjectId } = {}, user) {
   const where = { school_id: schoolId };
   if (academicTermId) where.academic_term_id = academicTermId;
   if (subjectId) where.subject_id = subjectId;
+
+  if (user && user.role === 'TEACHER') {
+    const teacher = await prisma.teacher.findFirst({
+      where: { user_id: user.id, school_id: schoolId }
+    });
+    if (!teacher || !teacher.subjects_taught) {
+      return [];
+    }
+    const assignments = teacher.subjects_taught;
+    if (!Array.isArray(assignments)) {
+      return [];
+    }
+    const subjectNames = assignments.map(a => a.subject).filter(Boolean);
+    const subjects = await prisma.subject.findMany({
+      where: {
+        school_id: schoolId,
+        name: { in: subjectNames, mode: 'insensitive' }
+      },
+      select: { id: true }
+    });
+    const subjectIds = subjects.map(s => s.id);
+    if (subjectId) {
+      if (!subjectIds.includes(subjectId)) {
+        return [];
+      }
+    } else {
+      where.subject_id = { in: subjectIds };
+    }
+  }
 
   return prisma.exam.findMany({
     where,
@@ -374,6 +439,44 @@ async function recordExamResults(schoolId, actorUserId, examId, results) {
   });
   if (!exam) throw Object.assign(new Error('Exam not found'), { status: 404 });
 
+  const actorUser = await prisma.user.findUnique({ where: { id: actorUserId } });
+  if (actorUser && actorUser.role === 'TEACHER') {
+    const teacher = await prisma.teacher.findFirst({
+      where: { user_id: actorUserId, school_id: schoolId }
+    });
+    if (!teacher || !teacher.subjects_taught) {
+      throw Object.assign(new Error('Access denied: You are not assigned to teach any subjects.'), { status: 403 });
+    }
+    const assignments = teacher.subjects_taught;
+    if (!Array.isArray(assignments)) {
+      throw Object.assign(new Error('Access denied: Invalid subject assignments.'), { status: 403 });
+    }
+
+    const subject = await prisma.subject.findUnique({ where: { id: exam.subject_id } });
+    const examSubjectName = subject ? subject.name.toLowerCase() : '';
+
+    for (const res of results) {
+      const student = await prisma.student.findFirst({
+        where: { id: res.student_id, school_id: schoolId },
+        include: { class: true }
+      });
+      if (!student) {
+        throw Object.assign(new Error(`Student ${res.student_id} not found.`), { status: 404 });
+      }
+
+      const isClassTeacher = student.class && student.class.class_teacher_id === actorUserId;
+      const teachesSubjectInClass = assignments.some(a => {
+        const isSameClass = a.class_id === student.class_id;
+        const isSameSubject = a.subject && a.subject.toLowerCase() === examSubjectName;
+        return isSameClass && isSameSubject;
+      });
+
+      if (!isClassTeacher && !teachesSubjectInClass) {
+        throw Object.assign(new Error(`Access denied: You do not teach ${subject ? subject.name : 'this subject'} in class ${student.class ? student.class.name : ''}.`), { status: 403 });
+      }
+    }
+  }
+
   const gradingScale = await getGradingScale(schoolId);
   const savedResults = [];
 
@@ -447,6 +550,17 @@ async function approveExamResult(schoolId, actorUserId, resultId) {
     where: { id: resultId, school_id: schoolId },
   });
   if (!result) throw Object.assign(new Error('Exam result not found'), { status: 404 });
+
+  const actorUser = await prisma.user.findUnique({ where: { id: actorUserId } });
+  if (actorUser && actorUser.role === 'TEACHER') {
+    const student = await prisma.student.findFirst({
+      where: { id: result.student_id, school_id: schoolId },
+      include: { class: true }
+    });
+    if (!student || !student.class || student.class.class_teacher_id !== actorUserId) {
+      throw Object.assign(new Error('Access denied: Only the Class Teacher is authorized to approve student marks.'), { status: 403 });
+    }
+  }
 
   const updated = await prisma.examResult.update({
     where: { id: resultId },

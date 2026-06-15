@@ -402,10 +402,11 @@ function DeleteConfirm({ student, onClose, onConfirm, loading }: { student: Stud
 }
 
 // ─── Student Row ──────────────────────────────────────────────────────────────
-function StudentRow({ s, idx, onEdit, onDelete, onIssue, issuing }: {
+function StudentRow({ s, idx, onEdit, onDelete, onIssue, issuing, isClassTeacher }: {
   s: Student; idx: number;
   onEdit: () => void; onDelete: () => void;
   onIssue: () => void; issuing: boolean;
+  isClassTeacher: boolean;
 }) {
   const router = useRouter();
   const { user } = useAuth();
@@ -454,10 +455,12 @@ function StudentRow({ s, idx, onEdit, onDelete, onIssue, issuing }: {
             {issuing ? <Loader2 size={11} className="animate-spin" /> : <CreditCard size={11} />}
           </button>
         )}
-        <button onClick={onEdit} title="Edit" className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 transition">
-          <Edit2 size={12} />
-        </button>
-        {(user?.role === "ADMIN" || user?.role === "TEACHER") && (
+        {(user?.role === "ADMIN" || (user?.role === "TEACHER" && isClassTeacher)) && (
+          <button onClick={onEdit} title="Edit" className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 transition">
+            <Edit2 size={12} />
+          </button>
+        )}
+        {(user?.role === "ADMIN" || (user?.role === "TEACHER" && isClassTeacher)) && (
           <button onClick={onDelete} title="Remove" className="p-1.5 rounded-lg border border-red-200 text-red-400 hover:bg-red-50 transition">
             <Trash2 size={12} />
           </button>
@@ -522,6 +525,8 @@ export default function StudentsPage() {
 
   const currentClassStudents = selectedClass ? (studentsByClass[selectedClass] ?? []) : [];
   const currentLevelClasses = selectedLevel ? classes.filter((c) => c.level.id === selectedLevel) : [];
+  const selectedClassObj = classes.find((c) => c.id === selectedClass);
+  const isClassTeacher = !selectedClassObj || user?.role !== 'TEACHER' || selectedClassObj.class_teacher_id === user?.id;
   const totalSelected = classes.reduce((acc, c) => {
     const n = studentsByClass[c.id]?.length ?? (c._count?.students ?? 0);
     return acc + n;
@@ -622,12 +627,14 @@ export default function StudentsPage() {
                 className="bg-transparent text-sm outline-none flex-1 text-gray-700 dark:text-gray-200"
               />
             </div>
-            <button
-              onClick={() => { setEditStudent(null); setShowModal(true); }}
-              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition"
-            >
-              <Plus size={15} /> Add Student
-            </button>
+            {isClassTeacher && (
+              <button
+                onClick={() => { setEditStudent(null); setShowModal(true); }}
+                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition"
+              >
+                <Plus size={15} /> Add Student
+              </button>
+            )}
           </div>
 
           {/* Student List */}
@@ -645,13 +652,17 @@ export default function StudentsPage() {
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <Users size={40} className="text-gray-200 mb-3" />
                 <p className="text-gray-600 dark:text-gray-300 font-medium">No students in this class</p>
-                <p className="text-sm text-gray-400 mt-1">Click "Add Student" to enroll the first student.</p>
-                <button
-                  onClick={() => setShowModal(true)}
-                  className="mt-4 flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition"
-                >
-                  <Plus size={14} /> Enroll First Student
-                </button>
+                <p className="text-sm text-gray-400 mt-1">
+                  {isClassTeacher ? 'Click "Add Student" to enroll the first student.' : 'Contact the class teacher or admin to enroll students.'}
+                </p>
+                {isClassTeacher && (
+                  <button
+                    onClick={() => setShowModal(true)}
+                    className="mt-4 flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition"
+                  >
+                    <Plus size={14} /> Enroll First Student
+                  </button>
+                )}
               </div>
             ) : (
               <div className="space-y-0.5">
@@ -662,6 +673,7 @@ export default function StudentsPage() {
                     onDelete={() => setDeleteTarget(s)}
                     onIssue={() => handleIssue(s.id)}
                     issuing={issuing === s.id}
+                    isClassTeacher={isClassTeacher}
                   />
                 ))}
               </div>

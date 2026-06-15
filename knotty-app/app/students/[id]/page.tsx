@@ -1071,15 +1071,15 @@ export default function StudentProfilePage() {
 
         {/* ── Profile Hero ────────────────────────────────────────── */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm overflow-hidden">
-          {/* Orange banner */}
-          <div className="h-20 bg-gradient-to-r from-blue-600 to-blue-800" />
+          {/* Black banner */}
+          <div className="h-20 bg-[#121212] border-b border-[#dcd9d9]/20" />
           <div className="px-6 pb-5 -mt-10 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div className="flex items-end gap-4">
               <div className="w-20 h-20 rounded-2xl overflow-hidden flex-shrink-0 border-4 border-white dark:border-gray-900 shadow-md">
                 {profile.user.profile_photo ? (
                   <img src={profile.user.profile_photo} className="w-full h-full object-cover" alt={name} />
                 ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-white text-2xl font-bold">
+                  <div className="w-full h-full bg-[#121212] flex items-center justify-center text-white text-2xl font-bold">
                     {initials}
                   </div>
                 )}

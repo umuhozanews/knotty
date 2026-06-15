@@ -15,6 +15,8 @@ router.post('/', authorize('ADMIN', 'TEACHER'), validate(createStudentSchema), c
 router.get('/', authorize('ADMIN', 'TEACHER', 'NURSE', 'BURSAR', 'DISCIPLINE'), ctrl.list);
 router.get('/:id', authorize('ADMIN', 'TEACHER', 'NURSE', 'BURSAR', 'DISCIPLINE', 'PARENT', 'STUDENT'), ctrl.getOne);
 router.get('/:id/full-profile', authorize('ADMIN', 'TEACHER'), ctrl.fullProfile);
+router.get('/:id/consent', authorize('ADMIN', 'TEACHER', 'PARENT', 'STUDENT'), ctrl.listConsent);
+router.post('/:id/consent', authorize('ADMIN', 'PARENT'), ctrl.recordConsent);
 router.put('/:id', authorize('ADMIN', 'TEACHER', 'PARENT', 'STUDENT'), validate(updateStudentSchema), ctrl.update);
 router.delete('/:id', authorize('ADMIN', 'TEACHER'), ctrl.remove);
 

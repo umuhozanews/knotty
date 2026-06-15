@@ -92,4 +92,29 @@ async function parentChildren(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { create, list, getOne, fullProfile, update, remove, myProfile, parentChildren };
+async function listConsent(req, res, next) {
+  try {
+    const result = await service.getConsentRecords(req.params.id, req.user.school_id);
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
+async function recordConsent(req, res, next) {
+  try {
+    const result = await service.recordConsent(req.user.school_id, req.params.id, req.body);
+    res.status(201).json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
+module.exports = {
+  create,
+  list,
+  getOne,
+  fullProfile,
+  update,
+  remove,
+  myProfile,
+  parentChildren,
+  listConsent,
+  recordConsent,
+};

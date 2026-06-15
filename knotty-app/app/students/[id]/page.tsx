@@ -11,12 +11,12 @@ import DashboardShell from "@/components/DashboardShell";
 import VirtualCardTap from "@/components/VirtualCardTap";
 import {
   students, cards, attendance, discipline, health, reports, fees, canteen,
-  FullProfile, WalletTransaction, FeePayment, CanteenTransaction, AcademicReport
+  FullProfile, WalletTransaction, FeePayment, CanteenTransaction, AcademicReport, ConsentRecord
 } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 
-type Tab = "overview" | "attendance" | "wallet" | "reports" | "health" | "discipline" | "fees" | "canteen";
+type Tab = "overview" | "attendance" | "wallet" | "reports" | "health" | "discipline" | "fees" | "canteen" | "consent";
 
 const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
   { key: "overview",    label: "Overview",    icon: User },
@@ -27,6 +27,7 @@ const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
   { key: "discipline",  label: "Discipline",  icon: AlertTriangle },
   { key: "fees",        label: "Fees",        icon: CreditCard },
   { key: "canteen",     label: "Canteen",     icon: ShoppingBag },
+  { key: "consent",     label: "Consent",     icon: CheckCircle },
 ];
 
 const STATUS_COLOR: Record<string, string> = {
@@ -152,6 +153,63 @@ function AddDisciplineModal({ studentId, onClose, onSuccess }: { studentId: stri
             <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600">Cancel</button>
             <button type="submit" disabled={loading} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-sm text-white font-medium flex items-center justify-center gap-2">
               {loading && <Loader2 size={13} className="animate-spin" />} Save
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function RecordConsentModal({ studentId, guardianId, onClose, onSuccess }: { studentId: string; guardianId: string; onClose: () => void; onSuccess: () => void }) {
+  const [form, setForm] = useState({ consent_type: "Medical Care", version: "1.0", document_url: "" });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await students.recordConsent(studentId, {
+        ...form,
+        guardian_id: guardianId,
+      });
+      onSuccess();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-800">
+          <h3 className="font-bold text-gray-800 dark:text-gray-100">Record Guardian Consent</h3>
+          <button onClick={onClose}><X size={16} className="text-gray-400" /></button>
+        </div>
+        <form onSubmit={submit} className="p-5 space-y-3">
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">Consent Type</label>
+            <select value={form.consent_type} onChange={(e) => setForm({ ...form, consent_type: e.target.value })} className={inp}>
+              {["Medical Care", "Media Release", "Field Trip", "Data Processing", "Other"].map((t) => <option key={t}>{t}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">Version</label>
+            <input required value={form.version} onChange={(e) => setForm({ ...form, version: e.target.value })} className={inp} placeholder="e.g. 1.0" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">Signed Document URL (Optional)</label>
+            <input value={form.document_url} onChange={(e) => setForm({ ...form, document_url: e.target.value })} className={inp} placeholder="e.g. https://example.com/consent.pdf" />
+          </div>
+          {error && <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 rounded-xl px-3 py-2">{error}</p>}
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600">Cancel</button>
+            <button type="submit" disabled={loading} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-sm text-white font-medium flex items-center justify-center gap-2">
+              {loading && <Loader2 size={13} className="animate-spin" />} Save Consent
             </button>
           </div>
         </form>
@@ -795,6 +853,7 @@ export default function StudentProfilePage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
+  const role = user?.role ?? "STUDENT";
   const { show } = useToast();
   const [profile, setProfile] = useState<FullProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -804,6 +863,8 @@ export default function StudentProfilePage() {
   const [canteenList, setCanteenList] = useState<CanteenTransaction[]>([]);
   const [tabLoading, setTabLoading] = useState(false);
   const [modal, setModal] = useState<null | "health" | "discipline" | "fee" | "report">(null);
+  const [consentRecords, setConsentRecords] = useState<ConsentRecord[]>([]);
+  const [showRecordConsentModal, setShowRecordConsentModal] = useState(false);
 
   // Wallet top-up state (inline)
   const [topupAmount, setTopupAmount] = useState("");
@@ -848,6 +909,13 @@ export default function StudentProfilePage() {
       setTabLoading(true);
       canteen.studentTransactions(studentId)
         .then((r) => setCanteenList(r.data as CanteenTransaction[]))
+        .catch(console.error)
+        .finally(() => setTabLoading(false));
+    }
+    if (tab === "consent") {
+      setTabLoading(true);
+      students.consent(studentId)
+        .then((r) => setConsentRecords(r.data))
         .catch(console.error)
         .finally(() => setTabLoading(false));
     }
@@ -973,6 +1041,20 @@ export default function StudentProfilePage() {
           onSuccess={reloadProfile}
         />
       )}
+      {showRecordConsentModal && profile?.parent && (
+        <RecordConsentModal
+          studentId={studentId}
+          guardianId={profile.parent.id || profile.parent_id || ""}
+          onClose={() => setShowRecordConsentModal(false)}
+          onSuccess={() => {
+            setTabLoading(true);
+            students.consent(studentId)
+              .then((r) => setConsentRecords(r.data))
+              .catch(console.error)
+              .finally(() => setTabLoading(false));
+          }}
+        />
+      )}
 
       <div className="p-4 space-y-4 max-w-5xl">
         {/* Back */}
@@ -984,33 +1066,37 @@ export default function StudentProfilePage() {
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm overflow-hidden">
           {/* Orange banner */}
           <div className="h-20 bg-gradient-to-r from-blue-600 to-blue-800" />
-          <div className="px-6 pb-5 -mt-10 flex items-end justify-between">
+          <div className="px-6 pb-5 -mt-10 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div className="flex items-end gap-4">
-              {profile.user.profile_photo ? (
-                <img src={profile.user.profile_photo} className="w-20 h-20 rounded-2xl object-cover border-4 border-white dark:border-gray-900 shadow-md" alt={name} />
-              ) : (
-                <div className="w-20 h-20 rounded-2xl border-4 border-white dark:border-gray-900 shadow-md bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-white text-2xl font-bold">
-                  {initials}
-                </div>
-              )}
+              <div className="w-20 h-20 rounded-2xl overflow-hidden flex-shrink-0 border-4 border-white dark:border-gray-900 shadow-md">
+                {profile.user.profile_photo ? (
+                  <img src={profile.user.profile_photo} className="w-full h-full object-cover" alt={name} />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-white text-2xl font-bold">
+                    {initials}
+                  </div>
+                )}
+              </div>
               <div className="pb-1">
                 <h1 className="text-xl font-bold text-gray-800 dark:text-gray-100">{name}</h1>
                 <p className="text-sm text-gray-400">{profile.level?.name} · Class {profile.class?.name}</p>
                 <p className="text-xs text-gray-400 font-mono">{profile.student_code}{age ? ` · ${age} years old` : ""}</p>
               </div>
             </div>
-            <div className="pb-1 text-right">
+            <div className="pb-1 text-left sm:text-right">
               {profile.card ? (
-                <div>
-                  <p className="text-xs text-gray-400">Wallet Balance</p>
-                  <p className={`text-2xl font-bold ${profile.card.wallet_balance < 1000 ? "text-red-500" : "text-blue-600"}`}>
-                    {profile.card.wallet_balance.toLocaleString()} <span className="text-sm font-normal text-gray-400">RWF</span>
-                  </p>
-                  <div className="flex items-center gap-1.5 justify-end mt-1">
+                <div className="flex flex-col items-start sm:items-end gap-1.5">
+                  <div className="flex items-center gap-1.5 justify-start sm:justify-end">
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${profile.card.is_frozen ? "bg-blue-50 text-blue-500" : "bg-green-50 text-green-600"}`}>
                       {profile.card.is_frozen ? "Frozen" : "Active"}
                     </span>
                     <span className="text-xs text-gray-400 font-mono">{profile.card.card_number}</span>
+                  </div>
+                  <div className="text-left sm:text-right">
+                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Wallet Balance</p>
+                    <p className="text-xs font-bold text-blue-600 dark:text-blue-400 mt-0.5">
+                      {profile.card.wallet_balance.toLocaleString()} <span className="text-[10px] font-normal text-blue-500/80 dark:text-blue-400/80">RWF</span>
+                    </p>
                   </div>
                 </div>
               ) : (
@@ -1471,6 +1557,42 @@ export default function StudentProfilePage() {
                       </div>
                     );
                   })}
+                </div>
+              )}
+            </div>
+          )}
+          {/* CONSENT RECORDS */}
+          {tab === "consent" && (
+            <div>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-semibold text-gray-700 dark:text-gray-200">Guardian Consent Registry</h3>
+                {(role === "ADMIN" || role === "PARENT") && (
+                  <button onClick={() => setShowRecordConsentModal(true)} className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded-xl font-medium transition flex items-center gap-1">
+                    <Plus size={12} /> Record Consent
+                  </button>
+                )}
+              </div>
+              {tabLoading ? (
+                <div className="flex justify-center py-8"><Loader2 className="animate-spin text-blue-600" size={20} /></div>
+              ) : consentRecords.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-10">No consent records logged for this student.</p>
+              ) : (
+                <div className="space-y-3">
+                  {consentRecords.map((r) => (
+                    <div key={r.id} className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl flex justify-between items-start">
+                      <div className="space-y-1">
+                        <span className="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">{r.consent_type}</span>
+                        <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 mt-1.5">Version: {r.version}</p>
+                        <p className="text-xs text-gray-400">Granted by guardian: {r.guardian?.first_name} {r.guardian?.last_name} ({r.guardian?.email})</p>
+                        <p className="text-xs text-gray-400">Granted at: {new Date(r.granted_at).toLocaleString()}</p>
+                      </div>
+                      {r.document_url && (
+                        <a href={r.document_url} target="_blank" rel="noreferrer" className="text-xs text-blue-500 font-semibold hover:underline">
+                          View Signed Doc
+                        </a>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

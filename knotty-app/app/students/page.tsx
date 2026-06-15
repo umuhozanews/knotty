@@ -285,13 +285,9 @@ function StudentModal({
                 </div>
                 {!isEdit && (
                   <div className="grid grid-cols-2 gap-3">
-                    {(user?.role === "ADMIN" || user?.role === "BURSAR") ? (
-                      <Field label="Initial Wallet Balance (RWF)">
-                        <input type="number" min="0" value={form.initial_balance} onChange={set("initial_balance")} className={inp} placeholder="0" />
-                      </Field>
-                    ) : (
-                      <div />
-                    )}
+                    <Field label="Initial Wallet Balance (RWF)">
+                      <input type="number" min="0" value={form.initial_balance} onChange={set("initial_balance")} className={inp} placeholder="0" />
+                    </Field>
                     <Field label="Login Password">
                       <div className="relative">
                         <input type={showPass ? "text" : "password"} value={form.password} onChange={set("password")} className={`${inp} pr-10`} />
@@ -412,18 +408,25 @@ function StudentRow({ s, idx, onEdit, onDelete, onIssue, issuing }: {
           {s.gender && <span className={`text-xs px-1.5 py-0.5 rounded-md font-medium ${s.gender === "M" ? "bg-blue-50 text-blue-500" : "bg-pink-50 text-pink-500"}`}>{s.gender === "M" ? "M" : "F"}</span>}
         </div>
         <p className="text-xs text-gray-400 font-mono">{s.student_code}{age ? ` · ${age}y` : ""}</p>
+        {s.card ? (
+          <p className="text-[11px] font-bold text-blue-600 dark:text-blue-400 mt-0.5 sm:hidden">
+            Balance: {s.card.wallet_balance.toLocaleString()} RWF
+          </p>
+        ) : (
+          <p className="text-xs text-gray-400 mt-0.5 sm:hidden">No card</p>
+        )}
       </div>
       <div className="hidden sm:block text-right min-w-0">
-        {s.card ? (
-          <p className={`text-sm font-bold ${s.card.wallet_balance < 1000 ? "text-red-500" : "text-teal-600"}`}>
-            {s.card.wallet_balance.toLocaleString()} <span className="text-xs font-normal text-gray-400">RWF</span>
-          </p>
-        ) : <p className="text-xs text-gray-300">No card</p>}
         {s.card && (
           <p className={`text-xs ${s.card.is_frozen ? "text-amber-500" : s.card.is_active ? "text-green-500" : "text-red-400"}`}>
             {s.card.is_frozen ? "Frozen" : s.card.is_active ? "Active" : "Inactive"}
           </p>
         )}
+        {s.card ? (
+          <p className="text-xs font-bold text-blue-600 dark:text-blue-400 mt-0.5">
+            {s.card.wallet_balance.toLocaleString()} <span className="text-[10px] font-normal text-blue-500/70 dark:text-blue-400/70">RWF</span>
+          </p>
+        ) : <p className="text-xs text-gray-300">No card</p>}
       </div>
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition" onClick={(e) => e.stopPropagation()}>
         {!s.card && (

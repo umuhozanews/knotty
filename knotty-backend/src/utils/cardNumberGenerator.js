@@ -6,7 +6,7 @@ async function generateCardNumber(schoolCode) {
 
   const lastCard = await prisma.knottyCard.findFirst({
     where: { card_number: { startsWith: prefix } },
-    orderBy: { created_at: 'desc' },
+    orderBy: { card_number: 'desc' },
   });
 
   let seq = 1;
@@ -24,7 +24,7 @@ async function generateStudentCode(schoolCode) {
 
   const lastStudent = await prisma.student.findFirst({
     where: { student_code: { startsWith: prefix } },
-    orderBy: { created_at: 'desc' },
+    orderBy: { student_code: 'desc' },
   });
 
   let seq = 1;

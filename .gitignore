@@ -18,3 +18,9 @@ madeof/ .next
 pg_data/
 .env*
 .gemini/
+
+# Logs and screenshots
+pg_data_start.log
+postgres_log.txt
+*.png
+uploads/

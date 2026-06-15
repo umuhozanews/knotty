@@ -33,7 +33,7 @@ export default function LoginPage() {
     setSubmitting(true);
 
     try {
-      await login(email, password);
+      await login(email.trim(), password.trim());
       router.replace("/");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");

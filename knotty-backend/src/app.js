@@ -44,6 +44,9 @@ app.use(`${API}/teachers`, require('./modules/teachers/routes'));
 app.use(`${API}/structure`, require('./modules/levels/routes'));
 app.use(`${API}/notifications`, require('./modules/notifications/routes'));
 app.use(`${API}/materials`, require('./modules/materials/routes'));
+app.use(`${API}/library`, require('./modules/library/routes'));
+app.use(`${API}/gate-access`, require('./modules/gate-access/routes'));
+app.use(`${API}/academics`, require('./modules/academics/routes'));
 
 // ─── Static uploads (local dev fallback) ───
 app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));

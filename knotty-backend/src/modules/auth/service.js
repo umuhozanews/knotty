@@ -36,7 +36,8 @@ function generateTokens(userId, role, schoolId) {
 }
 
 async function login(email, password) {
-  const user = await prisma.user.findUnique({ where: { email } });
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  const user = await prisma.user.findUnique({ where: { email: cleanEmail } });
   if (!user || !user.is_active) throw Object.assign(new Error('Invalid credentials'), { status: 401 });
 
   const valid = await bcrypt.compare(password, user.password_hash);

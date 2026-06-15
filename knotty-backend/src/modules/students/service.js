@@ -177,7 +177,7 @@ async function getStudentById(id, schoolId) {
       level: true,
       class: true,
       card: true,
-      parent: { select: { first_name: true, last_name: true, phone: true, email: true } },
+      parent: { select: { id: true, first_name: true, last_name: true, phone: true, email: true } },
     },
   });
   if (!student) throw Object.assign(new Error('Student not found'), { status: 404 });
@@ -326,4 +326,40 @@ async function getParentChildren(parentId, schoolId) {
   });
 }
 
-module.exports = { createStudent, listStudents, getStudentById, getFullProfile, updateStudent, deleteStudent, getParentChildren };
+async function getConsentRecords(studentId, schoolId) {
+  return prisma.consentRecord.findMany({
+    where: { student_id: studentId, school_id: schoolId },
+    include: {
+      guardian: { select: { first_name: true, last_name: true, email: true } },
+    },
+    orderBy: { granted_at: 'desc' },
+  });
+}
+
+async function recordConsent(schoolId, studentId, { consent_type, version, guardian_id, document_url }) {
+  return prisma.consentRecord.create({
+    data: {
+      school_id: schoolId,
+      student_id,
+      guardian_id,
+      consent_type,
+      version,
+      document_url: document_url || null,
+    },
+    include: {
+      guardian: { select: { first_name: true, last_name: true } },
+    },
+  });
+}
+
+module.exports = {
+  createStudent,
+  listStudents,
+  getStudentById,
+  getFullProfile,
+  updateStudent,
+  deleteStudent,
+  getParentChildren,
+  getConsentRecords,
+  recordConsent,
+};

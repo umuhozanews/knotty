@@ -21,6 +21,7 @@ function gradeFromPct(pct) {
   if (pct >= 70) return 'C';
   if (pct >= 65) return 'D';
   if (pct >= 50) return 'E';
+  if (pct >= 40) return 'S';
   return 'F';
 }
 
@@ -320,7 +321,7 @@ async function generateReportCard(report, student, school) {
 
     // ── 6. GRADING SCALE ──────────────────────────────────────────────────────
     const scaleRows = [
-      { label: 'Final Grade',  values: ['100-80', '79-75', '74-70', '69-65', '64-50', '59-50', '49-00'] },
+      { label: 'Final Grade',  values: ['100-80', '79-75', '74-70', '69-65', '64-50', '49-40', '39-00'] },
       { label: 'Letter Grade', values: ['A', 'B', 'C', 'D', 'E', 'S', 'F'] },
       { label: 'Grade Value',  values: ['6', '5', '4', '3', '2', '1', '0'] },
     ];

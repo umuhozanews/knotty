@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, Users, ClipboardCheck, CreditCard, ShoppingCart,
   Banknote, FileText, AlertTriangle, Settings, LogOut, ChevronRight,
-  Heart, BookOpen, User, CalendarDays, GraduationCap, Wallet, X,
+  Heart, BookOpen, User, CalendarDays, GraduationCap, Wallet, X, Library, Shield,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
@@ -24,6 +24,9 @@ const ALL_NAV = [
   // ── Admin / Teacher / Staff shared ──
   { icon: Users,           label: "Students",     href: "/students",      roles: ["ADMIN","TEACHER","NURSE","BURSAR","DISCIPLINE"] },
   { icon: ClipboardCheck,  label: "Attendance",   href: "/attendance",    roles: ["ADMIN","TEACHER","DISCIPLINE"] },
+  { icon: GraduationCap,   label: "Academics",    href: "/academics",     roles: ["ADMIN","TEACHER","STUDENT","PARENT"] },
+  { icon: Shield,          label: "Gate Access",  href: "/gate-access",   roles: ["ADMIN","DISCIPLINE"] },
+  { icon: Library,         label: "Library",      href: "/library",       roles: ["ADMIN","LIBRARIAN"] },
   { icon: BookOpen,        label: "Materials",    href: "/materials",     roles: ["ADMIN","TEACHER"] },
   { icon: FileText,        label: "Reports",      href: "/reports",       roles: ["ADMIN","TEACHER"] },
   { icon: AlertTriangle,   label: "Discipline",   href: "/discipline",    roles: ["ADMIN","TEACHER","DISCIPLINE"] },
@@ -43,6 +46,7 @@ const ROLE_LABELS: Record<string, string> = {
   DISCIPLINE: "Discipline Office",
   CANTEEN:    "Canteen Staff",
   PARENT:     "Parent",
+  LIBRARIAN:  "Librarian",
 };
 
 interface SidebarProps {

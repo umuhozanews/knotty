@@ -102,20 +102,85 @@ async function deleteClass(id, schoolId) {
     const userIds = students.map((s) => s.user_id);
 
     if (studentIds.length > 0) {
+      // Get cards and card IDs
+      const studentCards = await tx.knottyCard.findMany({
+        where: { student_id: { in: studentIds } },
+        select: { id: true }
+      });
+      const cardIds = studentCards.map(c => c.id);
+
+      // 1. Delete borrow records
+      await tx.borrowRecord.deleteMany({ where: { student_id: { in: studentIds } } });
+      
+      // 2. Delete clinic visits, medication administrations, immunizations, medical profiles
+      await tx.medicationAdministration.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.clinicVisit.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.immunizationRecord.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.medicalProfile.deleteMany({ where: { student_id: { in: studentIds } } });
+
+      // 3. Delete exam results, enrollments, consent records
+      await tx.examResult.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.enrollment.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.consentRecord.deleteMany({ where: { student_id: { in: studentIds } } });
+
+      // 4. Delete access logs referencing student cards
+      if (cardIds.length > 0) {
+        await tx.accessLog.deleteMany({ where: { card_id: { in: cardIds } } });
+      }
+
+      // 5. Delete payments and refund requests referencing wallet transactions
+      const walletTxns = await tx.walletTransaction.findMany({
+        where: { student_id: { in: studentIds } },
+        select: { id: true }
+      });
+      const walletTxnIds = walletTxns.map(w => w.id);
+
+      if (walletTxnIds.length > 0) {
+        await tx.refundRequest.deleteMany({ where: { wallet_transaction_id: { in: walletTxnIds } } });
+        await tx.payment.deleteMany({ where: { wallet_transaction_id: { in: walletTxnIds } } });
+      }
+
+      // 6. Delete payments referencing invoices of these students
+      const invoices = await tx.invoice.findMany({
+        where: { student_id: { in: studentIds } },
+        select: { id: true }
+      });
+      const invoiceIds = invoices.map(i => i.id);
+
+      if (invoiceIds.length > 0) {
+        await tx.payment.deleteMany({ where: { invoice_id: { in: invoiceIds } } });
+        await tx.invoiceLine.deleteMany({ where: { invoice_id: { in: invoiceIds } } });
+        await tx.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
+      }
+
+      // 7. Delete canteen transactions
+      await tx.canteenTransaction.deleteMany({ where: { student_id: { in: studentIds } } });
+
+      // 8. Delete wallet transactions and knotty cards
+      await tx.walletTransaction.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.knottyCard.deleteMany({ where: { student_id: { in: studentIds } } });
+
+      // 9. Delete core transactions: attendance, fees, health, discipline, achievements, reports
       await tx.attendance.deleteMany({ where: { student_id: { in: studentIds } } });
       await tx.feePayment.deleteMany({ where: { student_id: { in: studentIds } } });
-      await tx.canteenTransaction.deleteMany({ where: { student_id: { in: studentIds } } });
-      await tx.walletTransaction.deleteMany({ where: { student_id: { in: studentIds } } });
       await tx.healthRecord.deleteMany({ where: { student_id: { in: studentIds } } });
       await tx.disciplineRecord.deleteMany({ where: { student_id: { in: studentIds } } });
       await tx.achievement.deleteMany({ where: { student_id: { in: studentIds } } });
       await tx.academicReport.deleteMany({ where: { student_id: { in: studentIds } } });
-      await tx.knottyCard.deleteMany({ where: { student_id: { in: studentIds } } });
+
+      // 10. Delete student and user records
       await tx.student.deleteMany({ where: { id: { in: studentIds } } });
       await tx.user.deleteMany({ where: { id: { in: userIds } } });
     }
 
+    // Delete attendance and reports referencing this class directly
+    await tx.attendance.deleteMany({ where: { class_id: id } });
+    await tx.academicReport.deleteMany({ where: { class_id: id } });
+
+    // Delete materials of this class
     await tx.material.deleteMany({ where: { class_id: id } });
+
+    // Finally delete the class itself
     return tx.class.delete({ where: { id } });
   });
 }

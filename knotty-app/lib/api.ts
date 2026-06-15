@@ -204,6 +204,7 @@ export interface StudentBase {
   level: { id: string; name: string } | null;
   class: { id: string; name: string } | null;
   card: { id: string; card_number: string; wallet_balance: number; is_active: boolean; is_frozen: boolean; nfc_uid: string | null; qr_code: string; expires_at: string } | null;
+  parent_id?: string | null;
 }
 
 export type Student = StudentBase;
@@ -214,8 +215,19 @@ export interface StudentListResponse {
   pagination: { total: number; page: number; limit: number; pages: number };
 }
 
+export interface ConsentRecord {
+  id: string;
+  student_id: string;
+  guardian_id: string;
+  consent_type: string;
+  version: string;
+  granted_at: string;
+  document_url: string | null;
+  guardian?: { first_name: string; last_name: string; email: string };
+}
+
 export interface FullProfile extends StudentBase {
-  parent: { first_name: string; last_name: string; phone: string; email: string } | null;
+  parent: { id: string; first_name: string; last_name: string; phone: string; email: string } | null;
   attendances: AttendanceRecord[];
   reports: AcademicReport[];
   health: HealthRecord[];
@@ -237,6 +249,10 @@ export const students = {
   update: (id: string, data: Record<string, unknown>) =>
     request<{ success: boolean; data: StudentBase }>(`/students/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   remove: (id: string) => request(`/students/${id}`, { method: "DELETE" }),
+  consent: (studentId: string) =>
+    request<{ success: boolean; data: ConsentRecord[] }>(`/students/${studentId}/consent`),
+  recordConsent: (studentId: string, data: { consent_type: string; version: string; guardian_id: string; document_url?: string }) =>
+    request<{ success: boolean; data: ConsentRecord }>(`/students/${studentId}/consent`, { method: "POST", body: JSON.stringify(data) }),
 };
 
 // ─── Attendance ───────────────────────────────────────────
@@ -377,7 +393,7 @@ export interface WalletTransaction {
   created_at: string;
 }
 
-// ─── Fees ─────────────────────────────────────────────────
+// ─── Fees & Structured Invoicing ─────────────────────────
 export interface FeePayment {
   id: string;
   amount: number;
@@ -391,6 +407,76 @@ export interface FeePayment {
   created_at: string;
 }
 
+export interface FeeStructure {
+  id: string;
+  name: string;
+  academic_term_id: string | null;
+  applies_to: string[] | null;
+  amount: number;
+  currency: string;
+  created_at: string;
+}
+
+export interface InvoiceLine {
+  id: string;
+  invoice_id: string;
+  fee_structure_id: string;
+  description: string;
+  amount: number;
+  fee_structure: FeeStructure;
+}
+
+export interface InvoicePayment {
+  id: string;
+  invoice_id: string | null;
+  wallet_transaction_id: string | null;
+  amount: number;
+  channel: string;
+  status: string;
+  payer_user_id: string | null;
+  created_at: string;
+}
+
+export interface Invoice {
+  id: string;
+  student_id: string;
+  academic_term_id: string | null;
+  total_amount: number;
+  amount_paid: number;
+  status: "UNPAID" | "PARTIAL" | "PAID" | "OVERDUE" | "WAIVED";
+  due_date: string;
+  created_at: string;
+  student: {
+    student_code: string;
+    user: { first_name: string; last_name: string };
+    class: { name: string } | null;
+  };
+  lines: InvoiceLine[];
+  payments: InvoicePayment[];
+}
+
+export interface RefundRequest {
+  id: string;
+  wallet_transaction_id: string;
+  requested_by: string;
+  approved_by: string | null;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  reason: string;
+  created_at: string;
+  resolved_at: string | null;
+  wallet_transaction: {
+    id: string;
+    type: string;
+    amount: number;
+    created_at: string;
+    student: {
+      user: { first_name: string; last_name: string };
+    };
+  };
+  requester: { first_name: string; last_name: string };
+  approver: { first_name: string; last_name: string } | null;
+}
+
 export const fees = {
   pay: (data: { student_id: string; school_id: string; amount: number; payment_type: string; payment_method: string; term: string; academic_year: string; phone?: string }) =>
     request<{ success: boolean; payment: FeePayment; message: string }>("/fees/pay", { method: "POST", body: JSON.stringify(data) }),
@@ -398,6 +484,38 @@ export const fees = {
     request<{ success: boolean; data: FeePayment[]; pagination: unknown }>(`/fees/student/${studentId}?page=${page}&limit=${limit}`),
   schoolReport: () =>
     request<{ success: boolean; data: { total_collected: number; pending: number; by_type: unknown[] } }>("/fees/report"),
+
+  // Fee Structures
+  structures: () =>
+    request<{ success: boolean; data: FeeStructure[] }>("/fees/structures"),
+  createStructure: (data: { name: string; academic_term_id?: string; applies_to?: string[]; amount: number }) =>
+    request<{ success: boolean; data: FeeStructure }>("/fees/structures", { method: "POST", body: JSON.stringify(data) }),
+  deleteStructure: (id: string) =>
+    request(`/fees/structures/${id}`, { method: "DELETE" }),
+
+  // Invoices
+  invoices: (params?: { studentId?: string; classSectionId?: string; termId?: string; status?: string }) => {
+    const qs = new URLSearchParams(
+      Object.fromEntries(
+        Object.entries(params ?? {})
+          .filter(([, v]) => v !== undefined)
+          .map(([k, v]) => [k, String(v)])
+      )
+    ).toString();
+    return request<{ success: boolean; data: Invoice[] }>(`/fees/invoices${qs ? `?${qs}` : ""}`);
+  },
+  generateInvoices: (data: { fee_structure_id: string; due_date: string }) =>
+    request<{ success: boolean; count: number; invoices: Invoice[] }>("/fees/invoices/generate", { method: "POST", body: JSON.stringify(data) }),
+  payInvoice: (data: { invoice_id: string; amount: number; channel: string; phone?: string }) =>
+    request<{ success: boolean; payment: InvoicePayment; new_balance?: number; message: string }>("/fees/invoices/pay", { method: "POST", body: JSON.stringify(data) }),
+
+  // Refunds
+  refunds: () =>
+    request<{ success: boolean; data: RefundRequest[] }>("/fees/refunds"),
+  requestRefund: (data: { wallet_transaction_id: string; reason: string }) =>
+    request<{ success: boolean; data: RefundRequest }>("/fees/refunds", { method: "POST", body: JSON.stringify(data) }),
+  resolveRefund: (id: string, status: "APPROVED" | "REJECTED") =>
+    request<{ success: boolean; refund: RefundRequest; balance?: number }>((`/fees/refunds/${id}/resolve`), { method: "POST", body: JSON.stringify({ status }) }),
 };
 
 // ─── Canteen ──────────────────────────────────────────────
@@ -468,6 +586,44 @@ export interface HealthRecord {
   recorder?: { first_name: string; last_name: string; role: string };
 }
 
+export interface MedicalProfile {
+  id: string;
+  student_id: string;
+  blood_type: string | null;
+  allergies: string[];
+  chronic_conditions: string[];
+  emergency_contact_phone: string;
+}
+
+export interface ImmunizationRecord {
+  id: string;
+  student_id: string;
+  vaccine_name: string;
+  date_administered: string;
+}
+
+export interface ClinicVisit {
+  id: string;
+  student_id: string;
+  visit_datetime: string;
+  presenting_complaint: string;
+  treatment_notes: string | null;
+  recorded_by_staff_id: string;
+  follow_up_required: boolean;
+  recorder?: { first_name: string; last_name: string };
+  student?: { user: { first_name: string; last_name: string } };
+  medications?: MedicationAdministration[];
+}
+
+export interface MedicationAdministration {
+  id: string;
+  student_id: string;
+  clinic_visit_id: string | null;
+  medication_name: string;
+  dosage: string;
+  administered_at: string;
+}
+
 export const health = {
   schoolRecords: (params?: { page?: number; limit?: number }) => {
     const qs = new URLSearchParams();
@@ -481,6 +637,31 @@ export const health = {
     request<{ success: boolean; data: HealthRecord }>("/health", { method: "POST", body: JSON.stringify(data) }),
   update: (id: string, data: Partial<HealthRecord>) =>
     request(`/health/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  
+  // Advanced Profiles & Immunizations
+  getProfile: (studentId: string) =>
+    request<{ success: boolean; data: MedicalProfile }>(`/health/profile/${studentId}`),
+  updateProfile: (studentId: string, data: Partial<MedicalProfile>) =>
+    request<{ success: boolean; data: MedicalProfile }>(`/health/profile/${studentId}`, { method: "PUT", body: JSON.stringify(data) }),
+  
+  immunizations: (studentId: string) =>
+    request<{ success: boolean; data: ImmunizationRecord[] }>(`/health/immunization/${studentId}`),
+  addImmunization: (studentId: string, data: { vaccine_name: string; date_administered: string }) =>
+    request<{ success: boolean; data: ImmunizationRecord }>(`/health/immunization/${studentId}`, { method: "POST", body: JSON.stringify(data) }),
+  deleteImmunization: (id: string) =>
+    request(`/health/immunization/${id}`, { method: "DELETE" }),
+
+  // Clinic Visits & Medications
+  visits: (params?: { page?: number; limit?: number }) => {
+    const qs = new URLSearchParams(Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))).toString();
+    return request<{ success: boolean; data: ClinicVisit[]; pagination: { total: number; page: number; limit: number; pages: number } }>(`/health/visits${qs ? `?${qs}` : ""}`);
+  },
+  studentVisits: (studentId: string, params?: { page?: number; limit?: number }) => {
+    const qs = new URLSearchParams(Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))).toString();
+    return request<{ success: boolean; data: ClinicVisit[]; pagination: unknown }>(`/health/visits/student/${studentId}${qs ? `?${qs}` : ""}`);
+  },
+  createVisit: (studentId: string, data: { presenting_complaint: string; treatment_notes?: string; follow_up_required?: boolean; medications?: Array<{ medication_name: string; dosage: string }> }) =>
+    request<{ success: boolean; data: ClinicVisit }>(`/health/visits/student/${studentId}`, { method: "POST", body: JSON.stringify(data) }),
 };
 
 // ─── Achievements ─────────────────────────────────────────
@@ -599,7 +780,7 @@ export interface Teacher {
 }
 
 export const teachers = {
-  list: (params?: { page?: number; limit?: number }) => {
+  list: (params?: { page?: number; limit?: number; search?: string }) => {
     const qs = new URLSearchParams(
       Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))
     ).toString();
@@ -609,4 +790,362 @@ export const teachers = {
   update: (id: string, data: Record<string, unknown>) =>
     request<{ success: boolean; data: Teacher }>(`/teachers/${id}`, { method: "PUT", body: JSON.stringify(data) }),
 };
+
+// ─── Library ──────────────────────────────────────────────
+export interface LibraryBook {
+  id: string;
+  title: string;
+  author: string;
+  isbn: string | null;
+  category: string | null;
+  total_copies: number;
+  created_at: string;
+  _count?: { copies: number };
+}
+
+export interface LibraryBookCopy {
+  id: string;
+  copy_tag: string;
+  status: "AVAILABLE" | "BORROWED" | "LOST" | "DAMAGED" | "WITHDRAWN";
+  created_at: string;
+  book?: LibraryBook;
+}
+
+export interface LibraryBorrowRecord {
+  id: string;
+  borrowed_at: string;
+  due_at: string;
+  returned_at: string | null;
+  fine_amount: number;
+  student?: { user: { first_name: string; last_name: string } };
+  copy?: LibraryBookCopy;
+}
+
+export const library = {
+  books: (params?: { page?: number; limit?: number; search?: string; category?: string }) => {
+    const qs = new URLSearchParams(Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))).toString();
+    return request<{ success: boolean; data: LibraryBook[]; pagination: { total: number; page: number; limit: number; pages: number } }>(`/library/books${qs ? `?${qs}` : ""}`);
+  },
+  book: (id: string) => request<{ success: boolean; data: LibraryBook & { copies: Array<LibraryBookCopy & { borrows: LibraryBorrowRecord[] }> } }>(`/library/books/${id}`),
+  createBook: (data: { title: string; author: string; isbn?: string; category?: string; total_copies?: number; copy_tags?: string[] }) =>
+    request<{ success: boolean; data: LibraryBook }>("/library/books", { method: "POST", body: JSON.stringify(data) }),
+  updateBook: (id: string, data: Partial<LibraryBook>) =>
+    request<{ success: boolean; data: LibraryBook }>(`/library/books/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteBook: (id: string) => request(`/library/books/${id}`, { method: "DELETE" }),
+  
+  createCopy: (bookId: string, data: { copy_tag: string }) =>
+    request<{ success: boolean; data: LibraryBookCopy }>(`/library/books/${bookId}/copies`, { method: "POST", body: JSON.stringify(data) }),
+  updateCopy: (id: string, data: Partial<LibraryBookCopy>) =>
+    request<{ success: boolean; data: LibraryBookCopy }>(`/library/copies/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteCopy: (id: string) => request(`/library/copies/${id}`, { method: "DELETE" }),
+
+  borrowBook: (data: { copy_tag: string; student_code: string; due_days?: number }) =>
+    request<{ success: boolean; data: LibraryBorrowRecord; message: string }>("/library/borrow", { method: "POST", body: JSON.stringify(data) }),
+  returnBook: (data: { copy_tag: string; fine_rate_per_day?: number }) =>
+    request<{ success: boolean; data: { record: LibraryBorrowRecord; fine_amount: number; fine_charged_to_wallet: boolean }; message: string }>("/library/return", { method: "POST", body: JSON.stringify(data) }),
+  studentHistory: (studentId: string, page = 1, limit = 20) =>
+    request<{ success: boolean; data: LibraryBorrowRecord[]; pagination: unknown }>(`/library/borrow/student/${studentId}?page=${page}&limit=${limit}`),
+  schoolBorrows: (status?: "active" | "returned" | "overdue", page = 1, limit = 30) => {
+    const qs = new URLSearchParams({ ...(status ? { status } : {}), page: String(page), limit: String(limit) }).toString();
+    return request<{ success: boolean; data: LibraryBorrowRecord[]; pagination: unknown }>(`/library/borrow?${qs}`);
+  },
+  stats: () => request<{ success: boolean; data: {
+    borrowedBooks: number;
+    returnedBooks: number;
+    overdueBooks: number;
+    missingBooks: number;
+    totalBooks: number;
+    visitors: number;
+    newMembers: number;
+    pendingFees: number;
+    borrowedTrend: string;
+    returnedTrend: string;
+    overdueTrend: string;
+    missingTrend: string;
+    totalTrend: string;
+    visitorsTrend: string;
+    newMembersTrend: string;
+    pendingFeesTrend: string;
+  } }>("/library/stats"),
+};
+
+// ─── Gate Access ──────────────────────────────────────────
+export interface Campus {
+  id: string;
+  name: string;
+  address: string | null;
+  timezone_override: string | null;
+}
+
+export interface GateDevice {
+  id: string;
+  campus_id: string;
+  name: string;
+  location_type: string;
+  zone_id: string | null;
+  campus?: { name: string };
+  restricted_zone?: { name: string };
+}
+
+export interface RestrictedZone {
+  id: string;
+  campus_id: string;
+  name: string;
+  description: string | null;
+  campus?: { name: string };
+  access_grants?: ZoneAccessGrant[];
+}
+
+export interface ZoneAccessGrant {
+  id: string;
+  zone_id: string;
+  grantee_type: "ROLE" | "USER";
+  grantee_id: string;
+  valid_from: string;
+  valid_to: string | null;
+}
+
+export interface AccessLog {
+  id: string;
+  device_id: string;
+  card_id: string | null;
+  direction: "ENTRY" | "EXIT";
+  decision: "GRANTED" | "DENIED";
+  denial_reason: string | null;
+  overridden_by_user_id: string | null;
+  occurred_at: string;
+  device?: { name: string; location_type: string };
+  card?: {
+    student?: {
+      user: { first_name: string; last_name: string; profile_photo: string | null };
+    };
+  };
+  overrider?: { first_name: string; last_name: string };
+}
+
+export interface VisitorLog {
+  id: string;
+  visitor_name: string;
+  id_document_ref: string | null;
+  purpose: string;
+  checked_in_at: string;
+  checked_out_at: string | null;
+  host?: { first_name: string; last_name: string };
+  campus?: { name: string };
+}
+
+export const gateAccess = {
+  campuses: () => request<{ success: boolean; data: Campus[] }>("/gate-access/campuses"),
+  createCampus: (data: { name: string; address?: string }) =>
+    request<{ success: boolean; data: Campus }>("/gate-access/campuses", { method: "POST", body: JSON.stringify(data) }),
+
+  devices: (campusId?: string) => {
+    const qs = campusId ? `?campusId=${campusId}` : "";
+    return request<{ success: boolean; data: GateDevice[] }>(`/gate-access/devices${qs}`);
+  },
+  createDevice: (data: { campus_id: string; name: string; location_type: string; zone_id?: string }) =>
+    request<{ success: boolean; data: GateDevice }>("/gate-access/devices", { method: "POST", body: JSON.stringify(data) }),
+  updateDevice: (id: string, data: Partial<GateDevice>) =>
+    request<{ success: boolean; data: GateDevice }>(`/gate-access/devices/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteDevice: (id: string) => request(`/gate-access/devices/${id}`, { method: "DELETE" }),
+
+  zones: () => request<{ success: boolean; data: RestrictedZone[] }>("/gate-access/zones"),
+  createZone: (data: { campus_id: string; name: string; description?: string }) =>
+    request<{ success: boolean; data: RestrictedZone }>("/gate-access/zones", { method: "POST", body: JSON.stringify(data) }),
+  updateZone: (id: string, data: Partial<RestrictedZone>) =>
+    request<{ success: boolean; data: RestrictedZone }>(`/gate-access/zones/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteZone: (id: string) => request(`/gate-access/zones/${id}`, { method: "DELETE" }),
+
+  createGrant: (zoneId: string, data: { grantee_type: "ROLE" | "USER"; grantee_id: string; valid_from: string; valid_to?: string }) =>
+    request<{ success: boolean; data: ZoneAccessGrant }>(`/gate-access/zones/${zoneId}/grants`, { method: "POST", body: JSON.stringify(data) }),
+  deleteGrant: (id: string) => request(`/gate-access/grants/${id}`, { method: "DELETE" }),
+
+  evaluate: (data: { deviceId: string; cardNumber?: string; secureToken?: string; nfcUid?: string; direction?: "ENTRY" | "EXIT" }) =>
+    request<{ success: boolean; data: { decision: "GRANTED" | "DENIED"; reason?: string; ownerName?: string; studentCode?: string; photoUrl?: string } }>("/gate-access/evaluate", { method: "POST", body: JSON.stringify(data) }),
+  override: (logId: string) =>
+    request<{ success: boolean; data: AccessLog }>((`/gate-access/override/${logId}`), { method: "POST" }),
+
+  visitors: (params?: { campusId?: string; page?: number; limit?: number }) => {
+    const qs = new URLSearchParams(Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))).toString();
+    return request<{ success: boolean; data: VisitorLog[]; pagination: { total: number; page: number; limit: number; pages: number } }>(`/gate-access/visitors${qs ? `?${qs}` : ""}`);
+  },
+  createVisitor: (data: { campusId: string; visitor_name: string; id_document_ref?: string; purpose: string; host_user_id: string; expected_checkout_at?: string }) =>
+    request<{ success: boolean; data: VisitorLog }>("/gate-access/visitors", { method: "POST", body: JSON.stringify(data) }),
+  checkoutVisitor: (id: string) =>
+    request(`/gate-access/visitors/${id}/checkout`, { method: "POST" }),
+
+  logs: (params?: { page?: number; limit?: number; decision?: "GRANTED" | "DENIED"; direction?: "ENTRY" | "EXIT"; deviceId?: string }) => {
+    const qs = new URLSearchParams(Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))).toString();
+    return request<{ success: boolean; data: AccessLog[]; pagination: { total: number; page: number; limit: number; pages: number } }>(`/gate-access/logs${qs ? `?${qs}` : ""}`);
+  },
+};
+
+// ─── Academics ────────────────────────────────────────────
+export interface AcademicTerm {
+  id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  created_at: string;
+}
+
+export interface Program {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface ClassSection {
+  id: string;
+  name: string;
+  campus_id: string | null;
+  program_id: string;
+  academic_term_id: string;
+  homeroom_staff_id: string | null;
+  capacity: number | null;
+  program?: Program;
+  term?: AcademicTerm;
+  homeroom_teacher?: { id: string; first_name: string; last_name: string; email: string } | null;
+  enrollments?: Array<{
+    id: string;
+    student: {
+      id: string;
+      student_code: string;
+      user: { first_name: string; last_name: string; email: string; phone: string | null };
+    };
+  }>;
+  timetable_entries?: TimetableEntry[];
+  _count?: { enrollments: number };
+}
+
+export interface Enrollment {
+  id: string;
+  student_id: string;
+  class_section_id: string;
+  academic_term_id: string;
+  status: "ACTIVE" | "WITHDRAWN" | "COMPLETED";
+  created_at: string;
+  student?: {
+    id: string;
+    student_code: string;
+    user: { first_name: string; last_name: string; email: string; phone: string | null };
+  };
+  class_section?: ClassSection;
+}
+
+export interface TimetableEntry {
+  id: string;
+  class_section_id: string;
+  subject_id: string;
+  staff_id: string;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  room: string | null;
+  class_section?: ClassSection;
+  subject?: { id: string; name: string; code: string };
+  teacher?: { id: string; first_name: string; last_name: string };
+}
+
+export interface Exam {
+  id: string;
+  name: string;
+  subject_id: string;
+  academic_term_id: string;
+  exam_date: string;
+  max_score: number;
+  subject?: { id: string; name: string; code: string };
+  term?: AcademicTerm;
+  _count?: { results: number };
+}
+
+export interface ExamResult {
+  id: string;
+  exam_id: string;
+  student_id: string;
+  score: number;
+  grade_letter: string | null;
+  entered_by: string;
+  approved_by: string | null;
+  approved_at: string | null;
+  created_at: string;
+  student?: {
+    id: string;
+    user: { first_name: string; last_name: string };
+  };
+  recorder?: { first_name: string; last_name: string };
+  approver?: { first_name: string; last_name: string } | null;
+}
+
+export interface GradingScale {
+  id: string;
+  name: string;
+  bands: Array<{ min: number; max: number; letter: string; gpa: number }>;
+}
+
+export const academics = {
+  // Terms
+  terms: () => request<{ success: boolean; data: AcademicTerm[] }>("/academics/terms"),
+  createTerm: (data: { name: string; start_date: string; end_date: string }) =>
+    request<{ success: boolean; data: AcademicTerm }>("/academics/terms", { method: "POST", body: JSON.stringify(data) }),
+  updateTerm: (id: string, data: Partial<AcademicTerm>) =>
+    request<{ success: boolean; data: AcademicTerm }>(`/academics/terms/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteTerm: (id: string) => request(`/academics/terms/${id}`, { method: "DELETE" }),
+
+  // Programs
+  programs: () => request<{ success: boolean; data: Program[] }>("/academics/programs"),
+  createProgram: (data: { name: string }) =>
+    request<{ success: boolean; data: Program }>("/academics/programs", { method: "POST", body: JSON.stringify(data) }),
+  deleteProgram: (id: string) => request(`/academics/programs/${id}`, { method: "DELETE" }),
+
+  // Class Sections
+  sections: (params?: { campusId?: string; programId?: string; academicTermId?: string }) => {
+    const qs = new URLSearchParams(Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))).toString();
+    return request<{ success: boolean; data: ClassSection[] }>(`/academics/sections${qs ? `?${qs}` : ""}`);
+  },
+  createSection: (data: { name: string; program_id: string; academic_term_id: string; campus_id?: string; homeroom_staff_id?: string; capacity?: number }) =>
+    request<{ success: boolean; data: ClassSection }>("/academics/sections", { method: "POST", body: JSON.stringify(data) }),
+  sectionDetails: (id: string) =>
+    request<{ success: boolean; data: ClassSection }>(`/academics/sections/${id}`),
+
+  // Enrollments
+  enroll: (data: { student_id: string; class_section_id: string; academic_term_id: string }) =>
+    request<{ success: boolean; data: Enrollment }>("/academics/enroll", { method: "POST", body: JSON.stringify(data) }),
+  unenroll: (enrollmentId: string) =>
+    request(`/academics/enrollments/${enrollmentId}`, { method: "DELETE" }),
+
+  // Timetable
+  timetable: (params?: { classSectionId?: string; teacherId?: string }) => {
+    const qs = new URLSearchParams(Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))).toString();
+    return request<{ success: boolean; data: TimetableEntry[] }>(`/academics/timetable${qs ? `?${qs}` : ""}`);
+  },
+  createTimetableEntry: (data: { class_section_id: string; subject_id: string; staff_id: string; day_of_week: number; start_time: string; end_time: string; room?: string }) =>
+    request<{ success: boolean; data: TimetableEntry }>("/academics/timetable", { method: "POST", body: JSON.stringify(data) }),
+  deleteTimetableEntry: (id: string) =>
+    request(`/academics/timetable/${id}`, { method: "DELETE" }),
+
+  // Exams
+  exams: (params?: { academicTermId?: string; subjectId?: string }) => {
+    const qs = new URLSearchParams(Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))).toString();
+    return request<{ success: boolean; data: Exam[] }>(`/academics/exams${qs ? `?${qs}` : ""}`);
+  },
+  createExam: (data: { name: string; subject_id: string; academic_term_id: string; exam_date: string; max_score?: number }) =>
+    request<{ success: boolean; data: Exam }>("/academics/exams", { method: "POST", body: JSON.stringify(data) }),
+  deleteExam: (id: string) => request(`/academics/exams/${id}`, { method: "DELETE" }),
+
+  // Grading Scale
+  gradingScale: () => request<{ success: boolean; data: GradingScale }>("/academics/grading-scale"),
+  saveGradingScale: (data: { name: string; bands: Array<{ min: number; max: number; letter: string; gpa: number }> }) =>
+    request<{ success: boolean; data: GradingScale }>("/academics/grading-scale", { method: "POST", body: JSON.stringify(data) }),
+
+  // Results
+  examResults: (examId: string) =>
+    request<{ success: boolean; data: ExamResult[] }>(`/academics/exams/${examId}/results`),
+  recordResults: (examId: string, results: Array<{ student_id: string; score: number }>) =>
+    request<{ success: boolean; data: ExamResult[]; message: string }>(`/academics/exams/${examId}/results`, { method: "POST", body: JSON.stringify({ results }) }),
+  approveResult: (resultId: string) =>
+    request<{ success: boolean; data: ExamResult; message: string }>(`/academics/exams/results/${resultId}/approve`, { method: "POST" }),
+};
+
+
 

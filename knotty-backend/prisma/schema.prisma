@@ -16,6 +16,7 @@ enum Role {
   NURSE
   BURSAR
   DISCIPLINE
+  LIBRARIAN
 }
 
 enum SubscriptionPlan {
@@ -149,6 +150,37 @@ model School {
   notifications  Notification[]
   teachers       Teacher[]
   materials      Material[]
+  books          Book[]
+  book_copies    BookCopy[]
+  borrow_records BorrowRecord[]
+
+  // New models added for alignment
+  campuses              Campus[]
+  staff                 Staff[]
+  gate_devices          GateDevice[]
+  restricted_zones      RestrictedZone[]
+  access_logs           AccessLog[]
+  visitor_logs          VisitorLog[]
+  medical_profiles      MedicalProfile[]
+  clinic_visits         ClinicVisit[]
+  medication_administrations MedicationAdministration[]
+  academic_terms        AcademicTerm[]
+  programs              Program[]
+  class_sections        ClassSection[]
+  enrollments           Enrollment[]
+  timetable_entries     TimetableEntry[]
+  exams                 Exam[]
+  exam_results          ExamResult[]
+  grading_scales        GradingScale[]
+  audit_logs            AuditLog[]
+  consent_records       ConsentRecord[]
+  notification_rules     NotificationRule[]
+  notification_templates NotificationTemplate[]
+  notification_logs     NotificationLog[]
+  fee_structures        FeeStructure[]
+  invoices              Invoice[]
+  payments              Payment[]
+  refund_requests       RefundRequest[]
 }
 
 model User {
@@ -177,6 +209,23 @@ model User {
   recorded_discipline   DisciplineRecord[] @relation("DisciplineRecorder")
   recorded_achievements Achievement[]      @relation("AchievementRecorder")
   uploaded_materials    Material[]         @relation("MaterialUploader")
+
+  // New relationships added for alignment
+  staff                 Staff?
+  access_logs_overriden AccessLog[]        @relation("AccessOverrider")
+  visitor_logs          VisitorLog[]       @relation("VisitorHost")
+  clinic_visits         ClinicVisit[]      @relation("ClinicVisitRecorder")
+  medication_administrations MedicationAdministration[] @relation("MedicationAdministrator")
+  homeroom_classes      ClassSection[]     @relation("HomeroomTeacher")
+  timetable_entries     TimetableEntry[]   @relation("TimetableTeacher")
+  recorded_exam_results ExamResult[]       @relation("ExamResultRecorder")
+  approved_exam_results ExamResult[]       @relation("ExamResultApprover")
+  actor_audit_logs      AuditLog[]         @relation("AuditActor")
+  guardian_consents     ConsentRecord[]    @relation("ConsentGuardian")
+  notification_logs     NotificationLog[]  @relation("NotificationRecipient")
+  payments              Payment[]          @relation("PaymentPayer")
+  requested_refunds     RefundRequest[]    @relation("RefundRequester")
+  approved_refunds      RefundRequest[]    @relation("RefundApprover")
 
   @@index([school_id])
   @@index([email])
@@ -213,6 +262,19 @@ model Student {
   disciplines    DisciplineRecord[]
   achievements   Achievement[]
   reports        AcademicReport[]
+  borrow_records BorrowRecord[]
+
+  // New models added for alignment
+  campus_id      String?
+  campus         Campus?   @relation(fields: [campus_id], references: [id])
+  medical_profile MedicalProfile?
+  immunizations  ImmunizationRecord[]
+  clinic_visits  ClinicVisit[]
+  medication_administrations MedicationAdministration[]
+  enrollments    Enrollment[]
+  exam_results   ExamResult[]
+  consent_records ConsentRecord[]
+  invoices       Invoice[]
 
   @@index([school_id])
   @@index([student_code])
@@ -237,6 +299,9 @@ model KnottyCard {
   school       School               @relation(fields: [school_id], references: [id])
   canteen_txns CanteenTransaction[]
   wallet_txns  WalletTransaction[]
+
+  // New models added for alignment
+  access_logs  AccessLog[]
 
   @@index([card_number])
 }
@@ -363,6 +428,10 @@ model WalletTransaction {
   student Student    @relation(fields: [student_id], references: [id])
   school  School     @relation(fields: [school_id], references: [id])
 
+  // New models added for alignment
+  payment        Payment?
+  refund_request RefundRequest[]
+
   @@index([card_id])
   @@index([student_id])
 }
@@ -438,6 +507,10 @@ model Subject {
 
   school School @relation(fields: [school_id], references: [id])
   level  Level  @relation(fields: [level_id], references: [id])
+
+  // New relationships added for alignment
+  timetable_entries TimetableEntry[]
+  exams             Exam[]
 
   @@index([school_id])
 }
@@ -529,4 +602,592 @@ model Material {
   @@index([school_id])
   @@index([class_id])
   @@index([level_id])
+}
+
+model Book {
+  id           String     @id @default(uuid())
+  school_id    String
+  title        String
+  author       String
+  isbn         String?
+  category     String?
+  total_copies Int        @default(1)
+  created_at   DateTime   @default(now())
+  updated_at   DateTime   @updatedAt
+
+  school       School     @relation(fields: [school_id], references: [id])
+  copies       BookCopy[]
+
+  @@index([school_id])
+}
+
+model BookCopy {
+  id         String     @id @default(uuid())
+  school_id  String
+  book_id    String
+  copy_tag   String     @unique
+  status     String     @default("AVAILABLE") // AVAILABLE, BORROWED, LOST, DAMAGED, WITHDRAWN
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+
+  school     School     @relation(fields: [school_id], references: [id])
+  book       Book       @relation(fields: [book_id], references: [id], onDelete: Cascade)
+  borrows    BorrowRecord[]
+
+  @@index([school_id])
+  @@index([book_id])
+}
+
+model BorrowRecord {
+  id           String     @id @default(uuid())
+  school_id    String
+  book_copy_id String
+  student_id   String
+  borrowed_at  DateTime   @default(now())
+  due_at       DateTime
+  returned_at  DateTime?
+  fine_amount  Int        @default(0)
+
+  school       School     @relation(fields: [school_id], references: [id])
+  copy         BookCopy   @relation(fields: [book_copy_id], references: [id])
+  student      Student    @relation(fields: [student_id], references: [id])
+
+  @@index([school_id])
+  @@index([book_copy_id])
+  @@index([student_id])
+}
+
+// ─── NEW ALIGNED MODELS ───
+
+model Campus {
+  id                String          @id @default(uuid())
+  school_id         String
+  name              String
+  address           String?
+  timezone_override String?
+  created_at        DateTime        @default(now())
+  updated_at        DateTime        @updatedAt
+
+  school            School          @relation(fields: [school_id], references: [id])
+  students          Student[]
+  staff             Staff[]
+  gate_devices      GateDevice[]
+  visitor_logs      VisitorLog[]
+  restricted_zones  RestrictedZone[]
+
+  @@index([school_id])
+}
+
+model Staff {
+  id           String   @id @default(uuid())
+  school_id    String
+  user_id      String   @unique
+  campus_id    String
+  staff_number String
+  job_title    String
+  department   String?
+  status       String   @default("ACTIVE") // ACTIVE, ON_LEAVE, TERMINATED
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  school School @relation(fields: [school_id], references: [id])
+  user   User   @relation(fields: [user_id], references: [id])
+  campus Campus @relation(fields: [campus_id], references: [id])
+
+  @@index([school_id])
+  @@index([campus_id])
+}
+
+model GateDevice {
+  id            String          @id @default(uuid())
+  school_id     String
+  campus_id     String
+  name          String
+  location_type String // e.g. MAIN_GATE, CLASSROOM, LIBRARY, CAFETERIA, DORMITORY, RESTRICTED_ZONE
+  zone_id       String?
+  created_at    DateTime        @default(now())
+  updated_at    DateTime        @updatedAt
+
+  school          School          @relation(fields: [school_id], references: [id])
+  campus          Campus          @relation(fields: [campus_id], references: [id])
+  restricted_zone RestrictedZone? @relation(fields: [zone_id], references: [id])
+  access_logs     AccessLog[]
+
+  @@index([school_id])
+  @@index([campus_id])
+}
+
+model RestrictedZone {
+  id          String   @id @default(uuid())
+  school_id   String
+  campus_id   String
+  name        String
+  description String?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  school        School            @relation(fields: [school_id], references: [id])
+  campus        Campus            @relation(fields: [campus_id], references: [id])
+  gate_devices  GateDevice[]
+  access_grants ZoneAccessGrant[]
+
+  @@index([school_id])
+  @@index([campus_id])
+}
+
+model ZoneAccessGrant {
+  id           String    @id @default(uuid())
+  zone_id      String
+  grantee_type String // ROLE or USER
+  grantee_id   String // references role_id or user_id
+  valid_from   DateTime
+  valid_to     DateTime?
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  zone RestrictedZone @relation(fields: [zone_id], references: [id], onDelete: Cascade)
+
+  @@index([zone_id])
+}
+
+model AccessLog {
+  id                    String      @id @default(uuid())
+  school_id             String
+  card_id               String?
+  device_id             String
+  direction             String // ENTRY or EXIT
+  decision              String // GRANTED or DENIED
+  denial_reason         String?
+  overridden_by_user_id String?
+  occurred_at           DateTime    @default(now())
+  idempotency_key       String?     @unique
+  created_at            DateTime    @default(now())
+
+  school    School      @relation(fields: [school_id], references: [id])
+  card      KnottyCard? @relation(fields: [card_id], references: [id])
+  device    GateDevice  @relation(fields: [device_id], references: [id])
+  overrider User?       @relation("AccessOverrider", fields: [overridden_by_user_id], references: [id])
+
+  @@index([school_id])
+  @@index([card_id])
+  @@index([device_id])
+}
+
+model VisitorLog {
+  id                   String    @id @default(uuid())
+  school_id            String
+  campus_id            String
+  visitor_name         String
+  id_document_ref      String?
+  photo_url            String?
+  host_user_id         String
+  purpose              String
+  badge_qr_token       String?
+  expected_checkout_at DateTime?
+  checked_in_at        DateTime  @default(now())
+  checked_out_at       DateTime?
+  created_at           DateTime  @default(now())
+  updated_at           DateTime  @updatedAt
+
+  school School @relation(fields: [school_id], references: [id])
+  campus Campus @relation(fields: [campus_id], references: [id])
+  host   User   @relation("VisitorHost", fields: [host_user_id], references: [id])
+
+  @@index([school_id])
+  @@index([campus_id])
+}
+
+model MedicalProfile {
+  id                      String   @id @default(uuid())
+  school_id               String
+  student_id              String   @unique
+  blood_type              String?
+  allergies               Json? // JSON array e.g., ["peanuts", "penicillin"]
+  chronic_conditions      Json? // JSON array/object
+  emergency_contact_phone String
+  created_at              DateTime @default(now())
+  updated_at              DateTime @updatedAt
+
+  school  School  @relation(fields: [school_id], references: [id])
+  student Student @relation(fields: [student_id], references: [id])
+
+  @@index([school_id])
+}
+
+model ImmunizationRecord {
+  id                String   @id @default(uuid())
+  student_id        String
+  vaccine_name      String
+  date_administered DateTime
+  created_at        DateTime @default(now())
+
+  student Student @relation(fields: [student_id], references: [id])
+
+  @@index([student_id])
+}
+
+model ClinicVisit {
+  id                   String   @id @default(uuid())
+  school_id            String
+  student_id           String
+  visit_datetime       DateTime @default(now())
+  presenting_complaint String
+  treatment_notes      String?
+  recorded_by_staff_id String
+  follow_up_required   Boolean  @default(false)
+  created_at           DateTime @default(now())
+
+  school      School                     @relation(fields: [school_id], references: [id])
+  student     Student                    @relation(fields: [student_id], references: [id])
+  recorder    User                       @relation("ClinicVisitRecorder", fields: [recorded_by_staff_id], references: [id])
+  medications MedicationAdministration[]
+
+  @@index([school_id])
+  @@index([student_id])
+}
+
+model MedicationAdministration {
+  id                       String   @id @default(uuid())
+  school_id                String
+  student_id               String
+  clinic_visit_id          String?
+  medication_name          String
+  dosage                   String
+  administered_at          DateTime @default(now())
+  administered_by_staff_id String
+  created_at               DateTime @default(now())
+
+  school        School       @relation(fields: [school_id], references: [id])
+  student       Student      @relation(fields: [student_id], references: [id])
+  clinic_visit  ClinicVisit? @relation(fields: [clinic_visit_id], references: [id])
+  administrator User         @relation("MedicationAdministrator", fields: [administered_by_staff_id], references: [id])
+
+  @@index([school_id])
+  @@index([student_id])
+}
+
+model AcademicTerm {
+  id         String   @id @default(uuid())
+  school_id  String
+  name       String // e.g. "Term 1 2026"
+  start_date DateTime
+  end_date   DateTime
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  school         School         @relation(fields: [school_id], references: [id])
+  class_sections ClassSection[]
+  exams          Exam[]
+
+  @@index([school_id])
+}
+
+model Program {
+  id         String   @id @default(uuid())
+  school_id  String
+  name       String // e.g., "Grade 10", "BSc Computer Science"
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  school         School         @relation(fields: [school_id], references: [id])
+  class_sections ClassSection[]
+
+  @@index([school_id])
+}
+
+model ClassSection {
+  id                String   @id @default(uuid())
+  school_id         String
+  campus_id         String?
+  program_id        String
+  academic_term_id  String
+  name              String // e.g., "10A"
+  homeroom_staff_id String? // references User ID
+  capacity          Int?
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  school            School           @relation(fields: [school_id], references: [id])
+  program           Program          @relation(fields: [program_id], references: [id])
+  term              AcademicTerm     @relation(fields: [academic_term_id], references: [id])
+  homeroom_teacher  User?            @relation("HomeroomTeacher", fields: [homeroom_staff_id], references: [id])
+  enrollments       Enrollment[]
+  timetable_entries TimetableEntry[]
+
+  @@index([school_id])
+  @@index([program_id])
+  @@index([academic_term_id])
+}
+
+model Enrollment {
+  id               String   @id @default(uuid())
+  school_id        String
+  student_id       String
+  class_section_id String
+  academic_term_id String
+  status           String   @default("ACTIVE") // ACTIVE, WITHDRAWN, COMPLETED
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  school        School       @relation(fields: [school_id], references: [id])
+  student       Student      @relation(fields: [student_id], references: [id])
+  class_section ClassSection @relation(fields: [class_section_id], references: [id])
+
+  @@index([school_id])
+  @@index([student_id])
+}
+
+model TimetableEntry {
+  id               String   @id @default(uuid())
+  school_id        String
+  class_section_id String
+  subject_id       String
+  staff_id         String // teacher User ID
+  day_of_week      Int // 1-7 (Monday-Sunday)
+  start_time       String // e.g., "08:30"
+  end_time         String // e.g., "09:30"
+  room             String?
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  school        School       @relation(fields: [school_id], references: [id])
+  class_section ClassSection @relation(fields: [class_section_id], references: [id])
+  subject       Subject      @relation(fields: [subject_id], references: [id])
+  teacher       User         @relation("TimetableTeacher", fields: [staff_id], references: [id])
+
+  @@index([school_id])
+  @@index([class_section_id])
+}
+
+model Exam {
+  id               String   @id @default(uuid())
+  school_id        String
+  name             String // e.g., "Mid-Term Exam"
+  subject_id       String
+  academic_term_id String
+  exam_date        DateTime
+  max_score        Int      @default(100)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  school  School       @relation(fields: [school_id], references: [id])
+  subject Subject      @relation(fields: [subject_id], references: [id])
+  term    AcademicTerm @relation(fields: [academic_term_id], references: [id])
+  results ExamResult[]
+
+  @@index([school_id])
+  @@index([subject_id])
+  @@index([academic_term_id])
+}
+
+model ExamResult {
+  id           String    @id @default(uuid())
+  school_id    String
+  exam_id      String
+  student_id   String
+  score        Float
+  grade_letter String?
+  entered_by   String
+  approved_by  String?
+  approved_at  DateTime?
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  school   School  @relation(fields: [school_id], references: [id])
+  exam     Exam    @relation(fields: [exam_id], references: [id])
+  student  Student @relation(fields: [student_id], references: [id])
+  recorder User    @relation("ExamResultRecorder", fields: [entered_by], references: [id])
+  approver User?   @relation("ExamResultApprover", fields: [approved_by], references: [id])
+
+  @@index([school_id])
+  @@index([exam_id])
+  @@index([student_id])
+}
+
+model GradingScale {
+  id         String   @id @default(uuid())
+  school_id  String
+  name       String // e.g., "Standard Grading Scale"
+  bands      Json // e.g., [{min: 90, max: 100, letter: "A", gpa: 4.0}]
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  school School @relation(fields: [school_id], references: [id])
+
+  @@index([school_id])
+}
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  school_id     String
+  actor_user_id String?
+  action        String // e.g. "GRADE_CHANGE", "REFUND_APPROVED"
+  entity_type   String // e.g. "ExamResult", "KnottyCard"
+  entity_id     String
+  before_state  Json?
+  after_state   Json?
+  created_at    DateTime @default(now())
+
+  school School @relation(fields: [school_id], references: [id])
+  actor  User?  @relation("AuditActor", fields: [actor_user_id], references: [id])
+
+  @@index([school_id])
+}
+
+model ConsentRecord {
+  id           String   @id @default(uuid())
+  school_id    String
+  student_id   String
+  guardian_id  String // Parent User ID
+  consent_type String
+  version      String
+  granted_at   DateTime @default(now())
+  document_url String?
+
+  school   School  @relation(fields: [school_id], references: [id])
+  student  Student @relation(fields: [student_id], references: [id])
+  guardian User    @relation("ConsentGuardian", fields: [guardian_id], references: [id])
+
+  @@index([school_id])
+  @@index([student_id])
+}
+
+model NotificationRule {
+  id              String   @id @default(uuid())
+  school_id       String
+  event_type      String // e.g. "attendance.absent"
+  conditions      Json?
+  recipient_roles String[] // e.g. ["PARENT", "TEACHER"]
+  channels        String[] // e.g. ["SMS", "IN_APP"]
+  template_id     String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  school School @relation(fields: [school_id], references: [id])
+
+  @@index([school_id])
+}
+
+model NotificationTemplate {
+  id         String   @id @default(uuid())
+  school_id  String
+  event_type String
+  language   String   @default("en")
+  channel    String // SMS, IN_APP, EMAIL
+  subject    String?
+  body       String
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  school School @relation(fields: [school_id], references: [id])
+
+  @@index([school_id])
+}
+
+model NotificationLog {
+  id                String   @id @default(uuid())
+  school_id         String
+  recipient_user_id String
+  channel           String // SMS, IN_APP, EMAIL
+  template_id       String?
+  status            String // QUEUED, SENT, DELIVERED, FAILED
+  provider_ref      String?
+  created_at        DateTime @default(now())
+
+  school    School @relation(fields: [school_id], references: [id])
+  recipient User   @relation("NotificationRecipient", fields: [recipient_user_id], references: [id])
+
+  @@index([school_id])
+  @@index([recipient_user_id])
+}
+
+model FeeStructure {
+  id               String        @id @default(uuid())
+  school_id        String
+  name             String // e.g., "Term 1 Tuition"
+  academic_term_id String?
+  applies_to       Json? // e.g., ["Grade 10"] or specific programs
+  amount           Int
+  currency         String        @default("RWF")
+  created_at       DateTime      @default(now())
+  updated_at       DateTime      @updatedAt
+
+  school        School        @relation(fields: [school_id], references: [id])
+  invoice_lines InvoiceLine[]
+
+  @@index([school_id])
+}
+
+model Invoice {
+  id               String        @id @default(uuid())
+  school_id        String
+  student_id       String
+  academic_term_id String?
+  total_amount     Int
+  amount_paid      Int           @default(0)
+  status           String        @default("UNPAID") // UNPAID, PARTIAL, PAID, OVERDUE, WAIVED
+  due_date         DateTime
+  created_at       DateTime      @default(now())
+  updated_at       DateTime      @updatedAt
+
+  school   School        @relation(fields: [school_id], references: [id])
+  student  Student       @relation(fields: [student_id], references: [id])
+  lines    InvoiceLine[]
+  payments Payment[]
+
+  @@index([school_id])
+  @@index([student_id])
+}
+
+model InvoiceLine {
+  id               String       @id @default(uuid())
+  invoice_id       String
+  fee_structure_id String
+  description      String
+  amount           Int
+  created_at       DateTime     @default(now())
+
+  invoice       Invoice      @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+  fee_structure FeeStructure @relation(fields: [fee_structure_id], references: [id])
+
+  @@index([invoice_id])
+}
+
+model Payment {
+  id                    String             @id @default(uuid())
+  school_id             String
+  invoice_id            String?
+  wallet_transaction_id String?            @unique
+  amount                Int
+  channel               String // e.g. MOMO, CASH, BANK, CARD
+  status                String             @default("PENDING") // PENDING, COMPLETED, FAILED
+  payer_user_id         String?
+  created_at            DateTime           @default(now())
+  updated_at            DateTime           @updatedAt
+
+  school             School             @relation(fields: [school_id], references: [id])
+  invoice            Invoice?           @relation(fields: [invoice_id], references: [id])
+  wallet_transaction WalletTransaction? @relation(fields: [wallet_transaction_id], references: [id])
+  payer              User?              @relation("PaymentPayer", fields: [payer_user_id], references: [id])
+
+  @@index([school_id])
+}
+
+model RefundRequest {
+  id                    String            @id @default(uuid())
+  school_id             String
+  wallet_transaction_id String
+  requested_by          String // Assistant Bursar User ID
+  approved_by           String? // Bursar User ID
+  status                String            @default("PENDING") // PENDING, APPROVED, REJECTED
+  reason                String
+  created_at            DateTime          @default(now())
+  resolved_at           DateTime?
+
+  school             School            @relation(fields: [school_id], references: [id])
+  wallet_transaction WalletTransaction @relation(fields: [wallet_transaction_id], references: [id])
+  requester          User              @relation("RefundRequester", fields: [requested_by], references: [id])
+  approver           User?             @relation("RefundApprover", fields: [approved_by], references: [id])
+
+  @@index([school_id])
 }

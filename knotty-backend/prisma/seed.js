@@ -49,6 +49,7 @@ async function main() {
     { role: 'BURSAR',     first: 'Nshimiye', last: 'Paul',    email: 'bursar@knottyschool.rw',     phone: '+250788100003' },
     { role: 'DISCIPLINE', first: 'Rugamba',  last: 'Victor',  email: 'discipline@knottyschool.rw', phone: '+250788100004' },
     { role: 'CANTEEN',    first: 'Umutoni',  last: 'Claire',  email: 'canteen@knottyschool.rw',    phone: '+250788100005' },
+    { role: 'LIBRARIAN',  first: 'Mutoni',   last: 'Librarian', email: 'librarian@knottyschool.rw', phone: '+250788100006' },
   ];
   
   const staff = {};
@@ -402,7 +403,59 @@ async function main() {
 
   // 11. Seeding Health & Discipline Records
   console.log('Seeding health, discipline and achievements...');
+  
+  await prisma.medicationAdministration.deleteMany({ where: { school_id: school.id } });
+  await prisma.clinicVisit.deleteMany({ where: { school_id: school.id } });
+  await prisma.immunizationRecord.deleteMany({ where: { student: { school_id: school.id } } });
+  await prisma.medicalProfile.deleteMany({ where: { school_id: school.id } });
+
   for (const { student } of students) {
+    // Seed medical profile
+    await prisma.medicalProfile.create({
+      data: {
+        school_id: school.id,
+        student_id: student.id,
+        blood_type: ['A+', 'B+', 'O+', 'AB+'][Math.floor(Math.random() * 4)],
+        allergies: ['Peanuts', 'Dust', 'Penicillin'].filter(() => Math.random() > 0.7),
+        chronic_conditions: ['Asthma'].filter(() => Math.random() > 0.9),
+        emergency_contact_phone: '+250788123456',
+      }
+    });
+
+    // Seed immunization
+    await prisma.immunizationRecord.create({
+      data: {
+        student_id: student.id,
+        vaccine_name: 'BCG',
+        date_administered: new Date('2018-05-15'),
+      }
+    });
+
+    // Seed clinic visit
+    if (Math.random() > 0.5) {
+      const visit = await prisma.clinicVisit.create({
+        data: {
+          school_id: school.id,
+          student_id: student.id,
+          presenting_complaint: 'Headache and fatigue',
+          treatment_notes: 'Rested and given pain relief.',
+          recorded_by_staff_id: staff.NURSE.id,
+          follow_up_required: Math.random() > 0.8,
+        }
+      });
+
+      await prisma.medicationAdministration.create({
+        data: {
+          school_id: school.id,
+          student_id: student.id,
+          clinic_visit_id: visit.id,
+          medication_name: 'Paracetamol',
+          dosage: '500mg',
+          administered_by_staff_id: staff.NURSE.id,
+        }
+      });
+    }
+
     if (Math.random() > 0.4) {
       await prisma.healthRecord.create({
         data: {
@@ -469,6 +522,207 @@ async function main() {
         file_url: 'https://res.cloudinary.com/demo/image/upload/sample.pdf',
         file_name: m.name,
       },
+    });
+  }
+
+  // 13. Seeding Library Books & Borrows
+  console.log('Seeding library books, copies and borrow records...');
+  
+  await prisma.borrowRecord.deleteMany({ where: { school_id: school.id } });
+  await prisma.bookCopy.deleteMany({ where: { school_id: school.id } });
+  await prisma.book.deleteMany({ where: { school_id: school.id } });
+
+  const libraryBooksData = [
+    { title: 'The Great Gatsby', author: 'F. Scott Fitzgerald', isbn: '9780743273565', category: 'Fiction', copies: 3 },
+    { title: 'To Kill a Mockingbird', author: 'Harper Lee', isbn: '9780061120084', category: 'Fiction', copies: 2 },
+    { title: 'Principles of Physics', author: 'Halliday & Resnick', isbn: '9781118230725', category: 'Science', copies: 4 },
+    { title: 'Advanced Chemistry', author: 'Philip Matthews', isbn: '9780521359467', category: 'Science', copies: 3 },
+    { title: 'Calculus: Early Transcendentals', author: 'James Stewart', isbn: '9780538497909', category: 'Mathematics', copies: 2 },
+  ];
+
+  const booksList = [];
+  for (const b of libraryBooksData) {
+    const book = await prisma.book.create({
+      data: {
+        school_id: school.id,
+        title: b.title,
+        author: b.author,
+        isbn: b.isbn,
+        category: b.category,
+        total_copies: b.copies,
+      }
+    });
+    
+    for (let c = 1; c <= b.copies; c++) {
+      const copyTag = `LMY-${b.isbn.substring(0, 6)}-${c}`;
+      await prisma.bookCopy.create({
+        data: {
+          school_id: school.id,
+          book_id: book.id,
+          copy_tag: copyTag,
+          status: 'AVAILABLE',
+        }
+      });
+    }
+    booksList.push(book);
+  }
+
+  const activeStudentList = students;
+  const physicsBook = booksList.find(b => b.title === 'Principles of Physics');
+  const physicsCopies = await prisma.bookCopy.findMany({ where: { book_id: physicsBook.id } });
+  
+  await prisma.borrowRecord.create({
+    data: {
+      school_id: school.id,
+      book_copy_id: physicsCopies[0].id,
+      student_id: activeStudentList[2].student.id,
+      borrowed_at: new Date(Date.now() - 10 * 24 * 3600 * 1000),
+      due_at: new Date(Date.now() - 3 * 24 * 3600 * 1000),
+      returned_at: new Date(Date.now() - 4 * 24 * 3600 * 1000),
+      fine_amount: 0,
+    }
+  });
+
+  await prisma.borrowRecord.create({
+    data: {
+      school_id: school.id,
+      book_copy_id: physicsCopies[1].id,
+      student_id: activeStudentList[0].student.id,
+      borrowed_at: new Date(Date.now() - 3 * 24 * 3600 * 1000),
+      due_at: new Date(Date.now() + 11 * 24 * 3600 * 1000),
+    }
+  });
+  await prisma.bookCopy.update({
+    where: { id: physicsCopies[1].id },
+    data: { status: 'BORROWED' }
+  });
+
+  const chemistryBook = booksList.find(b => b.title === 'Advanced Chemistry');
+  const chemistryCopies = await prisma.bookCopy.findMany({ where: { book_id: chemistryBook.id } });
+  
+  await prisma.borrowRecord.create({
+    data: {
+      school_id: school.id,
+      book_copy_id: chemistryCopies[0].id,
+      student_id: activeStudentList[1].student.id,
+      borrowed_at: new Date(Date.now() - 18 * 24 * 3600 * 1000),
+      due_at: new Date(Date.now() - 4 * 24 * 3600 * 1000),
+    }
+  });
+  await prisma.bookCopy.update({
+    where: { id: chemistryCopies[0].id },
+    data: { status: 'BORROWED' }
+  });
+
+  // 14. Seeding Gate Access Control
+  console.log('Seeding gate access, campuses and visitor records...');
+  
+  await prisma.visitorLog.deleteMany({ where: { school_id: school.id } });
+  await prisma.accessLog.deleteMany({ where: { school_id: school.id } });
+  await prisma.zoneAccessGrant.deleteMany({ where: { zone: { school_id: school.id } } });
+  await prisma.gateDevice.deleteMany({ where: { school_id: school.id } });
+  await prisma.restrictedZone.deleteMany({ where: { school_id: school.id } });
+  await prisma.campus.deleteMany({ where: { school_id: school.id } });
+
+  const campus = await prisma.campus.create({
+    data: {
+      school_id: school.id,
+      name: 'Main Kigali Campus',
+      address: 'Kigali, Rwanda',
+    }
+  });
+
+  // Update all students to be enrolled at this campus
+  await prisma.student.updateMany({
+    where: { school_id: school.id },
+    data: { campus_id: campus.id }
+  });
+
+  const labZone = await prisma.restrictedZone.create({
+    data: {
+      school_id: school.id,
+      campus_id: campus.id,
+      name: 'Advanced Science Lab',
+      description: 'Contains sensitive materials and equipment.',
+    }
+  });
+
+  const gateMain = await prisma.gateDevice.create({
+    data: {
+      school_id: school.id,
+      campus_id: campus.id,
+      name: 'Main Entrance Gate',
+      location_type: 'MAIN_GATE',
+    }
+  });
+
+  const gateLab = await prisma.gateDevice.create({
+    data: {
+      school_id: school.id,
+      campus_id: campus.id,
+      name: 'Science Lab Entry',
+      location_type: 'RESTRICTED_ZONE',
+      zone_id: labZone.id,
+    }
+  });
+
+  // Grant access to Teachers for the Science Lab
+  await prisma.zoneAccessGrant.create({
+    data: {
+      zone_id: labZone.id,
+      grantee_type: 'ROLE',
+      grantee_id: 'TEACHER',
+      valid_from: new Date(Date.now() - 30 * 24 * 3600 * 1000), // 30 days ago
+    }
+  });
+
+  // Create access logs
+  // 1. Student entering Main Gate (GRANTED)
+  const cardStudent = await prisma.knottyCard.findFirst({
+    where: { student_id: activeStudentList[0].student.id }
+  });
+  if (cardStudent) {
+    await prisma.accessLog.create({
+      data: {
+        school_id: school.id,
+        card_id: cardStudent.id,
+        device_id: gateMain.id,
+        direction: 'ENTRY',
+        decision: 'GRANTED',
+        occurred_at: new Date(Date.now() - 2 * 3600 * 1000), // 2 hours ago
+      }
+    });
+
+    // 2. Student trying to enter Science Lab (DENIED)
+    await prisma.accessLog.create({
+      data: {
+        school_id: school.id,
+        card_id: cardStudent.id,
+        device_id: gateLab.id,
+        direction: 'ENTRY',
+        decision: 'DENIED',
+        denial_reason: 'RESTRICTED_ZONE_DENIED',
+        occurred_at: new Date(Date.now() - 1.5 * 3600 * 1000), // 1.5 hours ago
+      }
+    });
+  }
+
+  // Seeding visitors
+  const hostUser = await prisma.user.findFirst({
+    where: { school_id: school.id, role: 'ADMIN' }
+  });
+  if (hostUser) {
+    await prisma.visitorLog.create({
+      data: {
+        school_id: school.id,
+        campus_id: campus.id,
+        visitor_name: 'Jean-Paul Nsabimana',
+        id_document_ref: '1199580012345678',
+        purpose: 'Equipment Maintenance',
+        host_user_id: hostUser.id,
+        checked_in_at: new Date(Date.now() - 3 * 3600 * 1000), // 3 hours ago
+        expected_checkout_at: new Date(Date.now() - 1 * 3600 * 1000),
+      }
     });
   }
 

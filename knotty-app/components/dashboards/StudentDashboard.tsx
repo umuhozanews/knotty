@@ -34,74 +34,119 @@ export default function StudentDashboard() {
   const student = profile as { user?: { first_name?: string; last_name?: string }; level?: { name?: string }; class?: { name?: string }; student_code?: string } | null;
 
   return (
-    <div className="space-y-4 pr-1">
-      <div className="bg-gradient-to-r from-blue-600 to-green-600 rounded-2xl p-5 text-white">
-        <p className="text-sm opacity-80">Good day,</p>
-        <h1 className="text-2xl font-bold">{student?.user?.first_name} {student?.user?.last_name}</h1>
-        <p className="text-sm opacity-80 mt-0.5">{student?.level?.name} · {student?.class?.name} · {student?.student_code}</p>
+    <div className="space-y-6 max-w-5xl mx-auto p-4 sm:p-6 bg-[#fcf9f8] text-[#121212] min-h-screen" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      <style dangerouslySetInnerHTML={{ __html: `
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+      `}} />
+
+      {/* Hero Welcome banner */}
+      <div className="bg-[#121212] rounded-lg p-6 text-[#fcf9f8] border border-[#dcd9d9]/20 relative overflow-hidden">
+        <div className="absolute right-0 top-0 w-32 h-32 bg-[#d9ff8c]/5 rounded-full blur-2xl pointer-events-none" />
+        <p className="text-xs uppercase tracking-widest text-gray-400 font-bold">Good day,</p>
+        <h1 className="text-3xl font-extrabold tracking-tight text-white mt-1.5">
+          {student?.user?.first_name} <span className="text-[#d9ff8c]">{student?.user?.last_name}</span>
+        </h1>
+        <div className="mt-4 flex flex-wrap gap-2 text-xs">
+          <span className="bg-[#ffffff]/10 px-2.5 py-1 rounded-md border border-[#dcd9d9]/10 font-semibold">{student?.level?.name}</span>
+          <span className="bg-[#ffffff]/10 px-2.5 py-1 rounded-md border border-[#dcd9d9]/10 font-semibold">Class {student?.class?.name}</span>
+          <span className="bg-[#d9ff8c]/10 text-[#d9ff8c] px-2.5 py-1 rounded-md border border-[#d9ff8c]/20 font-mono font-bold tracking-wider">{student?.student_code}</span>
+        </div>
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-3 gap-2 sm:gap-3">
-        <div className="bg-white rounded-2xl shadow-sm p-4 text-center">
-          <CreditCard size={20} className="mx-auto text-blue-500 mb-1" />
-          <p className="text-xl font-bold text-gray-800">{card ? ((card.wallet_balance as number) ?? 0).toLocaleString() : "—"}</p>
-          <p className="text-xs text-gray-400">Wallet (RWF)</p>
+      <div className="grid grid-cols-3 gap-3">
+        {/* Wallet Balance */}
+        <div className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-4 flex flex-col justify-between hover:border-[#d9ff8c] hover:scale-[1.01] transition-all duration-200">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs uppercase tracking-wider text-gray-500 font-bold">Wallet</p>
+            <CreditCard size={16} className="text-[#121212]" />
+          </div>
+          <div>
+            <p className="text-2xl font-extrabold tracking-tight text-[#121212]">
+              {card ? ((card.wallet_balance as number) ?? 0).toLocaleString() : "—"}
+            </p>
+            <p className="text-[10px] text-gray-400 mt-1.5 uppercase tracking-wider font-bold">RWF Balance</p>
+          </div>
         </div>
-        <div className="bg-white rounded-2xl shadow-sm p-4 text-center">
-          <CalendarDays size={20} className="mx-auto text-green-500 mb-1" />
-          <p className="text-xl font-bold text-gray-800">{attPct !== null ? `${attPct}%` : "—"}</p>
-          <p className="text-xs text-gray-400">Attendance</p>
+
+        {/* Attendance */}
+        <div className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-4 flex flex-col justify-between hover:border-[#d9ff8c] hover:scale-[1.01] transition-all duration-200">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs uppercase tracking-wider text-gray-500 font-bold">Attendance</p>
+            <CalendarDays size={16} className="text-[#121212]" />
+          </div>
+          <div>
+            <p className="text-2xl font-extrabold tracking-tight text-[#121212]">
+              {attPct !== null ? `${attPct}%` : "—"}
+            </p>
+            {attPct !== null ? (
+              <div className="w-full h-1.5 bg-[#dcd9d9] rounded-full mt-2 overflow-hidden">
+                <div className="h-full bg-[#121212] rounded-full" style={{ width: `${attPct}%` }} />
+              </div>
+            ) : (
+              <p className="text-[10px] text-gray-400 mt-1.5 uppercase tracking-wider font-bold">No records</p>
+            )}
+          </div>
         </div>
-        <div className="bg-white rounded-2xl shadow-sm p-4 text-center">
-          <GraduationCap size={20} className="mx-auto text-purple-500 mb-1" />
-          <Link href="/my-reports" className="text-xs text-blue-600 hover:underline font-medium">View Reports</Link>
-          <p className="text-xs text-gray-400 mt-0.5">Academic</p>
-        </div>
+
+        {/* Reports */}
+        <Link href="/my-reports" className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-4 flex flex-col justify-between hover:border-[#d9ff8c] hover:scale-[1.01] transition-all duration-200 text-left">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs uppercase tracking-wider text-gray-500 font-bold">Academic</p>
+            <GraduationCap size={16} className="text-[#121212]" />
+          </div>
+          <div>
+            <p className="text-2xl font-extrabold tracking-tight text-[#121212] flex items-center gap-1.5">
+              <span>Reports</span>
+              <ExternalLink size={14} className="text-gray-400" />
+            </p>
+            <p className="text-[10px] text-gray-400 mt-1.5 uppercase tracking-wider font-bold">View Term Cards</p>
+          </div>
+        </Link>
       </div>
 
       {/* Quick nav */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {[
-          { href: "/my-profile",    icon: User,          label: "My Profile",    sub: "Personal info & contacts",   color: "bg-blue-500" },
-          { href: "/my-attendance", icon: CalendarDays,  label: "Attendance",    sub: "Daily check-in history",      color: "bg-green-500" },
-          { href: "/my-reports",    icon: GraduationCap, label: "My Reports",    sub: "Term reports & PDF download", color: "bg-purple-500" },
-          { href: "/my-card",       icon: CreditCard,    label: "My Card",       sub: "Wallet balance & transactions",color: "bg-teal-500" },
-        ].map(({ href, icon: Icon, label, sub, color }) => (
+          { href: "/my-profile",    icon: User,          label: "My Profile",    sub: "Personal info & contacts" },
+          { href: "/my-attendance", icon: CalendarDays,  label: "Attendance",    sub: "Daily check-in history" },
+          { href: "/my-reports",    icon: GraduationCap, label: "My Reports",    sub: "Term reports & PDF download" },
+          { href: "/my-card",       icon: CreditCard,    label: "My Card",       sub: "Wallet balance & transactions" },
+        ].map(({ href, icon: Icon, label, sub }) => (
           <Link key={href} href={href}
-            className="bg-white rounded-2xl shadow-sm p-4 flex items-center gap-3 hover:shadow-md transition group"
+            className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-4 flex items-center gap-4 hover:border-[#d9ff8c] hover:scale-[1.01] transition-all duration-200 group"
           >
-            <div className={`w-10 h-10 rounded-xl ${color} flex items-center justify-center flex-shrink-0`}>
-              <Icon size={18} className="text-white" />
+            <div className="w-10 h-10 rounded-lg bg-[#121212] text-white flex items-center justify-center flex-shrink-0 group-hover:bg-[#d9ff8c] group-hover:text-[#121212] transition-colors duration-200">
+              <Icon size={18} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-800">{label}</p>
-              <p className="text-xs text-gray-400 truncate">{sub}</p>
+              <p className="text-sm font-extrabold tracking-tight text-[#121212]">{label}</p>
+              <p className="text-xs text-gray-500 truncate mt-0.5">{sub}</p>
             </div>
-            <ExternalLink size={14} className="text-gray-300 group-hover:text-blue-500 transition flex-shrink-0" />
+            <ExternalLink size={14} className="text-gray-300 group-hover:text-[#121212] transition flex-shrink-0" />
           </Link>
         ))}
       </div>
 
       {/* Recent materials */}
       {recentMaterials.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-sm p-4">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-semibold text-gray-700">Recent Class Materials</p>
-            <Link href="/materials" className="text-xs text-blue-600 hover:underline">See all</Link>
+        <div className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-5">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Recent Class Materials</p>
+            <Link href="/materials" className="text-xs font-bold text-gray-500 hover:text-black border-b border-gray-400">See all</Link>
           </div>
-          <div className="space-y-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {recentMaterials.map((m) => (
               <a key={m.id} href={m.file_url} target="_blank" rel="noreferrer"
-                className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 transition">
-                <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
-                  <BookOpen size={14} className="text-blue-500" />
+                className="flex items-center gap-3 p-3 rounded-lg border border-transparent hover:border-[#dcd9d9] hover:bg-[#fcf9f8] transition group">
+                <div className="w-8 h-8 rounded-lg bg-[#121212]/5 group-hover:bg-[#d9ff8c] group-hover:text-[#121212] flex items-center justify-center flex-shrink-0 transition-colors">
+                  <BookOpen size={14} className="text-[#121212]" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-700 truncate">{m.title}</p>
-                  <p className="text-xs text-gray-400">{m.subject ?? "General"} · {m.uploader.first_name} {m.uploader.last_name}</p>
+                  <p className="text-sm font-semibold text-[#121212] truncate">{m.title}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{m.subject ?? "General"} · {m.uploader.first_name} {m.uploader.last_name}</p>
                 </div>
-                <ExternalLink size={13} className="text-gray-300 flex-shrink-0" />
+                <ExternalLink size={13} className="text-gray-300 group-hover:text-[#121212] transition flex-shrink-0" />
               </a>
             ))}
           </div>

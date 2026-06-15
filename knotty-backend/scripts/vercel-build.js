@@ -30,11 +30,11 @@ if (dbUrl) {
 console.log('Generating Prisma client...');
 execSync('npx prisma generate', { stdio: 'inherit' });
 
-console.log('Running migrations...');
+console.log('Running database schema push...');
 try {
-  execSync('npx prisma migrate deploy', { stdio: 'inherit' });
+  execSync('npx prisma db push --accept-data-loss', { stdio: 'inherit' });
 } catch (error) {
-  console.error('Migration failed:', error);
+  console.error('Database push failed:', error);
   process.exit(1);
 }
 

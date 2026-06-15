@@ -285,17 +285,32 @@ function StudentModal({
                 </div>
                 {!isEdit && (
                   <div className="grid grid-cols-2 gap-3">
-                    <Field label="Initial Wallet Balance (RWF)">
-                      <input type="number" min="0" value={form.initial_balance} onChange={set("initial_balance")} className={inp} placeholder="0" />
-                    </Field>
-                    <Field label="Login Password">
-                      <div className="relative">
-                        <input type={showPass ? "text" : "password"} value={form.password} onChange={set("password")} className={`${inp} pr-10`} />
-                        <button type="button" onClick={() => setShowPass((p) => !p)} className="absolute right-3 top-2 text-gray-400">
-                          {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
-                        </button>
+                    {user?.role !== "TEACHER" ? (
+                      <>
+                        <Field label="Initial Wallet Balance (RWF)">
+                          <input type="number" min="0" value={form.initial_balance} onChange={set("initial_balance")} className={inp} placeholder="0" />
+                        </Field>
+                        <Field label="Login Password">
+                          <div className="relative">
+                            <input type={showPass ? "text" : "password"} value={form.password} onChange={set("password")} className={`${inp} pr-10`} />
+                            <button type="button" onClick={() => setShowPass((p) => !p)} className="absolute right-3 top-2 text-gray-400">
+                              {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
+                            </button>
+                          </div>
+                        </Field>
+                      </>
+                    ) : (
+                      <div className="col-span-2">
+                        <Field label="Login Password">
+                          <div className="relative">
+                            <input type={showPass ? "text" : "password"} value={form.password} onChange={set("password")} className={`${inp} pr-10`} />
+                            <button type="button" onClick={() => setShowPass((p) => !p)} className="absolute right-3 top-2 text-gray-400">
+                              {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
+                            </button>
+                          </div>
+                        </Field>
                       </div>
-                    </Field>
+                    )}
                   </div>
                 )}
               </>
@@ -408,12 +423,14 @@ function StudentRow({ s, idx, onEdit, onDelete, onIssue, issuing }: {
           {s.gender && <span className={`text-xs px-1.5 py-0.5 rounded-md font-medium ${s.gender === "M" ? "bg-blue-50 text-blue-500" : "bg-pink-50 text-pink-500"}`}>{s.gender === "M" ? "M" : "F"}</span>}
         </div>
         <p className="text-xs text-gray-400 font-mono">{s.student_code}{age ? ` · ${age}y` : ""}</p>
-        {s.card ? (
-          <p className="text-[11px] font-bold text-blue-600 dark:text-blue-400 mt-0.5 sm:hidden">
-            Balance: {s.card.wallet_balance.toLocaleString()} RWF
-          </p>
-        ) : (
-          <p className="text-xs text-gray-400 mt-0.5 sm:hidden">No card</p>
+        {user?.role !== "TEACHER" && (
+          s.card ? (
+            <p className="text-[11px] font-bold text-blue-600 dark:text-blue-400 mt-0.5 sm:hidden">
+              Balance: {s.card.wallet_balance.toLocaleString()} RWF
+            </p>
+          ) : (
+            <p className="text-xs text-gray-400 mt-0.5 sm:hidden">No card</p>
+          )
         )}
       </div>
       <div className="hidden sm:block text-right min-w-0">
@@ -422,14 +439,16 @@ function StudentRow({ s, idx, onEdit, onDelete, onIssue, issuing }: {
             {s.card.is_frozen ? "Frozen" : s.card.is_active ? "Active" : "Inactive"}
           </p>
         )}
-        {s.card ? (
-          <p className="text-xs font-bold text-blue-600 dark:text-blue-400 mt-0.5">
-            {s.card.wallet_balance.toLocaleString()} <span className="text-[10px] font-normal text-blue-500/70 dark:text-blue-400/70">RWF</span>
-          </p>
-        ) : <p className="text-xs text-gray-300">No card</p>}
+        {user?.role !== "TEACHER" ? (
+          s.card ? (
+            <p className="text-xs font-bold text-blue-600 dark:text-blue-400 mt-0.5">
+              {s.card.wallet_balance.toLocaleString()} <span className="text-[10px] font-normal text-blue-500/70 dark:text-blue-400/70">RWF</span>
+            </p>
+          ) : <p className="text-xs text-gray-300">No card</p>
+        ) : null}
       </div>
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition" onClick={(e) => e.stopPropagation()}>
-        {!s.card && (
+        {!s.card && user?.role !== "TEACHER" && (
           <button onClick={onIssue} disabled={issuing} title="Issue Card"
             className="p-1.5 rounded-lg border border-blue-500 text-blue-600 hover:bg-blue-50 transition text-xs flex items-center gap-1">
             {issuing ? <Loader2 size={11} className="animate-spin" /> : <CreditCard size={11} />}

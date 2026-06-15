@@ -855,6 +855,13 @@ export default function StudentProfilePage() {
   const { user, loading: authLoading } = useAuth();
   const role = user?.role ?? "STUDENT";
   const { show } = useToast();
+
+  const filteredTabs = TABS.filter((t) => {
+    if (user?.role === "TEACHER") {
+      return !["wallet", "fees", "canteen"].includes(t.key);
+    }
+    return true;
+  });
   const [profile, setProfile] = useState<FullProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("overview");
@@ -1092,17 +1099,21 @@ export default function StudentProfilePage() {
                     </span>
                     <span className="text-xs text-gray-400 font-mono">{profile.card.card_number}</span>
                   </div>
-                  <div className="text-left sm:text-right">
-                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Wallet Balance</p>
-                    <p className="text-xs font-bold text-blue-600 dark:text-blue-400 mt-0.5">
-                      {profile.card.wallet_balance.toLocaleString()} <span className="text-[10px] font-normal text-blue-500/80 dark:text-blue-400/80">RWF</span>
-                    </p>
-                  </div>
+                  {user?.role !== "TEACHER" && (
+                    <div className="text-left sm:text-right">
+                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Wallet Balance</p>
+                      <p className="text-xs font-bold text-blue-600 dark:text-blue-400 mt-0.5">
+                        {profile.card.wallet_balance.toLocaleString()} <span className="text-[10px] font-normal text-blue-500/80 dark:text-blue-400/80">RWF</span>
+                      </p>
+                    </div>
+                  )}
                 </div>
               ) : (
-                <button onClick={issueCard} className="flex items-center gap-1.5 text-sm text-blue-600 border border-blue-500 rounded-xl px-3 py-2 hover:bg-blue-50 transition">
-                  <CreditCard size={14} /> Issue KNOTTY Card
-                </button>
+                user?.role !== "TEACHER" && (
+                  <button onClick={issueCard} className="flex items-center gap-1.5 text-sm text-blue-600 border border-blue-500 rounded-xl px-3 py-2 hover:bg-blue-50 transition">
+                    <CreditCard size={14} /> Issue KNOTTY Card
+                  </button>
+                )
               )}
             </div>
           </div>
@@ -1126,7 +1137,7 @@ export default function StudentProfilePage() {
 
         {/* ── Tabs ────────────────────────────────────────────────── */}
         <div className="flex gap-1 bg-white dark:bg-gray-900 rounded-2xl p-1.5 shadow-sm overflow-x-auto">
-          {TABS.map(({ key, label, icon: Icon }) => (
+          {filteredTabs.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
               onClick={() => setTab(key)}
@@ -1182,27 +1193,29 @@ export default function StudentProfilePage() {
                     <div className="space-y-0">
                       {[
                         ["Card Number", profile.card.card_number],
-                        ["Balance", `${profile.card.wallet_balance.toLocaleString()} RWF`],
+                        user?.role !== "TEACHER" ? ["Balance", `${profile.card.wallet_balance.toLocaleString()} RWF`] : null,
                         ["NFC UID", profile.card.nfc_uid ?? "Not linked"],
                         ["Status", profile.card.is_frozen ? "Frozen" : profile.card.is_active ? "Active" : "Inactive"],
                         ["Expires", new Date(profile.card.expires_at).toLocaleDateString("en-GB")],
-                      ].map(([k, v]) => (
+                      ].filter((item): item is [string, string] => item !== null).map(([k, v]) => (
                         <div key={k} className="flex justify-between py-2.5 border-b border-gray-50 dark:border-gray-800 last:border-0">
                           <span className="text-xs text-gray-400">{k}</span>
                           <span className="text-xs text-gray-700 dark:text-gray-300 font-medium font-mono">{v}</span>
                         </div>
                       ))}
-                      <div className="flex gap-2 pt-3">
-                        <button onClick={() => setTab("wallet")} className="flex-1 py-2 rounded-xl bg-blue-600 text-xs text-white font-medium hover:bg-blue-700 transition">Top Up Wallet</button>
-                        {profile.card.is_frozen
-                          ? <button onClick={() => freezeCard(false)} className="flex-1 py-2 rounded-xl bg-green-500 text-xs text-white font-medium hover:bg-green-600 transition flex items-center justify-center gap-1">
-                              <ThermometerSnowflake size={11} /> Unfreeze
-                            </button>
-                          : <button onClick={() => freezeCard(true)} className="flex-1 py-2 rounded-xl bg-blue-500 text-xs text-white font-medium hover:bg-blue-600 transition flex items-center justify-center gap-1">
-                              <Snowflake size={11} /> Freeze
-                            </button>
-                        }
-                      </div>
+                      {user?.role !== "TEACHER" && (
+                        <div className="flex gap-2 pt-3">
+                          <button onClick={() => setTab("wallet")} className="flex-1 py-2 rounded-xl bg-blue-600 text-xs text-white font-medium hover:bg-blue-700 transition">Top Up Wallet</button>
+                          {profile.card.is_frozen
+                            ? <button onClick={() => freezeCard(false)} className="flex-1 py-2 rounded-xl bg-green-500 text-xs text-white font-medium hover:bg-green-600 transition flex items-center justify-center gap-1">
+                                <ThermometerSnowflake size={11} /> Unfreeze
+                              </button>
+                            : <button onClick={() => freezeCard(true)} className="flex-1 py-2 rounded-xl bg-blue-500 text-xs text-white font-medium hover:bg-blue-600 transition flex items-center justify-center gap-1">
+                                <Snowflake size={11} /> Freeze
+                              </button>
+                          }
+                        </div>
+                      )}
                       {profile.card.qr_code && (
                         <div className="mt-3 flex justify-center">
                           <img src={profile.card.qr_code} alt="QR" className="w-28 h-28 object-contain rounded-xl border border-gray-100 dark:border-gray-800 p-2" />
@@ -1213,7 +1226,9 @@ export default function StudentProfilePage() {
                     <div className="text-center py-4">
                       <CreditCard size={28} className="text-gray-200 mx-auto mb-2" />
                       <p className="text-sm text-gray-400 mb-3">No card issued yet</p>
-                      <button onClick={issueCard} className="bg-blue-600 text-white text-xs px-4 py-2 rounded-xl hover:bg-blue-700 transition">Issue Card</button>
+                      {user?.role !== "TEACHER" && (
+                        <button onClick={issueCard} className="bg-blue-600 text-white text-xs px-4 py-2 rounded-xl hover:bg-blue-700 transition">Issue Card</button>
+                      )}
                     </div>
                   )}
                 </div>

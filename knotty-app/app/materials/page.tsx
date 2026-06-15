@@ -93,16 +93,19 @@ export default function MaterialsPage() {
 
   return (
     <DashboardShell>
-      <div className="p-2 sm:p-4 space-y-4">
+      <div className="p-4 sm:p-6 space-y-6 max-w-5xl mx-auto bg-[#fcf9f8] min-h-screen text-[#121212]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        <style dangerouslySetInnerHTML={{ __html: `
+          @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        `}} />
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-gray-800">Class Materials</h1>
-            <p className="text-sm text-gray-400">Notes, slides, and study resources</p>
+            <h1 className="text-2xl font-extrabold tracking-tight text-[#121212]">Class Materials</h1>
+            <p className="text-xs text-gray-500 mt-0.5 font-medium">Notes, slides, and study resources</p>
           </div>
           {CAN_UPLOAD.includes(role) && (
             <button onClick={() => setShowUpload(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-2xl text-sm font-medium hover:bg-blue-700 transition">
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#121212] hover:bg-[#d9ff8c] hover:text-[#121212] text-white rounded-lg text-xs font-bold transition duration-200 border border-[#121212]">
               <Plus size={16} />Upload Material
             </button>
           )}
@@ -113,13 +116,13 @@ export default function MaterialsPage() {
           <form onSubmit={handleSearch} className="flex-1 flex gap-2">
             <input value={search} onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by title or subject..."
-              className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500" />
-            <button type="submit" className="px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 transition">
+              className="flex-1 border border-[#dcd9d9] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#121212] bg-[#ffffff]" />
+            <button type="submit" className="px-3 py-2 rounded-lg border border-[#dcd9d9] bg-[#ffffff] hover:bg-[#fcf9f8] transition">
               <Search size={15} className="text-gray-500" />
             </button>
           </form>
           <select value={filterClass} onChange={(e) => setFilterClass(e.target.value)}
-            className="border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500">
+            className="border border-[#dcd9d9] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#121212] bg-[#ffffff]">
             <option value="">All classes</option>
             {classes.map((c) => <option key={c.id} value={c.id}>{c.level?.name} {c.name}</option>)}
           </select>
@@ -129,40 +132,40 @@ export default function MaterialsPage() {
         {loading ? (
           <div className="flex justify-center py-12"><Loader2 className="animate-spin text-blue-500" size={28} /></div>
         ) : data.length === 0 ? (
-          <div className="bg-white rounded-2xl shadow-sm p-10 text-center">
+          <div className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-10 text-center">
             <BookOpen size={40} className="mx-auto text-gray-200 mb-3" />
-            <p className="text-gray-400 text-sm">No materials uploaded yet</p>
+            <p className="text-gray-400 text-sm font-medium">No materials uploaded yet</p>
             {CAN_UPLOAD.includes(role) && (
-              <button onClick={() => setShowUpload(true)} className="mt-3 text-sm text-blue-600 hover:underline">Upload the first one</button>
+              <button onClick={() => setShowUpload(true)} className="mt-3 text-sm text-[#121212] hover:underline font-bold">Upload the first one</button>
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
             {data.map((m) => (
-              <div key={m.id} className="bg-white rounded-2xl shadow-sm p-4 hover:shadow-md transition">
+              <div key={m.id} className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-4 hover:border-[#d9ff8c] transition duration-200 shadow-none">
                 <div className="flex items-start gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+                  <div className="w-10 h-10 rounded-lg bg-[#121212]/5 flex items-center justify-center flex-shrink-0 font-bold text-[#121212]">
                     <FileTypeIcon type={m.file_type} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-800 truncate">{m.title}</p>
-                    <p className="text-xs text-gray-400">{m.subject ?? "General"}</p>
+                    <p className="text-sm font-bold text-[#121212] truncate tracking-tight">{m.title}</p>
+                    <p className="text-xs text-gray-500 font-semibold">{m.subject ?? "General"}</p>
                   </div>
                 </div>
-                {m.description && <p className="text-xs text-gray-500 mb-2 line-clamp-2">{m.description}</p>}
-                <div className="flex items-center justify-between">
+                {m.description && <p className="text-xs text-gray-500 mb-3 line-clamp-2 font-medium">{m.description}</p>}
+                <div className="flex items-end justify-between border-t border-[#dcd9d9]/50 pt-3">
                   <div>
                     {(m.class || m.level) && (
-                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded border border-[#dcd9d9] bg-[#fcf9f8] text-[#121212]">
                         {m.level?.name}{m.class ? ` · ${m.class.name}` : ""}
                       </span>
                     )}
-                    <p className="text-[10px] text-gray-400 mt-1">By {m.uploader.first_name} {m.uploader.last_name}</p>
-                    <p className="text-[10px] text-gray-300">{new Date(m.created_at).toLocaleDateString("en-GB")}</p>
+                    <p className="text-[10px] text-gray-400 mt-2 font-semibold">By {m.uploader.first_name} {m.uploader.last_name}</p>
+                    <p className="text-[10px] text-gray-400 font-mono font-semibold">{new Date(m.created_at).toLocaleDateString("en-GB")}</p>
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1.5">
                     <a href={m.file_url} target="_blank" rel="noreferrer"
-                      className="w-8 h-8 rounded-lg flex items-center justify-center bg-blue-50 hover:bg-blue-100 text-blue-500 transition">
+                      className="w-8 h-8 rounded-lg flex items-center justify-center border border-[#dcd9d9] bg-[#ffffff] hover:bg-[#fcf9f8] text-[#121212] transition">
                       <ExternalLink size={13} />
                     </a>
                     {CAN_DELETE.includes(role) && (
@@ -181,55 +184,55 @@ export default function MaterialsPage() {
         {/* Upload modal */}
         {showUpload && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5">
-              <div className="flex items-center justify-between mb-4">
-                <p className="text-base font-bold text-gray-800">Upload Material</p>
+            <div className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] w-full max-w-md p-6 shadow-none">
+              <div className="flex items-center justify-between mb-4 border-b border-[#dcd9d9] pb-3">
+                <p className="text-base font-bold text-[#121212]">Upload Material</p>
                 <button onClick={() => setShowUpload(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
               </div>
               <form onSubmit={handleUpload} className="space-y-3">
                 <div>
-                  <label className="text-xs font-medium text-gray-500 mb-1 block">Title *</label>
+                  <label className="text-xs font-bold text-gray-500 mb-1 block">Title *</label>
                   <input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
                     placeholder="e.g. Integration by Parts Notes"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500" required />
+                    className="w-full border border-[#dcd9d9] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#121212] bg-[#ffffff]" required />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs font-medium text-gray-500 mb-1 block">Subject</label>
+                    <label className="text-xs font-bold text-gray-500 mb-1 block">Subject</label>
                     <input value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))}
                       placeholder="e.g. Mathematics"
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500" />
+                      className="w-full border border-[#dcd9d9] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#121212] bg-[#ffffff]" />
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-gray-500 mb-1 block">Class</label>
+                    <label className="text-xs font-bold text-gray-500 mb-1 block">Class</label>
                     <select value={form.classId} onChange={(e) => setForm((f) => ({ ...f, classId: e.target.value }))}
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500">
+                      className="w-full border border-[#dcd9d9] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#121212] bg-[#ffffff]">
                       <option value="">All classes</option>
                       {classes.map((c) => <option key={c.id} value={c.id}>{c.level?.name} {c.name}</option>)}
                     </select>
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-500 mb-1 block">Description (optional)</label>
+                  <label className="text-xs font-bold text-gray-500 mb-1 block">Description (optional)</label>
                   <textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                     rows={2} placeholder="What's in this file..."
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500 resize-none" />
+                    className="w-full border border-[#dcd9d9] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#121212] bg-[#ffffff] resize-none" />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-500 mb-1 block">File * (PDF, Word, PPT, Image — max 20 MB)</label>
+                  <label className="text-xs font-bold text-gray-500 mb-1 block">File * (PDF, Word, PPT, Image — max 20 MB)</label>
                   <div
                     onClick={() => fileRef.current?.click()}
-                    className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition ${file ? "border-blue-300 bg-blue-50" : "border-gray-200 hover:border-blue-300"}`}
+                    className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition ${file ? "border-[#121212] bg-[#fcf9f8]" : "border-[#dcd9d9] hover:border-[#121212] bg-[#fcf9f8]"}`}
                   >
                     {file ? (
                       <div className="flex items-center gap-2 justify-center">
-                        <FileText size={16} className="text-blue-500" />
-                        <span className="text-sm text-blue-600 font-medium truncate">{file.name}</span>
+                        <FileText size={16} className="text-[#121212]" />
+                        <span className="text-sm text-[#121212] font-semibold truncate">{file.name}</span>
                       </div>
                     ) : (
                       <div>
-                        <Upload size={20} className="mx-auto text-gray-300 mb-1" />
-                        <p className="text-sm text-gray-400">Click to select file</p>
+                        <Upload size={20} className="mx-auto text-gray-400 mb-1" />
+                        <p className="text-sm text-gray-400 font-bold">Click to select file</p>
                       </div>
                     )}
                     <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png"
@@ -237,7 +240,7 @@ export default function MaterialsPage() {
                   </div>
                 </div>
                 <button type="submit" disabled={uploading || !file || !form.title}
-                  className="w-full py-3 rounded-2xl bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2">
+                  className="w-full py-3 bg-[#121212] text-white font-bold text-sm hover:bg-[#d9ff8c] hover:text-[#121212] rounded-lg transition border border-[#121212] flex items-center justify-center gap-2 disabled:opacity-50">
                   {uploading ? <><Loader2 size={15} className="animate-spin" />Uploading...</> : <><Upload size={15} />Upload Material</>}
                 </button>
               </form>

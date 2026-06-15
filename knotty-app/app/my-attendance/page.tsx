@@ -28,57 +28,60 @@ export default function MyAttendancePage() {
 
   return (
     <DashboardShell>
-      <div className="p-2 sm:p-4 space-y-4">
-        <h1 className="text-xl font-bold text-gray-800">My Attendance</h1>
+      <div className="p-4 sm:p-6 space-y-6 max-w-4xl mx-auto bg-[#fcf9f8] min-h-screen text-[#121212]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        <style dangerouslySetInnerHTML={{ __html: `
+          @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        `}} />
+        <h1 className="text-2xl font-extrabold tracking-tight text-[#121212]">My Attendance</h1>
 
         {/* Summary */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-2 md:gap-3">
-          <div className="col-span-2 md:col-span-1 bg-gradient-to-br from-blue-600 to-green-600 rounded-2xl p-4 text-white text-center flex flex-col justify-center">
-            <p className="text-3xl font-bold">{pct}%</p>
-            <p className="text-xs opacity-80 mt-1">Attendance Rate</p>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="col-span-2 md:col-span-1 bg-[#121212] border border-[#dcd9d9]/20 rounded-lg p-4 text-[#fcf9f8] text-center flex flex-col justify-center">
+            <p className="text-3xl font-extrabold tracking-tight text-[#d9ff8c]">{pct}%</p>
+            <p className="text-[10px] uppercase font-bold tracking-wider text-gray-400 mt-1">Attendance Rate</p>
           </div>
           {(["PRESENT","ABSENT","LATE","EXCUSED"] as const).map((st) => {
             const cfg = STATUS[st];
             const Icon = cfg.icon;
             return (
-              <div key={st} className="bg-white rounded-2xl shadow-sm p-3 text-center">
-                <Icon size={16} className={`mx-auto mb-1 ${st === "PRESENT" ? "text-green-500" : st === "ABSENT" ? "text-red-500" : st === "LATE" ? "text-yellow-500" : "text-blue-500"}`} />
-                <p className="text-xl font-bold text-gray-800">{summary[st]}</p>
-                <p className="text-xs text-gray-400">{cfg.label}</p>
+              <div key={st} className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-3 text-center hover:border-[#d9ff8c] transition duration-200">
+                <Icon size={16} className={`mx-auto mb-1 text-[#121212]`} />
+                <p className="text-2xl font-extrabold tracking-tight text-[#121212]">{summary[st]}</p>
+                <p className="text-xs text-gray-500 font-semibold">{cfg.label}</p>
               </div>
             );
           })}
         </div>
 
         {/* Records list */}
-        <div className="bg-white rounded-2xl shadow-sm p-4">
-          <p className="text-sm font-semibold text-gray-700 mb-3">Recent Records</p>
+        <div className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-5">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">Recent Records</p>
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="animate-spin text-blue-500" size={24} /></div>
           ) : records.length === 0 ? (
             <p className="text-center py-6 text-sm text-gray-400">No attendance records found</p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {records.map((rec) => {
                 const cfg = STATUS[rec.status] ?? STATUS.ABSENT;
                 const Icon = cfg.icon;
                 return (
-                  <div key={rec.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${cfg.color}`}>
+                  <div key={rec.id} className="flex items-center gap-3 p-3 rounded-lg border border-[#dcd9d9] bg-[#fcf9f8] hover:border-[#d9ff8c] transition duration-200">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#121212]/5 text-[#121212]">
                       <Icon size={14} />
                     </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-700">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold tracking-tight text-[#121212]">
                         {new Date(rec.date).toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", year: "numeric" })}
                       </p>
                       {rec.check_in_time && (
-                        <p className="text-xs text-gray-400">
+                        <p className="text-xs text-gray-500 font-medium mt-0.5">
                           In: {new Date(rec.check_in_time).toLocaleTimeString("en-RW", { hour: "2-digit", minute: "2-digit" })}
                           {rec.check_out_time && ` · Out: ${new Date(rec.check_out_time).toLocaleTimeString("en-RW", { hour: "2-digit", minute: "2-digit" })}`}
                         </p>
                       )}
                     </div>
-                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${cfg.color}`}>{cfg.label}</span>
+                    <span className="text-xs font-bold px-3 py-1 rounded-md border border-[#dcd9d9] bg-[#ffffff] text-[#121212]">{cfg.label}</span>
                   </div>
                 );
               })}

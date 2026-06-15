@@ -43,81 +43,79 @@ export default function MyReportsPage() {
 
   return (
     <DashboardShell>
-      <div className="p-2 sm:p-4 space-y-4">
-        <h1 className="text-xl font-bold text-gray-800">My Academic Reports</h1>
+      <div className="p-4 sm:p-6 space-y-6 max-w-4xl mx-auto bg-[#fcf9f8] min-h-screen text-[#121212]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        <style dangerouslySetInnerHTML={{ __html: `
+          @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        `}} />
+        <h1 className="text-2xl font-extrabold tracking-tight text-[#121212]">My Academic Reports</h1>
 
         {loading ? (
           <div className="flex justify-center py-16"><Loader2 className="animate-spin text-blue-500" size={28} /></div>
         ) : data.length === 0 ? (
-          <div className="bg-white rounded-2xl shadow-sm p-10 text-center">
+          <div className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-10 text-center">
             <GraduationCap size={40} className="mx-auto text-gray-200 mb-3" />
             <p className="text-gray-400">No published reports yet</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {data.map((rep) => {
               const grades = rep.grades as Record<string, unknown>;
               const meta = (grades?._meta as { decision?: string }) ?? {};
               const subjects = Object.entries(grades).filter(([k]) => k !== "_meta") as [string, { total?: number; max_total?: number; grade?: string; percentage?: number }][];
 
               return (
-                <div key={rep.id} className="bg-white rounded-2xl shadow-sm p-4">
-                  <div className="flex items-start justify-between mb-3">
+                <div key={rep.id} className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-5 shadow-none">
+                  <div className="flex items-start justify-between mb-4">
                     <div>
-                      <p className="text-base font-bold text-gray-800">{TERM_LABEL[rep.term] ?? rep.term} · {rep.academic_year}</p>
-                      <div className="flex items-center gap-2 mt-1">
+                      <p className="text-lg font-extrabold tracking-tight text-[#121212]">{TERM_LABEL[rep.term] ?? rep.term} · {rep.academic_year}</p>
+                      <div className="flex items-center gap-3 mt-1.5">
                         {meta.decision && (
-                          <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${DECISION_COLOR[meta.decision] ?? "bg-gray-100 text-gray-600"}`}>
+                          <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded-md border border-[#dcd9d9] bg-[#fcf9f8] text-[#121212]">
                             {meta.decision.replace("_", " ")}
                           </span>
                         )}
                         {rep.position_in_class && (
-                          <span className="text-xs text-gray-400">Position: <span className="font-medium text-gray-700">{rep.position_in_class}</span></span>
+                          <span className="text-xs text-gray-500">Position: <span className="font-bold text-[#121212]">#{rep.position_in_class}</span></span>
                         )}
                         {rep.average !== null && rep.average !== undefined && (
-                          <span className="text-xs text-gray-400">Average: <span className="font-medium text-gray-700">{rep.average.toFixed(1)}%</span></span>
+                          <span className="text-xs text-gray-500">Average: <span className="font-bold text-[#121212]">{rep.average.toFixed(1)}%</span></span>
                         )}
                       </div>
                     </div>
                     <button
                       onClick={() => handleDownload(rep.id, rep.term, rep.academic_year)}
                       disabled={downloading === rep.id}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 transition disabled:opacity-50"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-[#121212] hover:bg-[#d9ff8c] hover:text-[#121212] text-white rounded-lg text-xs font-bold transition duration-200 border border-[#121212] disabled:opacity-50"
                     >
                       {downloading === rep.id ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
-                      PDF
+                      Download PDF
                     </button>
                   </div>
 
                   {/* Subject table */}
-                  <div className="rounded-xl overflow-hidden border border-gray-100">
+                  <div className="rounded-lg overflow-hidden border border-[#dcd9d9]">
                     <table className="w-full text-xs">
                       <thead>
-                        <tr className="bg-gray-50">
-                          <th className="text-left px-3 py-2 font-semibold text-gray-500">Subject</th>
-                          <th className="text-center px-2 py-2 font-semibold text-gray-500">CAT</th>
-                          <th className="text-center px-2 py-2 font-semibold text-gray-500">Exam</th>
-                          <th className="text-center px-2 py-2 font-semibold text-gray-500">Total</th>
-                          <th className="text-center px-2 py-2 font-semibold text-gray-500">%</th>
-                          <th className="text-center px-2 py-2 font-semibold text-gray-500">Grade</th>
+                        <tr className="bg-[#fcf9f8] border-b border-[#dcd9d9]">
+                          <th className="text-left px-3 py-2 font-bold text-gray-500 uppercase tracking-wider">Subject</th>
+                          <th className="text-center px-2 py-2 font-bold text-gray-500 uppercase tracking-wider">CAT</th>
+                          <th className="text-center px-2 py-2 font-bold text-gray-500 uppercase tracking-wider">Exam</th>
+                          <th className="text-center px-2 py-2 font-bold text-gray-500 uppercase tracking-wider">Total</th>
+                          <th className="text-center px-2 py-2 font-bold text-gray-500 uppercase tracking-wider">%</th>
+                          <th className="text-center px-2 py-2 font-bold text-gray-500 uppercase tracking-wider">Grade</th>
                         </tr>
                       </thead>
                       <tbody>
                         {subjects.map(([name, data]) => (
-                          <tr key={name} className="border-t border-gray-50">
-                            <td className="px-3 py-2 font-medium text-gray-700">{name}</td>
-                            <td className="text-center px-2 py-2 text-gray-600">{(data as { cat?: number }).cat ?? "—"}</td>
-                            <td className="text-center px-2 py-2 text-gray-600">{(data as { exam?: number }).exam ?? "—"}</td>
-                            <td className="text-center px-2 py-2 text-gray-600">{data.total ?? "—"}</td>
-                            <td className="text-center px-2 py-2 text-gray-600">{data.percentage !== undefined ? `${data.percentage.toFixed(1)}%` : "—"}</td>
+                          <tr key={name} className="border-t border-[#dcd9d9] hover:bg-[#fcf9f8]/50 transition-colors">
+                            <td className="px-3 py-2 font-bold text-[#121212]">{name}</td>
+                            <td className="text-center px-2 py-2 text-gray-600 font-semibold">{(data as { cat?: number }).cat ?? "—"}</td>
+                            <td className="text-center px-2 py-2 text-gray-600 font-semibold">{(data as { exam?: number }).exam ?? "—"}</td>
+                            <td className="text-center px-2 py-2 text-[#121212] font-bold">{data.total ?? "—"}</td>
+                            <td className="text-center px-2 py-2 text-[#121212] font-bold">{data.percentage !== undefined ? `${data.percentage.toFixed(1)}%` : "—"}</td>
                             <td className="text-center px-2 py-2">
                               {data.grade && (
-                                <span className={`font-bold px-1.5 py-0.5 rounded ${
-                                  data.grade === "A" ? "text-green-700 bg-green-50" :
-                                  data.grade === "B" ? "text-blue-700 bg-blue-50" :
-                                  data.grade === "C" ? "text-yellow-700 bg-yellow-50" :
-                                  data.grade === "F" ? "text-red-700 bg-red-50" : "text-gray-700 bg-gray-50"
-                                }`}>{data.grade}</span>
+                                <span className="font-bold px-2 py-0.5 rounded border border-[#dcd9d9] bg-[#ffffff] text-[#121212]">{data.grade}</span>
                               )}
                             </td>
                           </tr>
@@ -127,7 +125,9 @@ export default function MyReportsPage() {
                   </div>
 
                   {rep.principal_remarks && (
-                    <p className="mt-3 text-xs text-gray-500 italic">"{rep.principal_remarks}"</p>
+                    <div className="mt-3 bg-[#fcf9f8] p-3 rounded-lg border border-[#dcd9d9] text-xs text-gray-600 font-semibold italic">
+                      "{rep.principal_remarks}"
+                    </div>
                   )}
                 </div>
               );

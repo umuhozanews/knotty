@@ -264,6 +264,63 @@ export default function AcademicsPage() {
   return (
     <DashboardShell>
       <div className="p-4 space-y-4">
+        <style dangerouslySetInnerHTML={{ __html: `
+          @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+          
+          /* Precision Design System overrides */
+          .p-4.space-y-4 {
+            padding: 24px !important;
+            background-color: #fcf9f8 !important;
+            font-family: 'Plus Jakarta Sans', sans-serif !important;
+            min-height: 100vh;
+          }
+          
+          .bg-white {
+            background-color: #ffffff !important;
+            border: 1px solid #dcd9d9 !important;
+            border-radius: 8px !important;
+            box-shadow: none !important;
+          }
+          
+          .rounded-xl, .rounded-2xl, .rounded-3xl {
+            border-radius: 8px !important;
+          }
+          
+          .bg-indigo-600, .bg-indigo-500, .bg-blue-600, .bg-blue-500, .bg-green-600, .bg-teal-500 {
+            background-color: #121212 !important;
+            color: #ffffff !important;
+            border-radius: 8px !important;
+            border: 1px solid #121212 !important;
+          }
+          .bg-indigo-600:hover, .bg-indigo-500:hover, .bg-blue-600:hover, .bg-blue-500:hover, .bg-green-600:hover, .bg-teal-500:hover {
+            background-color: #d9ff8c !important;
+            color: #121212 !important;
+            border-color: #d9ff8c !important;
+          }
+          
+          .text-indigo-600, .text-blue-600, .text-indigo-500 {
+            color: #121212 !important;
+          }
+          .border-indigo-600, .border-blue-600, .border-indigo-500 {
+            border-color: #121212 !important;
+          }
+          
+          .border-indigo-600.text-indigo-600 {
+            border-color: #121212 !important;
+            color: #121212 !important;
+            font-weight: 800 !important;
+          }
+          
+          .bg-gray-50 {
+            background-color: #fcf9f8 !important;
+            border-bottom: 1px solid #dcd9d9 !important;
+          }
+          
+          .hover\\:shadow-md:hover, .hover\\:shadow-lg:hover {
+            border-color: #d9ff8c !important;
+            box-shadow: none !important;
+          }
+        ` }} />
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>

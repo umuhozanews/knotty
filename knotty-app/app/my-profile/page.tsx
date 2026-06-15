@@ -96,32 +96,35 @@ export default function MyProfilePage() {
   function field(icon: React.ElementType, label: string, val: string | undefined | null) {
     const Icon = icon;
     return (
-      <div className="flex items-start gap-3 py-3 border-b border-gray-50 dark:border-gray-800 last:border-0">
-        <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
-          <Icon size={14} className="text-blue-500" />
+      <div className="flex items-start gap-3 py-3 border-b border-[#dcd9d9] last:border-0">
+        <div className="w-8 h-8 rounded-lg bg-[#121212]/5 flex items-center justify-center flex-shrink-0 mt-0.5">
+          <Icon size={14} className="text-[#121212]" />
         </div>
         <div>
-          <p className="text-xs text-gray-400">{label}</p>
-          <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{val || "—"}</p>
+          <p className="text-xs text-gray-500 font-semibold">{label}</p>
+          <p className="text-sm font-extrabold tracking-tight text-[#121212]">{val || "—"}</p>
         </div>
       </div>
     );
   }
 
-  const inp = "w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500 dark:bg-gray-800 dark:text-gray-100";
+  const inp = "w-full border border-[#dcd9d9] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#121212] bg-[#ffffff] text-[#121212]";
 
   return (
     <DashboardShell>
-      <div className="p-4 sm:p-6 space-y-6 max-w-4xl mx-auto">
+      <div className="p-4 sm:p-6 space-y-6 max-w-4xl mx-auto bg-[#fcf9f8] min-h-screen text-[#121212]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        <style dangerouslySetInnerHTML={{ __html: `
+          @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        `}} />
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">My Profile</h1>
-            <p className="text-xs text-gray-400 mt-0.5">View and update contact details</p>
+            <h1 className="text-2xl font-extrabold tracking-tight text-[#121212]">My Profile</h1>
+            <p className="text-xs text-gray-500 mt-0.5">View and update contact details</p>
           </div>
           {s && !isEditing && (
             <button
               onClick={() => setIsEditing(true)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-xs transition"
+              className="flex items-center gap-1.5 px-4 py-2 bg-[#121212] hover:bg-[#d9ff8c] hover:text-[#121212] text-white rounded-lg text-xs font-bold transition duration-200 border border-[#121212]"
             >
               <Edit3 size={14} />
               Edit Profile
@@ -137,10 +140,10 @@ export default function MyProfilePage() {
           <form onSubmit={handleSave}>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* Photo Card */}
-              <div className="bg-gradient-to-br from-blue-600 to-green-600 rounded-3xl p-6 text-white text-center flex flex-col items-center justify-center relative shadow-md">
+              <div className="bg-[#121212] rounded-lg p-6 text-[#fcf9f8] text-center flex flex-col items-center justify-center relative border border-[#dcd9d9]/20 shadow-none">
                 {isEditing ? (
                   <label className="relative cursor-pointer group mb-3">
-                    <div className="w-24 h-24 rounded-full border-4 border-white/50 overflow-hidden relative flex items-center justify-center bg-black/20 hover:border-white transition">
+                    <div className="w-24 h-24 rounded-full border-4 border-[#d9ff8c]/50 overflow-hidden relative flex items-center justify-center bg-black/20 hover:border-[#d9ff8c] transition">
                       {form.profile_photo ? (
                         <img src={form.profile_photo} alt="" className="w-full h-full object-cover" />
                       ) : (
@@ -155,9 +158,9 @@ export default function MyProfilePage() {
                 ) : (
                   <div className="relative mb-3">
                     {s.user?.profile_photo ? (
-                      <img src={s.user.profile_photo} alt="" className="w-24 h-24 rounded-full object-cover border-4 border-white/30" />
+                      <img src={s.user.profile_photo} alt="" className="w-24 h-24 rounded-full object-cover border-4 border-white/10" />
                     ) : (
-                      <div className="w-24 h-24 rounded-full bg-white/20 flex items-center justify-center border-4 border-white/30">
+                      <div className="w-24 h-24 rounded-full bg-white/10 flex items-center justify-center border-4 border-white/10">
                         <User size={40} className="text-white" />
                       </div>
                     )}
@@ -165,26 +168,26 @@ export default function MyProfilePage() {
                 )}
                 <p className="text-xl font-bold">{s.user?.first_name} {s.user?.last_name}</p>
                 <p className="text-sm opacity-85 mt-0.5">{s.level?.name} · Class {s.class?.name}</p>
-                <p className="text-xs opacity-60 mt-1.5 font-mono bg-white/10 px-2 py-0.5 rounded-md">{s.student_code}</p>
+                <p className="text-xs text-[#d9ff8c] font-mono bg-white/10 px-2.5 py-1 rounded-md border border-[#d9ff8c]/20 mt-3 font-bold tracking-wider">{s.student_code}</p>
               </div>
 
               {/* Personal details / inputs */}
-              <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-sm p-6 md:col-span-2 space-y-4">
-                <div className="flex items-center justify-between border-b border-gray-50 dark:border-gray-800 pb-2">
-                  <p className="font-bold text-gray-800 dark:text-gray-100">Personal Information</p>
+              <div className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-6 md:col-span-2 space-y-4 shadow-none">
+                <div className="flex items-center justify-between border-b border-[#dcd9d9] pb-3">
+                  <p className="font-extrabold tracking-tight text-[#121212]">Personal Information</p>
                   {isEditing && (
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={() => setIsEditing(false)}
-                        className="p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+                        className="p-1.5 rounded-lg border border-[#dcd9d9] text-gray-500 hover:bg-gray-50 transition"
                       >
                         <X size={14} />
                       </button>
                       <button
                         type="submit"
                         disabled={saving}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold disabled:opacity-60 transition"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-[#121212] hover:bg-[#d9ff8c] hover:text-[#121212] text-white rounded-lg text-xs font-bold disabled:opacity-60 transition border border-[#121212]"
                       >
                         {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
                         Save
@@ -225,7 +228,7 @@ export default function MyProfilePage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-1">
+                  <div className="space-y-0">
                     {field(User, "Full Name", `${s.user?.first_name} ${s.user?.last_name}`)}
                     {field(Mail, "Email Address", s.user?.email)}
                     {field(Phone, "Phone Number", s.user?.phone)}
@@ -237,9 +240,9 @@ export default function MyProfilePage() {
               </div>
 
               {/* Cards, Parent info */}
-              <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-sm p-6 space-y-4 md:col-span-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-6 space-y-4 md:col-span-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 shadow-none">
                 <div>
-                  <p className="font-bold text-gray-800 dark:text-gray-100 border-b border-gray-50 dark:border-gray-800 pb-2 mb-2">School Details</p>
+                  <p className="font-extrabold tracking-tight text-[#121212] border-b border-[#dcd9d9] pb-3 mb-2">School Details</p>
                   {field(User, "Level", s.level?.name)}
                   {field(User, "Class", s.class?.name)}
                   {field(Calendar, "Enrollment Date", s.enrollment_date ? new Date(s.enrollment_date).toLocaleDateString("en-GB") : null)}
@@ -247,7 +250,7 @@ export default function MyProfilePage() {
 
                 {s.card && (
                   <div>
-                    <p className="font-bold text-gray-800 dark:text-gray-100 border-b border-gray-50 dark:border-gray-800 pb-2 mb-2">My KNOTTY Card</p>
+                    <p className="font-extrabold tracking-tight text-[#121212] border-b border-[#dcd9d9] pb-3 mb-2">My KNOTTY Card</p>
                     {field(CreditCard, "Card Number", s.card.card_number)}
                     {field(CreditCard, "Wallet Balance", `${(s.card.wallet_balance ?? 0).toLocaleString()} RWF`)}
                     {field(Calendar, "Expires", s.card.expires_at ? new Date(s.card.expires_at).toLocaleDateString("en-GB") : null)}
@@ -256,7 +259,7 @@ export default function MyProfilePage() {
 
                 {s.parent && (
                   <div>
-                    <p className="font-bold text-gray-800 dark:text-gray-100 border-b border-gray-50 dark:border-gray-800 pb-2 mb-2">Parent / Guardian</p>
+                    <p className="font-extrabold tracking-tight text-[#121212] border-b border-[#dcd9d9] pb-3 mb-2">Parent / Guardian</p>
                     {field(User, "Guardian Name", `${s.parent.first_name} ${s.parent.last_name}`)}
                     {field(Phone, "Guardian Phone", s.parent.phone)}
                     {field(Mail, "Guardian Email", s.parent.email)}

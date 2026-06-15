@@ -30,7 +30,7 @@ async function createClass(req, res, next) {
 
 async function getClasses(req, res, next) {
   try {
-    const data = await service.getClasses(req.user.school_id);
+    const data = await service.getClasses(req.user.school_id, req.user);
     res.json({ success: true, data });
   } catch (err) { next(err); }
 }

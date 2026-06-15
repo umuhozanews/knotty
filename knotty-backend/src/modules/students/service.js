@@ -132,7 +132,7 @@ async function createStudent(data, schoolId) {
   });
 }
 
-async function listStudents(schoolId, { page, limit, search, classId, levelId }) {
+async function listStudents(schoolId, { page, limit, search, classId, levelId }, user) {
   const where = {
     school_id: schoolId,
     is_active: true,
@@ -148,6 +148,31 @@ async function listStudents(schoolId, { page, limit, search, classId, levelId })
       },
     }),
   };
+
+  if (user && user.role === 'TEACHER') {
+    const teacher = await prisma.teacher.findFirst({
+      where: { user_id: user.id, school_id: schoolId }
+    });
+    if (!teacher || !teacher.subjects_taught) {
+      return paginatedResponse([], 0, page, limit);
+    }
+    const assignments = teacher.subjects_taught;
+    if (!Array.isArray(assignments)) {
+      return paginatedResponse([], 0, page, limit);
+    }
+    const classIds = assignments.map(a => a.class_id).filter(Boolean);
+    if (classIds.length === 0) {
+      return paginatedResponse([], 0, page, limit);
+    }
+
+    if (classId) {
+      if (!classIds.includes(classId)) {
+        return paginatedResponse([], 0, page, limit);
+      }
+    } else {
+      where.class_id = { in: classIds };
+    }
+  }
 
   const { skip, take } = paginate(null, page, limit);
   const [data, total] = await Promise.all([

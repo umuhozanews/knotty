@@ -22,7 +22,32 @@ async function createClass(data, schoolId) {
   });
 }
 
-async function getClasses(schoolId) {
+async function getClasses(schoolId, user) {
+  if (user && user.role === 'TEACHER') {
+    const teacher = await prisma.teacher.findFirst({
+      where: { user_id: user.id, school_id: schoolId }
+    });
+    if (!teacher || !teacher.subjects_taught) {
+      return [];
+    }
+    const assignments = teacher.subjects_taught;
+    if (!Array.isArray(assignments)) {
+      return [];
+    }
+    const classIds = assignments.map(a => a.class_id).filter(Boolean);
+    if (classIds.length === 0) {
+      return [];
+    }
+    return prisma.class.findMany({
+      where: { school_id: schoolId, id: { in: classIds } },
+      include: {
+        level: true,
+        _count: { select: { students: true } },
+      },
+      orderBy: { created_at: 'asc' },
+    });
+  }
+
   return prisma.class.findMany({
     where: { school_id: schoolId },
     include: {

@@ -10,13 +10,35 @@ async function create(req, res, next) {
 async function list(req, res, next) {
   try {
     const { page = 1, limit = 20, search, classId, levelId } = req.query;
-    const result = await service.listStudents(req.user.school_id, { page, limit, search, classId, levelId });
+    const result = await service.listStudents(req.user.school_id, { page, limit, search, classId, levelId }, req.user);
     res.json({ success: true, ...result });
   } catch (err) { next(err); }
 }
 
+async function verifyTeacherStudentAccess(userId, studentId, schoolId) {
+  const prisma = require('../../config/database');
+  const student = await prisma.student.findFirst({
+    where: { id: studentId, school_id: schoolId }
+  });
+  if (!student) return false;
+
+  const teacher = await prisma.teacher.findFirst({
+    where: { user_id: userId, school_id: schoolId }
+  });
+  if (!teacher || !teacher.subjects_taught) return false;
+  const assignments = teacher.subjects_taught;
+  if (!Array.isArray(assignments)) return false;
+  return assignments.some(a => a.class_id === student.class_id);
+}
+
 async function getOne(req, res, next) {
   try {
+    if (req.user.role === 'TEACHER') {
+      const hasAccess = await verifyTeacherStudentAccess(req.user.id, req.params.id, req.user.school_id);
+      if (!hasAccess) {
+        return res.status(403).json({ success: false, message: 'Access denied: You are not assigned to this student\'s class.' });
+      }
+    }
     const student = await service.getStudentById(req.params.id, req.user.school_id);
     res.json({ success: true, data: student });
   } catch (err) { next(err); }
@@ -24,6 +46,12 @@ async function getOne(req, res, next) {
 
 async function fullProfile(req, res, next) {
   try {
+    if (req.user.role === 'TEACHER') {
+      const hasAccess = await verifyTeacherStudentAccess(req.user.id, req.params.id, req.user.school_id);
+      if (!hasAccess) {
+        return res.status(403).json({ success: false, message: 'Access denied: You are not assigned to this student\'s class.' });
+      }
+    }
     const data = await service.getFullProfile(req.params.id, req.user.school_id);
     res.json({ success: true, data });
   } catch (err) { next(err); }
@@ -45,6 +73,12 @@ async function update(req, res, next) {
     if (req.user.role === 'PARENT' && student.parent_id !== req.user.id) {
       return res.status(403).json({ success: false, message: 'You can only edit your own child\'s profile' });
     }
+    if (req.user.role === 'TEACHER') {
+      const hasAccess = await verifyTeacherStudentAccess(req.user.id, req.params.id, req.user.school_id);
+      if (!hasAccess) {
+        return res.status(403).json({ success: false, message: 'Access denied: You are not assigned to this student\'s class.' });
+      }
+    }
 
     if (req.user.role === 'STUDENT' || req.user.role === 'PARENT') {
       const allowed = ['first_name', 'last_name', 'phone', 'date_of_birth', 'gender', 'nationality', 'profile_photo'];
@@ -62,6 +96,12 @@ async function update(req, res, next) {
 
 async function remove(req, res, next) {
   try {
+    if (req.user.role === 'TEACHER') {
+      const hasAccess = await verifyTeacherStudentAccess(req.user.id, req.params.id, req.user.school_id);
+      if (!hasAccess) {
+        return res.status(403).json({ success: false, message: 'Access denied: You are not assigned to this student\'s class.' });
+      }
+    }
     await service.deleteStudent(req.params.id, req.user.school_id);
     res.json({ success: true, message: 'Student deactivated' });
   } catch (err) { next(err); }
@@ -94,6 +134,12 @@ async function parentChildren(req, res, next) {
 
 async function listConsent(req, res, next) {
   try {
+    if (req.user.role === 'TEACHER') {
+      const hasAccess = await verifyTeacherStudentAccess(req.user.id, req.params.id, req.user.school_id);
+      if (!hasAccess) {
+        return res.status(403).json({ success: false, message: 'Access denied: You are not assigned to this student\'s class.' });
+      }
+    }
     const result = await service.getConsentRecords(req.params.id, req.user.school_id);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }

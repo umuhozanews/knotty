@@ -264,15 +264,39 @@ async function scanAttendanceByNFC(nfcUid, recordedBy, options = {}) {
   return scanAttendance(card.card_number, recordedBy, options);
 }
 
-async function getTodaySummary(schoolId, classId) {
+async function getTodaySummary(schoolId, classId, user) {
   const now = new Date();
   const kigaliDateStr = now.toLocaleDateString('en-ZA', { timeZone: 'Africa/Kigali' });
   const today = new Date(kigaliDateStr.replace(/\//g, '-'));
   today.setUTCHours(0, 0, 0, 0);
 
   const where = { school_id: schoolId, date: today };
+  let allowedClassIds = null;
+
+  if (user && user.role === 'TEACHER') {
+    const teacher = await prisma.teacher.findFirst({
+      where: { user_id: user.id, school_id: schoolId }
+    });
+    if (!teacher || !teacher.subjects_taught) {
+      return { summary: { PRESENT: 0, ABSENT: 0, LATE: 0, EXCUSED: 0 }, total: 0, recent: [] };
+    }
+    const assignments = teacher.subjects_taught;
+    if (!Array.isArray(assignments)) {
+      return { summary: { PRESENT: 0, ABSENT: 0, LATE: 0, EXCUSED: 0 }, total: 0, recent: [] };
+    }
+    allowedClassIds = assignments.map(a => a.class_id).filter(Boolean);
+    if (allowedClassIds.length === 0) {
+      return { summary: { PRESENT: 0, ABSENT: 0, LATE: 0, EXCUSED: 0 }, total: 0, recent: [] };
+    }
+  }
+
   if (classId) {
+    if (allowedClassIds && !allowedClassIds.includes(classId)) {
+      return { summary: { PRESENT: 0, ABSENT: 0, LATE: 0, EXCUSED: 0 }, total: 0, recent: [] };
+    }
     where.class_id = classId;
+  } else if (allowedClassIds) {
+    where.class_id = { in: allowedClassIds };
   }
 
   const records = await prisma.attendance.findMany({
@@ -284,6 +308,8 @@ async function getTodaySummary(schoolId, classId) {
   const studentCountWhere = { school_id: schoolId };
   if (classId) {
     studentCountWhere.class_id = classId;
+  } else if (allowedClassIds) {
+    studentCountWhere.class_id = { in: allowedClassIds };
   }
   const totalStudents = await prisma.student.count({ where: studentCountWhere });
 

@@ -17,9 +17,11 @@ const upload = multer({
   },
 });
 
+const { checkClassAccess } = require('../../middleware/classAccess');
+
 router.use(authenticate);
-router.get('/', authorize('ADMIN', 'TEACHER', 'STUDENT', 'NURSE', 'BURSAR', 'DISCIPLINE'), ctrl.list);
-router.post('/', authorize('ADMIN', 'TEACHER'), upload.single('file'), ctrl.upload);
+router.get('/', authorize('ADMIN', 'TEACHER', 'STUDENT', 'NURSE', 'BURSAR', 'DISCIPLINE'), checkClassAccess, ctrl.list);
+router.post('/', authorize('ADMIN', 'TEACHER'), upload.single('file'), checkClassAccess, ctrl.upload);
 router.delete('/:id', authorize('ADMIN', 'TEACHER'), ctrl.remove);
 
 module.exports = router;

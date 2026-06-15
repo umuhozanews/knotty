@@ -25,7 +25,7 @@ async function list(req, res, next) {
       classId: classId || undefined,
       levelId: levelId || undefined,
       search: search || undefined,
-    });
+    }, req.user);
     res.json({ success: true, ...result });
   } catch (err) { next(err); }
 }

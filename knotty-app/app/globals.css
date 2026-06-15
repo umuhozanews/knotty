@@ -1,81 +1,249 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
 @variant dark (&:where(.dark, .dark *));
 
-:root {
-  --bg: #f0f2f5;
+@theme {
+  /* Font Override */
+  --font-sans: 'Plus Jakarta Sans', sans-serif;
+
+  /* Blue variants override to black/charcoal/gray */
+  --color-blue-50: rgba(18, 18, 18, 0.05);
+  --color-blue-100: #fcf9f8;
+  --color-blue-200: #dcd9d9;
+  --color-blue-300: #dcd9d9;
+  --color-blue-400: #888888;
+  --color-blue-500: #121212;
+  --color-blue-600: #121212;
+  --color-blue-700: #121212;
+  --color-blue-800: #121212;
+  --color-blue-900: #000000;
+
+  /* Indigo variants override to black/charcoal/gray */
+  --color-indigo-50: rgba(18, 18, 18, 0.05);
+  --color-indigo-100: #fcf9f8;
+  --color-indigo-200: #dcd9d9;
+  --color-indigo-300: #dcd9d9;
+  --color-indigo-400: #888888;
+  --color-indigo-500: #121212;
+  --color-indigo-600: #121212;
+  --color-indigo-700: #121212;
+  --color-indigo-800: #121212;
+  --color-indigo-900: #000000;
+
+  /* Green variants override to black/charcoal/gray */
+  --color-green-50: rgba(18, 18, 18, 0.05);
+  --color-green-100: #fcf9f8;
+  --color-green-200: #dcd9d9;
+  --color-green-300: #dcd9d9;
+  --color-green-400: #888888;
+  --color-green-500: #121212;
+  --color-green-600: #121212;
+  --color-green-700: #121212;
+  --color-green-800: #121212;
+  --color-green-900: #000000;
+
+  /* Teal / Emerald variants override to black/charcoal/gray */
+  --color-teal-50: rgba(18, 18, 18, 0.05);
+  --color-teal-100: #fcf9f8;
+  --color-teal-200: #dcd9d9;
+  --color-teal-500: #121212;
+  --color-teal-600: #121212;
+  --color-teal-700: #121212;
+
+  --color-emerald-50: rgba(18, 18, 18, 0.05);
+  --color-emerald-100: #fcf9f8;
+  --color-emerald-200: #dcd9d9;
+  --color-emerald-500: #121212;
+  --color-emerald-600: #121212;
+
+  /* Purple variants override to black/charcoal/gray */
+  --color-purple-50: rgba(18, 18, 18, 0.05);
+  --color-purple-100: #fcf9f8;
+  --color-purple-200: #dcd9d9;
+  --color-purple-500: #121212;
+  --color-purple-600: #121212;
+
+  /* Orange / Amber / Yellow variants override to black/charcoal/gray */
+  --color-orange-50: rgba(18, 18, 18, 0.05);
+  --color-orange-100: #fcf9f8;
+  --color-orange-200: #dcd9d9;
+  --color-orange-500: #121212;
+  --color-orange-600: #121212;
+
+  --color-amber-50: rgba(18, 18, 18, 0.05);
+  --color-amber-100: #fcf9f8;
+  --color-amber-200: #dcd9d9;
+  --color-amber-500: #121212;
+  --color-amber-600: #121212;
+
+  --color-yellow-50: rgba(18, 18, 18, 0.05);
+  --color-yellow-100: #fcf9f8;
+  --color-yellow-200: #dcd9d9;
+  --color-yellow-500: #121212;
+  --color-yellow-600: #121212;
+
+  /* Gray/Slate scale mapped to high contrast system */
+  --color-slate-50: #fcf9f8;
+  --color-slate-100: #fcf9f8;
+  --color-slate-200: #dcd9d9;
+  --color-slate-300: #dcd9d9;
+  --color-slate-400: #888888;
+  --color-slate-500: #555555;
+  --color-slate-600: #121212;
+  --color-slate-700: #121212;
+  --color-slate-800: #121212;
+
+  --color-gray-50: #fcf9f8;
+  --color-gray-100: #fcf9f8;
+  --color-gray-200: #dcd9d9;
+  --color-gray-300: #dcd9d9;
+  --color-gray-400: #888888;
+  --color-gray-500: #555555;
+  --color-gray-600: #121212;
+  --color-gray-700: #121212;
+  --color-gray-800: #121212;
+
+  /* Accent Lime Color */
+  --color-lime-500: #d9ff8c;
+  --color-lime-600: #d9ff8c;
+  --color-lime-700: #d9ff8c;
+
+  /* Standardized Corner Radii to 8px */
+  --radius-xl: 8px;
+  --radius-2xl: 8px;
+  --radius-3xl: 8px;
+  --radius-lg: 8px;
+  --radius-md: 8px;
+  --radius-sm: 8px;
+}
+
+:root, .dark {
+  --bg: #fcf9f8;
   --card: #ffffff;
-  --border: #e5e7eb;
-  --text-primary: #1a1a2e;
-  --text-secondary: #6b7280;
-  --text-muted: #9ca3af;
+  --border: #dcd9d9;
+  --text-primary: #121212;
+  --text-secondary: #555555;
+  --text-muted: #888888;
   --sidebar-bg: #ffffff;
   --header-bg: transparent;
   --input-bg: #ffffff;
-  --hover-bg: #f9fafb;
-  --brand: #2563eb;
+  --hover-bg: #fcf9f8;
+  --brand: #121212;
 }
 
-.dark {
-  --bg: #0f172a;
-  --card: #1e293b;
-  --border: #334155;
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  --sidebar-bg: #1e293b;
-  --header-bg: transparent;
-  --input-bg: #1e293b;
-  --hover-bg: #334155;
-  --brand: #2563eb;
+body, html, html.dark body {
+  background: #fcf9f8 !important;
+  color: #121212 !important;
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  transition: none !important;
 }
 
-body {
-  background: var(--bg);
-  color: var(--text-primary);
-  font-family: 'Inter', Arial, Helvetica, sans-serif;
-  transition: background 0.2s ease, color 0.2s ease;
+* {
+  box-sizing: border-box;
 }
 
-/* ===== DARK MODE OVERRIDES ===== */
-html.dark body { background: var(--bg); color: var(--text-primary); }
-
-/* Cards / white surfaces */
-html.dark [class*="bg-white"] { background-color: var(--card) !important; }
-html.dark [class*="bg-gray-50"] { background-color: #1a2744 !important; }
-html.dark [class*="bg-gray-100"] { background-color: #22304a !important; }
-
-/* Text */
-html.dark [class*="text-gray-800"] { color: #f1f5f9 !important; }
-html.dark [class*="text-gray-700"] { color: #e2e8f0 !important; }
-html.dark [class*="text-gray-600"] { color: #cbd5e1 !important; }
-html.dark [class*="text-gray-500"] { color: #94a3b8 !important; }
-html.dark [class*="text-gray-400"] { color: #64748b !important; }
-html.dark [class*="text-gray-300"] { color: #475569 !important; }
-
-/* Borders */
-html.dark [class*="border-gray-200"] { border-color: #334155 !important; }
-html.dark [class*="border-gray-100"] { border-color: #1e293b !important; }
-html.dark [class*="divide-gray-100"] > * { border-color: #1e293b !important; }
-
-/* Inputs */
-html.dark input:not([type="checkbox"]), html.dark select, html.dark textarea {
-  background-color: #1e293b !important;
-  color: #f1f5f9 !important;
-  border-color: #334155 !important;
+/* Force standard bg white sections to pure white, 1px border */
+[class*="bg-white"] {
+  background-color: #ffffff !important;
+  border: 1px solid #dcd9d9 !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
 }
-html.dark input::placeholder, html.dark textarea::placeholder { color: #64748b !important; }
 
-/* Shadows */
-html.dark [class*="shadow-sm"] { box-shadow: 0 1px 4px rgba(0,0,0,0.5) !important; }
-html.dark [class*="shadow-lg"], html.dark [class*="shadow-xl"] { box-shadow: 0 8px 32px rgba(0,0,0,0.7) !important; }
+/* Force custom inputs and select fields to design system standard */
+input:not([type="checkbox"]), select, textarea {
+  border: 1px solid #dcd9d9 !important;
+  border-radius: 8px !important;
+  background-color: #ffffff !important;
+  color: #121212 !important;
+  outline: none !important;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: #121212 !important;
+}
 
-/* Gradient sidebar card */
-html.dark .bg-gradient-to-br { background: linear-gradient(135deg, #1e3a2f, #2d2010) !important; }
+/* Reset all rounded corners to exactly 8px */
+.rounded-xl, .rounded-2xl, .rounded-3xl, .rounded-lg, .rounded-md {
+  border-radius: 8px !important;
+}
 
-* { box-sizing: border-box; }
+/* Redefine shadow utilities to flat design system */
+[class*="shadow-"] {
+  box-shadow: none !important;
+}
 
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
-.dark ::-webkit-scrollbar-thumb { background: #475569; }
+/* Sidebar active link styling */
+.bg-blue-50.text-blue-700,
+.bg-indigo-50.text-indigo-700 {
+  background-color: #121212 !important;
+  color: #ffffff !important;
+  border-radius: 8px !important;
+  border: 1px solid #121212 !important;
+}
+.bg-blue-50.text-blue-700 *,
+.bg-indigo-50.text-indigo-700 * {
+  color: #ffffff !important;
+}
+
+/* Buttons hover effect globally to lime green */
+button:hover,
+a.bg-blue-600:hover,
+a.bg-indigo-600:hover,
+button.bg-blue-600:hover,
+button.bg-indigo-600:hover,
+.bg-blue-600:hover,
+.bg-blue-500:hover,
+.bg-indigo-600:hover,
+.bg-indigo-500:hover,
+.hover\:bg-blue-700:hover,
+.hover\:bg-blue-600:hover,
+.hover\:bg-indigo-700:hover,
+.hover\:bg-indigo-600:hover {
+  background-color: #d9ff8c !important;
+  color: #121212 !important;
+  border-color: #d9ff8c !important;
+}
+
+/* Clean up gradients, force simple containers */
+.from-blue-50.to-green-50,
+.from-indigo-50.to-teal-50,
+.bg-gradient-to-br,
+.bg-gradient-to-r {
+  background: #ffffff !important;
+  border: 1px solid #dcd9d9 !important;
+}
+
+/* Custom table tweaks */
+table {
+  border-collapse: collapse !important;
+}
+th {
+  background-color: #fcf9f8 !important;
+  color: #121212 !important;
+  font-weight: 800 !important;
+  border-bottom: 1px solid #dcd9d9 !important;
+}
+td {
+  border-bottom: 1px solid #dcd9d9 !important;
+}
+
+/* Loader custom color */
+.animate-spin {
+  color: #121212 !important;
+}
+
+/* Scrollbars styling */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #dcd9d9;
+  border-radius: 4px;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #dcd9d9;
+}

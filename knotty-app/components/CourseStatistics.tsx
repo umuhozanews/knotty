@@ -18,25 +18,25 @@ export default function CourseStatistics({ schoolId }: { schoolId: string }) {
     : 0;
 
   const stats = [
-    { label: "Attendance", percent: attendancePct, color: "#2563eb" },
+    { label: "Attendance", percent: attendancePct, color: "#121212" },
     {
       label: "Fees Collected",
       percent: data ? Math.min(Math.round((data.fee_collected / 10_000_000) * 100), 100) : 0,
-      color: "#2e7d32",
+      color: "#121212",
     },
     {
       label: "Low Balance",
       percent: data
         ? Math.min(Math.round((data.low_balance_cards / Math.max(data.total_students, 1)) * 100), 100)
         : 0,
-      color: "#1a1a2e",
+      color: "#121212",
     },
   ];
 
   return (
-    <div className="bg-white rounded-2xl p-5 shadow-sm h-full">
+    <div className="bg-white rounded-lg border border-[#dcd9d9] p-5 shadow-none h-full">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-gray-800">Course Statistics</h3>
+        <h3 className="font-semibold text-[#121212]">Course Statistics</h3>
         <button className="text-gray-400 hover:text-gray-600">
           <MoreHorizontal size={18} />
         </button>

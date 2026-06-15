@@ -124,7 +124,7 @@ export default function MyProfilePage() {
           {s && !isEditing && (
             <button
               onClick={() => setIsEditing(true)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-[#121212] hover:bg-[#d9ff8c] hover:text-[#121212] text-white rounded-lg text-xs font-bold transition duration-200 border border-[#121212]"
+              className="flex items-center gap-1.5 px-4 py-2 bg-[#121212] hover:bg-[#dcd9d9] hover:text-[#121212] text-white rounded-lg text-xs font-bold transition duration-200 border border-[#121212]"
             >
               <Edit3 size={14} />
               Edit Profile
@@ -143,7 +143,7 @@ export default function MyProfilePage() {
               <div className="bg-[#121212] rounded-lg p-6 text-[#fcf9f8] text-center flex flex-col items-center justify-center relative border border-[#dcd9d9]/20 shadow-none">
                 {isEditing ? (
                   <label className="relative cursor-pointer group mb-3">
-                    <div className="w-24 h-24 rounded-full border-4 border-[#d9ff8c]/50 overflow-hidden relative flex items-center justify-center bg-black/20 hover:border-[#d9ff8c] transition">
+                    <div className="w-24 h-24 rounded-full border-4 border-[#dcd9d9]/50 overflow-hidden relative flex items-center justify-center bg-black/20 hover:border-[#dcd9d9] transition">
                       {form.profile_photo ? (
                         <img src={form.profile_photo} alt="" className="w-full h-full object-cover" />
                       ) : (
@@ -187,7 +187,7 @@ export default function MyProfilePage() {
                       <button
                         type="submit"
                         disabled={saving}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-[#121212] hover:bg-[#d9ff8c] hover:text-[#121212] text-white rounded-lg text-xs font-bold disabled:opacity-60 transition border border-[#121212]"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-[#121212] hover:bg-[#dcd9d9] hover:text-[#121212] text-white rounded-lg text-xs font-bold disabled:opacity-60 transition border border-[#121212]"
                       >
                         {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
                         Save

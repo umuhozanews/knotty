@@ -85,7 +85,7 @@ export default function MyReportsPage() {
                     <button
                       onClick={() => handleDownload(rep.id, rep.term, rep.academic_year)}
                       disabled={downloading === rep.id}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-[#121212] hover:bg-[#d9ff8c] hover:text-[#121212] text-white rounded-lg text-xs font-bold transition duration-200 border border-[#121212] disabled:opacity-50"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-[#121212] hover:bg-[#dcd9d9] hover:text-[#121212] text-white rounded-lg text-xs font-bold transition duration-200 border border-[#121212] disabled:opacity-50"
                     >
                       {downloading === rep.id ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
                       Download PDF

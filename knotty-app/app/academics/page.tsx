@@ -293,9 +293,9 @@ export default function AcademicsPage() {
             border: 1px solid #121212 !important;
           }
           .bg-indigo-600:hover, .bg-indigo-500:hover, .bg-blue-600:hover, .bg-blue-500:hover, .bg-green-600:hover, .bg-teal-500:hover {
-            background-color: #d9ff8c !important;
+            background-color: #dcd9d9 !important;
             color: #121212 !important;
-            border-color: #d9ff8c !important;
+            border-color: #dcd9d9 !important;
           }
           
           .text-indigo-600, .text-blue-600, .text-indigo-500 {
@@ -317,7 +317,7 @@ export default function AcademicsPage() {
           }
           
           .hover\\:shadow-md:hover, .hover\\:shadow-lg:hover {
-            border-color: #d9ff8c !important;
+            border-color: #dcd9d9 !important;
             box-shadow: none !important;
           }
         ` }} />

@@ -146,17 +146,17 @@ export default function MyCardPage() {
 
             {/* Info */}
             <div className="grid grid-cols-3 gap-3">
-              <div className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-4 text-center hover:border-[#d9ff8c] transition duration-200">
+              <div className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-4 text-center hover:border-[#dcd9d9] transition duration-200">
                 <TrendingUp size={20} className="mx-auto text-[#121212] mb-1.5" />
                 <p className="text-lg font-extrabold tracking-tight text-[#121212]">{(card.wallet_balance ?? 0).toLocaleString()}</p>
                 <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Balance (RWF)</p>
               </div>
-              <div className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-4 text-center hover:border-[#d9ff8c] transition duration-200">
+              <div className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-4 text-center hover:border-[#dcd9d9] transition duration-200">
                 <ArrowUpRight size={20} className="mx-auto text-[#121212] mb-1.5" />
                 <p className="text-xs font-bold text-[#121212]">Ask Admin</p>
                 <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold mt-1">Top Up Cash</p>
               </div>
-              <div className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-4 text-center hover:border-[#d9ff8c] transition duration-200">
+              <div className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-4 text-center hover:border-[#dcd9d9] transition duration-200">
                 <ArrowDownLeft size={20} className="mx-auto text-[#121212] mb-1.5" />
                 <p className="text-xs font-bold text-[#121212]">Canteen</p>
                 <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold mt-1">Tap to pay</p>

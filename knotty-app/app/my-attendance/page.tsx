@@ -44,7 +44,7 @@ export default function MyAttendancePage() {
             const cfg = STATUS[st];
             const Icon = cfg.icon;
             return (
-              <div key={st} className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-3 text-center hover:border-[#d9ff8c] transition duration-200">
+              <div key={st} className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-3 text-center hover:border-[#dcd9d9] transition duration-200">
                 <Icon size={16} className={`mx-auto mb-1 text-[#121212]`} />
                 <p className="text-2xl font-extrabold tracking-tight text-[#121212]">{summary[st]}</p>
                 <p className="text-xs text-gray-500 font-semibold">{cfg.label}</p>
@@ -66,7 +66,7 @@ export default function MyAttendancePage() {
                 const cfg = STATUS[rec.status] ?? STATUS.ABSENT;
                 const Icon = cfg.icon;
                 return (
-                  <div key={rec.id} className="flex items-center gap-3 p-3 rounded-lg border border-[#dcd9d9] bg-[#fcf9f8] hover:border-[#d9ff8c] transition duration-200">
+                  <div key={rec.id} className="flex items-center gap-3 p-3 rounded-lg border border-[#dcd9d9] bg-[#fcf9f8] hover:border-[#dcd9d9] transition duration-200">
                     <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#121212]/5 text-[#121212]">
                       <Icon size={14} />
                     </div>

@@ -105,7 +105,7 @@ export default function MaterialsPage() {
           </div>
           {CAN_UPLOAD.includes(role) && (
             <button onClick={() => setShowUpload(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#121212] hover:bg-[#d9ff8c] hover:text-[#121212] text-white rounded-lg text-xs font-bold transition duration-200 border border-[#121212]">
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#121212] hover:bg-[#dcd9d9] hover:text-[#121212] text-white rounded-lg text-xs font-bold transition duration-200 border border-[#121212]">
               <Plus size={16} />Upload Material
             </button>
           )}
@@ -142,7 +142,7 @@ export default function MaterialsPage() {
         ) : (
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
             {data.map((m) => (
-              <div key={m.id} className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-4 hover:border-[#d9ff8c] transition duration-200 shadow-none">
+              <div key={m.id} className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-4 hover:border-[#dcd9d9] transition duration-200 shadow-none">
                 <div className="flex items-start gap-3 mb-3">
                   <div className="w-10 h-10 rounded-lg bg-[#121212]/5 flex items-center justify-center flex-shrink-0 font-bold text-[#121212]">
                     <FileTypeIcon type={m.file_type} />
@@ -240,7 +240,7 @@ export default function MaterialsPage() {
                   </div>
                 </div>
                 <button type="submit" disabled={uploading || !file || !form.title}
-                  className="w-full py-3 bg-[#121212] text-white font-bold text-sm hover:bg-[#d9ff8c] hover:text-[#121212] rounded-lg transition border border-[#121212] flex items-center justify-center gap-2 disabled:opacity-50">
+                  className="w-full py-3 bg-[#121212] text-white font-bold text-sm hover:bg-[#dcd9d9] hover:text-[#121212] rounded-lg transition border border-[#121212] flex items-center justify-center gap-2 disabled:opacity-50">
                   {uploading ? <><Loader2 size={15} className="animate-spin" />Uploading...</> : <><Upload size={15} />Upload Material</>}
                 </button>
               </form>

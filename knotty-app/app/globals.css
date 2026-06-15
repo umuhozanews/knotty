@@ -104,10 +104,10 @@
   --color-gray-700: #121212;
   --color-gray-800: #121212;
 
-  /* Accent Lime Color */
-  --color-lime-500: #d9ff8c;
-  --color-lime-600: #d9ff8c;
-  --color-lime-700: #d9ff8c;
+  /* Accent Lime Color mapped to Gray */
+  --color-lime-500: #dcd9d9;
+  --color-lime-600: #dcd9d9;
+  --color-lime-700: #dcd9d9;
 
   /* Standardized Corner Radii to 8px */
   --radius-xl: 8px;
@@ -186,7 +186,7 @@ input:focus, select:focus, textarea:focus {
   color: #ffffff !important;
 }
 
-/* Buttons hover effect globally to lime green */
+/* Buttons hover effect globally to light gray */
 button:hover,
 a.bg-blue-600:hover,
 a.bg-indigo-600:hover,
@@ -200,9 +200,9 @@ button.bg-indigo-600:hover,
 .hover\:bg-blue-600:hover,
 .hover\:bg-indigo-700:hover,
 .hover\:bg-indigo-600:hover {
-  background-color: #d9ff8c !important;
+  background-color: #dcd9d9 !important;
   color: #121212 !important;
-  border-color: #d9ff8c !important;
+  border-color: #dcd9d9 !important;
 }
 
 /* Clean up gradients, force simple containers */

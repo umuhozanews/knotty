@@ -10,7 +10,7 @@
     "db:generate": "prisma generate",
     "db:seed": "node prisma/seed.js",
     "db:studio": "prisma studio",
-    "vercel-build": "prisma generate && prisma migrate deploy"
+    "vercel-build": "node scripts/vercel-build.js"
   },
   "prisma": {
     "seed": "node prisma/seed.js"

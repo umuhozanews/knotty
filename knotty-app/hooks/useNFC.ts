@@ -41,7 +41,7 @@ export function useNFC() {
               return;
             }
           }
-          resolve({ type: "uid", value: event.serialNumber });
+          resolve({ type: "uid", value: event.serialNumber.toUpperCase().replace(/:/g, "") });
         };
 
         reader.onerror = () => {
@@ -74,7 +74,14 @@ export function useNFC() {
       await reader.scan();
       setListening(true);
 
+      // Debounce: ignore taps within 2.5 s of each other to prevent double-fire
+      let lastTapAt = 0;
+
       reader.onreading = (event: { message: { records: Array<{ recordType: string; encoding?: string; data: ArrayBuffer }> }; serialNumber: string }) => {
+        const now = Date.now();
+        if (now - lastTapAt < 2500) return;
+        lastTapAt = now;
+
         for (const record of event.message.records) {
           if (record.recordType === "text") {
             const decoder = new TextDecoder(record.encoding || "utf-8");
@@ -82,7 +89,7 @@ export function useNFC() {
             return;
           }
         }
-        onTap({ type: "uid", value: event.serialNumber });
+        onTap({ type: "uid", value: event.serialNumber.toUpperCase().replace(/:/g, "") });
       };
 
       reader.onerror = () => {
@@ -90,6 +97,11 @@ export function useNFC() {
       };
 
       stopFnRef.current = () => {
+        // Null out handlers so the reader can't fire callbacks even if still scanning
+        if (readerRef.current) {
+          readerRef.current.onreading = null;
+          readerRef.current.onerror = null;
+        }
         readerRef.current = null;
         setListening(false);
       };

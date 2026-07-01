@@ -2,24 +2,67 @@ const prisma = require('../../config/database');
 const { paginate, paginatedResponse } = require('../../utils/helpers');
 
 async function purchase({ card_number, items, served_by, school_id }) {
-  const card = await prisma.knottyCard.findUnique({ where: { card_number } });
+  if (!Array.isArray(items) || items.length === 0) {
+    throw Object.assign(new Error('items must be a non-empty array'), { status: 400 });
+  }
+  for (const item of items) {
+    const price = Number(item.price);
+    const qty = Number(item.quantity);
+    if (!Number.isFinite(price) || price <= 0) {
+      throw Object.assign(new Error(`Invalid price for item: ${item.name || 'unknown'}`), { status: 400 });
+    }
+    if (!Number.isFinite(qty) || qty <= 0) {
+      throw Object.assign(new Error(`Invalid quantity for item: ${item.name || 'unknown'}`), { status: 400 });
+    }
+  }
+
+  const card = await prisma.knottyCard.findFirst({ where: { card_number, school_id } });
   if (!card) throw Object.assign(new Error('Card not found'), { status: 404 });
   if (!card.is_active || card.is_frozen) throw Object.assign(new Error('Card not usable'), { status: 403 });
 
-  const total_amount = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-
-  if (card.wallet_balance < total_amount) {
-    throw Object.assign(
-      new Error(`Insufficient balance. Balance: ${card.wallet_balance} RWF, Required: ${total_amount} RWF`),
-      { status: 400 }
-    );
-  }
+  const total_amount = items.reduce((sum, item) => sum + Number(item.price) * Number(item.quantity), 0);
 
   return prisma.$transaction(async (tx) => {
-    const updatedCard = await tx.knottyCard.update({
-      where: { id: card.id },
+    // Duplicate guard: reject if this card was charged within the last 5 seconds
+    const recentTxn = await tx.canteenTransaction.findFirst({
+      where: {
+        card_id: card.id,
+        transaction_time: { gte: new Date(Date.now() - 5000) },
+      },
+    });
+    if (recentTxn) {
+      throw Object.assign(
+        new Error('Duplicate transaction detected — please wait a moment before retrying'),
+        { status: 409 }
+      );
+    }
+
+    // Atomically deduct balance only if card is still usable and has enough funds.
+    // Using updateMany with a WHERE guard makes the balance check + deduction a single
+    // atomic DB operation, eliminating the TOCTOU race between check and update.
+    const updateResult = await tx.knottyCard.updateMany({
+      where: {
+        id: card.id,
+        is_active: true,
+        is_frozen: false,
+        wallet_balance: { gte: total_amount },
+      },
       data: { wallet_balance: { decrement: total_amount } },
     });
+
+    if (updateResult.count === 0) {
+      const freshCard = await tx.knottyCard.findUnique({ where: { id: card.id } });
+      if (!freshCard || !freshCard.is_active || freshCard.is_frozen) {
+        throw Object.assign(new Error('Card not usable'), { status: 403 });
+      }
+      throw Object.assign(
+        new Error(`Insufficient balance. Balance: ${freshCard.wallet_balance} RWF, Required: ${total_amount} RWF`),
+        { status: 400 }
+      );
+    }
+
+    const updatedCard = await tx.knottyCard.findUnique({ where: { id: card.id } });
+    const balanceBefore = updatedCard.wallet_balance + total_amount;
 
     const txn = await tx.canteenTransaction.create({
       data: {
@@ -28,7 +71,7 @@ async function purchase({ card_number, items, served_by, school_id }) {
         card_id: card.id,
         items_purchased: items,
         total_amount,
-        wallet_balance_before: card.wallet_balance,
+        wallet_balance_before: balanceBefore,
         wallet_balance_after: updatedCard.wallet_balance,
         served_by,
       },
@@ -41,7 +84,7 @@ async function purchase({ card_number, items, served_by, school_id }) {
         school_id,
         type: 'DEDUCTION',
         amount: total_amount,
-        balance_before: card.wallet_balance,
+        balance_before: balanceBefore,
         balance_after: updatedCard.wallet_balance,
         source: 'ADMIN',
         description: `Canteen purchase — ${items.length} item(s)`,
@@ -88,10 +131,24 @@ async function getDailyReport(schoolId, date) {
     }),
   ]);
 
+  // Build per-item sales breakdown from items_purchased JSON arrays
+  const itemMap = {};
+  for (const txn of transactions) {
+    const items = Array.isArray(txn.items_purchased) ? txn.items_purchased : [];
+    for (const item of items) {
+      const key = item.name || 'Unknown';
+      if (!itemMap[key]) itemMap[key] = { name: key, quantity: 0, revenue: 0 };
+      itemMap[key].quantity += Number(item.quantity) || 0;
+      itemMap[key].revenue += (Number(item.price) || 0) * (Number(item.quantity) || 0);
+    }
+  }
+  const items_summary = Object.values(itemMap).sort((a, b) => b.revenue - a.revenue);
+
   return {
     transactions,
     total_revenue: summary._sum.total_amount || 0,
     transaction_count: summary._count,
+    items_summary,
   };
 }
 

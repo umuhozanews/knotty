@@ -400,7 +400,7 @@ export default function FeesPage() {
                                     style={{ background: st.bg, color: st.text }}>
                                     {st.icon} {inv.status}
                                   </span>
-                                  {inv.fee_structure && <span className="text-xs text-gray-500">{inv.fee_structure.name}</span>}
+                                  {inv.lines?.[0]?.description && <span className="text-xs text-gray-500">{inv.lines[0].description}</span>}
                                 </div>
                                 <p className="text-xs text-gray-400">Due: {new Date(inv.due_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</p>
                               </div>

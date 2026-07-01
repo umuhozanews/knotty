@@ -3,7 +3,7 @@ const ctrl = require('./controller');
 const { authenticate } = require('../../middleware/auth');
 const { authorize } = require('../../middleware/rbac');
 
-router.get('/', authenticate, authorize('ADMIN', 'BURSAR', 'TEACHER', 'CANTEEN', 'DISCIPLINE', 'NURSE'), ctrl.list);
+router.get('/', authenticate, authorize('ADMIN', 'BURSAR', 'TEACHER', 'CANTEEN', 'DISCIPLINE'), ctrl.list);
 router.get('/me/secure-qr', authenticate, authorize('STUDENT'), ctrl.mySecureQR);
 router.get('/nfc/:nfcUid', authenticate, ctrl.scanNFC);
 router.get('/:cardNumber/scan', authenticate, ctrl.scan);

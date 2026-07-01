@@ -22,7 +22,7 @@ const ALL_NAV = [
   { icon: BookOpen,        label: "Materials",     href: "/materials",     roles: ["STUDENT"] },
 
   // ── Admin / Teacher / Staff shared ──
-  { icon: Users,           label: "Students",     href: "/students",      roles: ["ADMIN","TEACHER","NURSE","BURSAR","DISCIPLINE"] },
+  { icon: Users,           label: "Students",     href: "/students",      roles: ["ADMIN","TEACHER","BURSAR","DISCIPLINE"] },
   { icon: ClipboardCheck,  label: "Attendance",   href: "/attendance",    roles: ["ADMIN","TEACHER","DISCIPLINE"] },
   { icon: GraduationCap,   label: "Academics",    href: "/academics",     roles: ["ADMIN","TEACHER","STUDENT","PARENT"] },
   { icon: Shield,          label: "Gate Access",  href: "/gate-access",   roles: ["ADMIN","DISCIPLINE"] },

@@ -1,111 +1,92 @@
 "use client";
-import { useEffect, useState } from "react";
-import { Loader2, Plus, TrendingUp, Clock, CheckCircle, XCircle, AlertCircle, Filter, Receipt, RotateCcw, Wallet, CreditCard, Calendar, Trash2 } from "lucide-react";
+import { useEffect, useState, useRef, useCallback } from "react";
+import {
+  Wifi, WifiOff, Loader2, CreditCard, CheckCircle, Clock, XCircle,
+  Plus, X, Receipt, TrendingUp, Wallet, AlertCircle,
+  ChevronLeft, ChevronRight, Trash2,
+} from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
-import { fees, students, StudentBase, FeeStructure, Invoice, RefundRequest } from "@/lib/api";
+import VirtualCardTap from "@/components/VirtualCardTap";
+import { cards, fees, CardScanResult, Invoice, FeeStructure, RefundRequest } from "@/lib/api";
+import { useNFC } from "@/hooks/useNFC";
+import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
 
-// Collect Legacy Fee Modal
-function CollectFeeModal({ schoolId, onClose, onSuccess }: { schoolId: string; onClose: () => void; onSuccess: () => void }) {
-  const [search, setSearch] = useState("");
-  const [results, setResults] = useState<StudentBase[]>([]);
-  const [selected, setSelected] = useState<StudentBase | null>(null);
-  const [form, setForm] = useState({ amount: "", payment_type: "TUITION", payment_method: "CASH", term: "TERM1", academic_year: "2025-2026", phone: "" });
-  const [loading, setLoading] = useState(false);
-  const [searching, setSearching] = useState(false);
+type ScannedStudent = CardScanResult["student"];
 
-  useEffect(() => {
-    if (!search.trim()) { setResults([]); return; }
-    const t = setTimeout(async () => {
-      setSearching(true);
-      try { const r = await students.list({ search, limit: 6 }); setResults(r.data); } catch { /* ignore */ }
-      finally { setSearching(false); }
-    }, 300);
-    return () => clearTimeout(t);
-  }, [search]);
+const STATUS_STYLE: Record<string, { bg: string; text: string; icon: React.ReactNode }> = {
+  PAID:    { bg: "#DCFCE7", text: "#166534", icon: <CheckCircle size={12} /> },
+  PARTIAL: { bg: "#FEF9C3", text: "#854D0E", icon: <Clock size={12} /> },
+  PENDING: { bg: "#FEE2E2", text: "#991B1B", icon: <XCircle size={12} /> },
+  OVERDUE: { bg: "#FEE2E2", text: "#991B1B", icon: <AlertCircle size={12} /> },
+};
+
+/* ── Pay Invoice Modal ─────────────────────────────────────────── */
+function PayModal({ invoice, onClose, onSuccess }: {
+  invoice: Invoice; onClose: () => void; onSuccess: () => void;
+}) {
+  const remaining = invoice.total_amount - invoice.amount_paid;
+  const [form, setForm] = useState({ amount: String(remaining), channel: "CASH", phone: "" });
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!selected) return;
     setLoading(true);
     try {
-      await fees.pay({ ...form, amount: parseInt(form.amount), student_id: selected.id, school_id: schoolId });
-      onSuccess(); onClose();
-    } catch (err) { alert(err instanceof Error ? err.message : "Error"); }
+      await fees.payInvoice({ invoice_id: invoice.id, amount: parseFloat(form.amount), channel: form.channel, phone: form.channel === "MOMO" ? form.phone : undefined });
+      toast("Payment recorded successfully", "success");
+      onSuccess();
+      onClose();
+    } catch (err) { toast(err instanceof Error ? err.message : "Error", "error"); }
     finally { setLoading(false); }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-        <h3 className="font-bold text-gray-800 mb-4">Record Fee Payment (Direct)</h3>
-        <form onSubmit={submit} className="space-y-3">
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">Student</label>
-            {selected ? (
-              <div className="flex items-center justify-between p-2.5 bg-blue-50 rounded-xl">
-                <span className="text-sm font-medium text-blue-600">{selected.user.first_name} {selected.user.last_name} · {selected.student_code}</span>
-                <button type="button" onClick={() => setSelected(null)} className="text-xs text-gray-400 hover:text-gray-600">Change</button>
-              </div>
-            ) : (
-              <div className="relative">
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search student by name or ID…" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500" />
-                {searching && <Loader2 size={14} className="animate-spin absolute right-3 top-3 text-gray-400" />}
-                {results.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 bg-white border border-gray-100 rounded-xl shadow-lg mt-1 z-10 overflow-hidden">
-                    {results.map((s) => (
-                      <button key={s.id} type="button" onClick={() => { setSelected(s); setSearch(""); setResults([]); }}
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition">
-                        {s.user.first_name} {s.user.last_name} <span className="text-gray-400 text-xs">{s.student_code}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+            <p className="font-bold text-sm" style={{ color: "#121212" }}>Record Payment</p>
+            <p className="text-xs text-gray-400">Outstanding: {remaining.toLocaleString()} RWF</p>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">Type</label>
-              <select value={form.payment_type} onChange={(e) => setForm({ ...form, payment_type: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-                {["TUITION", "ACTIVITY", "UNIFORM", "OTHER"].map((t) => <option key={t}>{t}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">Method</label>
-              <select value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-                <option value="CASH">Cash</option>
-                <option value="MOMO">MTN MoMo</option>
-                <option value="BANK_TRANSFER">Bank Transfer</option>
-              </select>
+          <button onClick={onClose} className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center"><X size={14} /></button>
+        </div>
+        <form onSubmit={submit} className="p-5 space-y-3">
+          <div>
+            <p className="text-xs font-semibold mb-1.5" style={{ color: "#666" }}>PAYMENT CHANNEL</p>
+            <div className="grid grid-cols-3 gap-1.5">
+              {[["CASH", "Cash"], ["MOMO", "MTN MoMo"], ["BANK", "Bank Transfer"]].map(([val, label]) => (
+                <button key={val} type="button" onClick={() => setForm((f) => ({ ...f, channel: val }))}
+                  className="py-1.5 rounded-xl text-xs font-medium border transition"
+                  style={form.channel === val
+                    ? { background: "#121212", color: "#fff", borderColor: "#121212" }
+                    : { background: "#fff", color: "#666", borderColor: "#e5e5e5" }}>
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">Amount (RWF)</label>
-            <input type="number" min={0} required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500" />
+            <p className="text-xs font-semibold mb-1.5" style={{ color: "#666" }}>AMOUNT (RWF)</p>
+            <input type="number" required min={1} max={remaining} value={form.amount}
+              onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-400" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          {form.channel === "MOMO" && (
             <div>
-              <label className="text-xs text-gray-500 mb-1 block">Term</label>
-              <select value={form.term} onChange={(e) => setForm({ ...form, term: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-                {["TERM1", "TERM2", "TERM3"].map((t) => <option key={t}>{t}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">Academic Year</label>
-              <input value={form.academic_year} onChange={(e) => setForm({ ...form, academic_year: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500" />
-            </div>
-          </div>
-          {form.payment_method === "MOMO" && (
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">MoMo Phone Number</label>
-              <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="250780000000" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500" />
+              <p className="text-xs font-semibold mb-1.5" style={{ color: "#666" }}>MOMO PHONE</p>
+              <input required placeholder="250780000000" value={form.phone}
+                onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-400" />
             </div>
           )}
-          <div className="flex gap-3 pt-1">
-            <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600">Cancel</button>
-            <button type="submit" disabled={loading || !selected} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-sm text-white font-medium disabled:opacity-60">
-              {loading ? <Loader2 size={14} className="animate-spin mx-auto" /> : "Collect Payment"}
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={onClose} className="flex-1 py-3 rounded-2xl text-sm font-medium" style={{ background: "#F5F5F5", color: "#666" }}>Cancel</button>
+            <button type="submit" disabled={loading}
+              className="flex-1 py-3 rounded-2xl text-sm font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2"
+              style={{ background: "#1D4ED8" }}>
+              {loading ? <Loader2 size={14} className="animate-spin" /> : <><Receipt size={14} /> Record</>}
             </button>
           </div>
         </form>
@@ -114,559 +95,489 @@ function CollectFeeModal({ schoolId, onClose, onSuccess }: { schoolId: string; o
   );
 }
 
+/* ── Main Page ─────────────────────────────────────────────────── */
 export default function FeesPage() {
   const { user, loading: authLoading } = useAuth();
-  const role = user?.role ?? "STUDENT";
-  const isBursarOrAdmin = ["ADMIN", "BURSAR"].includes(role);
+  const { toast } = useToast();
+  const { startListen, stopListen, listening, isSupported } = useNFC();
+  const isBursarOrAdmin = ["ADMIN", "BURSAR"].includes(user?.role ?? "");
 
-  // Tabs
-  const [activeTab, setActiveTab] = useState<"overview" | "structures" | "invoices" | "refunds">("overview");
+  /* ── Scanner ───────────────────────────────────────────────── */
+  const [cardInput, setCardInput]   = useState("");
+  const [scanning, setScanning]     = useState(false);
+  const processingRef               = useRef(false);
 
-  // State Lists
-  const [report, setReport] = useState<any | null>(null);
-  const [structures, setStructures] = useState<FeeStructure[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [refunds, setRefunds] = useState<RefundRequest[]>([]);
-  const [loading, setLoading] = useState(true);
+  /* ── Scanned student ───────────────────────────────────────── */
+  const [student, setStudent]           = useState<ScannedStudent | null>(null);
+  const [studentInvoices, setStudentInvoices] = useState<Invoice[]>([]);
+  const [studentLoading, setStudentLoading]   = useState(false);
+  const [payTarget, setPayTarget]             = useState<Invoice | null>(null);
 
-  // Modals
-  const [showCollectModal, setShowCollectModal] = useState(false);
+  /* ── School-wide data ──────────────────────────────────────── */
+  const [activeTab, setActiveTab]     = useState<"overview" | "invoices" | "structures" | "refunds">("overview");
+  const [report, setReport]           = useState<{ total_collected: number; pending: number; by_type: { payment_type: string; _sum: { amount: number }; _count: number }[] } | null>(null);
+  const [allInvoices, setAllInvoices] = useState<Invoice[]>([]);
+  const [structures, setStructures]   = useState<FeeStructure[]>([]);
+  const [refunds, setRefunds]         = useState<RefundRequest[]>([]);
+  const [tabLoading, setTabLoading]   = useState(false);
+
+  /* ── Structure / invoice-gen modals ───────────────────────── */
   const [showStructureModal, setShowStructureModal] = useState(false);
-  const [showInvoiceGenModal, setShowInvoiceGenModal] = useState(false);
-  const [showPayModal, setShowPayModal] = useState<Invoice | null>(null);
-  const [showRefundModal, setShowRefundModal] = useState<Invoice | null>(null);
+  const [showGenModal, setShowGenModal]             = useState(false);
+  const [structForm, setStructForm] = useState({ name: "", applies_to: "", amount: "" });
+  const [genForm, setGenForm]       = useState({ fee_structure_id: "", due_date: "" });
 
-  // Form states
-  const [structureForm, setStructureForm] = useState({ name: "", applies_to: "", amount: "", currency: "RWF" });
-  const [invoiceGenForm, setInvoiceGenForm] = useState({ fee_structure_id: "", due_date: "" });
-  const [payForm, setPayForm] = useState({ amount: "", channel: "CASH", phone: "" });
-  const [refundForm, setRefundForm] = useState({ reason: "" });
+  /* ── Card scan ─────────────────────────────────────────────── */
+  async function handleCardScan(cardNum: string, isNFC = false) {
+    if (!cardNum.trim() || processingRef.current) return;
+    processingRef.current = true;
+    setScanning(true);
+    try {
+      const res = isNFC ? await cards.scanNFC(cardNum) : await cards.scan(cardNum.trim());
+      const scanned = res.data.student;
+      setStudent(scanned);
+      setCardInput("");
+      setStudentLoading(true);
+      const invRes = await fees.invoices({ studentId: scanned.id });
+      setStudentInvoices(invRes.data);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Card not found", "error");
+    } finally {
+      setScanning(false);
+      processingRef.current = false;
+      setStudentLoading(false);
+    }
+  }
 
-  // Loaders
-  async function loadData() {
-    setLoading(true);
+  const scanHandlerRef = useRef(handleCardScan);
+  scanHandlerRef.current = handleCardScan;
+
+  useEffect(() => {
+    if (!authLoading && isSupported) {
+      startListen((r) => scanHandlerRef.current(r.value, r.type === "uid"));
+    }
+    return () => { stopListen(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, isSupported]);
+
+  /* ── Load school-wide tab data ─────────────────────────────── */
+  const loadTab = useCallback(async () => {
+    if (authLoading || !isBursarOrAdmin) return;
+    setTabLoading(true);
     try {
       if (activeTab === "overview") {
         const r = await fees.schoolReport();
-        setReport(r.data);
+        setReport(r.data as typeof report);
+      } else if (activeTab === "invoices") {
+        const r = await fees.invoices();
+        setAllInvoices(r.data);
       } else if (activeTab === "structures") {
         const r = await fees.structures();
         setStructures(r.data);
-      } else if (activeTab === "invoices") {
-        const r = await fees.invoices();
-        setInvoices(r.data);
       } else if (activeTab === "refunds") {
         const r = await fees.refunds();
         setRefunds(r.data);
       }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }
+    } catch { /* ignore */ }
+    finally { setTabLoading(false); }
+  }, [activeTab, authLoading, isBursarOrAdmin]);
 
-  useEffect(() => {
-    if (!authLoading) {
-      // Direct student/parent users straight to Invoices
-      if (!isBursarOrAdmin && activeTab === "overview") {
-        setActiveTab("invoices");
-      } else {
-        loadData();
-      }
-    }
-  }, [authLoading, activeTab]);
+  useEffect(() => { loadTab(); }, [loadTab]);
 
-  // Operations
-  async function handleCreateStructure(e: React.FormEvent) {
-    e.preventDefault();
-    try {
-      const appliesArr = structureForm.applies_to ? structureForm.applies_to.split(",").map(s => s.trim()) : undefined;
-      await fees.createStructure({
-        name: structureForm.name,
-        amount: parseFloat(structureForm.amount),
-        applies_to: appliesArr,
-      });
-      setStructureForm({ name: "", applies_to: "", amount: "", currency: "RWF" });
-      setShowStructureModal(false);
-      loadData();
-    } catch (err) { alert(err instanceof Error ? err.message : "Error"); }
-  }
-
-  async function handleGenerateInvoices(e: React.FormEvent) {
-    e.preventDefault();
-    try {
-      const r = await fees.generateInvoices({
-        fee_structure_id: invoiceGenForm.fee_structure_id,
-        due_date: invoiceGenForm.due_date,
-      });
-      alert(`Successfully generated invoices for ${r.count} students!`);
-      setShowInvoiceGenModal(false);
-      loadData();
-    } catch (err) { alert(err instanceof Error ? err.message : "Error"); }
-  }
-
-  async function handlePayInvoice(e: React.FormEvent) {
-    e.preventDefault();
-    if (!showPayModal) return;
-    try {
-      const r = await fees.payInvoice({
-        invoice_id: showPayModal.id,
-        amount: parseFloat(payForm.amount),
-        channel: payForm.channel,
-        phone: payForm.channel === "MOMO" ? payForm.phone : undefined,
-      });
-      alert(r.message || "Payment processed successfully!");
-      setShowPayModal(null);
-      setPayForm({ amount: "", channel: "CASH", phone: "" });
-      loadData();
-    } catch (err) { alert(err instanceof Error ? err.message : "Error"); }
-  }
-
-  async function handleRequestRefund(e: React.FormEvent) {
-    e.preventDefault();
-    if (!showRefundModal) return;
-    try {
-      // Find the payment transaction ID to refund
-      const paymentTx = showRefundModal.payments.find(p => p.status === "COMPLETED");
-      if (!paymentTx || !paymentTx.wallet_transaction_id) {
-        alert("No refundable wallet transaction found for this invoice.");
-        return;
-      }
-
-      await fees.requestRefund({
-        wallet_transaction_id: paymentTx.wallet_transaction_id,
-        reason: refundForm.reason,
-      });
-      alert("Refund request submitted for Bursar review.");
-      setShowRefundModal(null);
-      setRefundForm({ reason: "" });
-      loadData();
-    } catch (err) { alert(err instanceof Error ? err.message : "Error"); }
-  }
-
-  async function handleResolveRefund(id: string, status: "APPROVED" | "REJECTED") {
-    if (!confirm(`Are you sure you want to ${status.toLowerCase()} this refund request?`)) return;
-    try {
-      const res = await fees.resolveRefund(id, status);
-      alert(`Refund request marked as ${status}!`);
-      loadData();
-    } catch (err) { alert(err instanceof Error ? err.message : "Error"); }
-  }
+  /* ── Computed totals for scanned student ───────────────────── */
+  const totalOwed   = studentInvoices.reduce((s, i) => s + i.total_amount, 0);
+  const totalPaid   = studentInvoices.reduce((s, i) => s + i.amount_paid, 0);
+  const outstanding = totalOwed - totalPaid;
+  const allPaid     = outstanding === 0 && studentInvoices.length > 0;
 
   return (
     <DashboardShell>
-      {showCollectModal && <CollectFeeModal schoolId={user?.school_id ?? ""} onClose={() => setShowCollectModal(false)} onSuccess={loadData} />}
-      
-      <div className="p-4 space-y-4">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-gray-800">Fee Management & Invoicing</h1>
-            <p className="text-sm text-gray-400">Manage school fee structures, bill students, and approve refunds</p>
+      {payTarget && (
+        <PayModal invoice={payTarget} onClose={() => setPayTarget(null)}
+          onSuccess={async () => {
+            if (student) {
+              const r = await fees.invoices({ studentId: student.id });
+              setStudentInvoices(r.data);
+            }
+            if (activeTab === "invoices") loadTab();
+          }} />
+      )}
+
+      {/* Structure modal */}
+      {showStructureModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-xl w-full max-w-md p-6">
+            <h3 className="font-bold mb-4" style={{ color: "#121212" }}>New Fee Structure</h3>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              await fees.createStructure({ name: structForm.name, amount: parseFloat(structForm.amount), applies_to: structForm.applies_to ? structForm.applies_to.split(",").map(s => s.trim()) : undefined });
+              setShowStructureModal(false); setStructForm({ name: "", applies_to: "", amount: "" }); loadTab();
+            }} className="space-y-3">
+              <div>
+                <p className="text-xs font-semibold mb-1" style={{ color: "#666" }}>TITLE</p>
+                <input required value={structForm.name} onChange={(e) => setStructForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="e.g. S5 Term 1 Tuition" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold mb-1" style={{ color: "#666" }}>APPLIES TO (comma separated, blank = all)</p>
+                <input value={structForm.applies_to} onChange={(e) => setStructForm((f) => ({ ...f, applies_to: e.target.value }))}
+                  placeholder="Senior 5, Senior 6" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold mb-1" style={{ color: "#666" }}>AMOUNT (RWF)</p>
+                <input required type="number" min={1} value={structForm.amount} onChange={(e) => setStructForm((f) => ({ ...f, amount: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none" />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={() => setShowStructureModal(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm">Cancel</button>
+                <button type="submit" className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white" style={{ background: "#1D4ED8" }}>Save</button>
+              </div>
+            </form>
           </div>
-          {isBursarOrAdmin && (
-            <div className="flex gap-2">
-              <button onClick={() => setShowStructureModal(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition">
-                <Plus size={16} /> New Structure
-              </button>
-              <button onClick={() => setShowCollectModal(true)} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition">
-                <Receipt size={16} /> Record Cash
-              </button>
+        </div>
+      )}
+
+      {/* Invoice gen modal */}
+      {showGenModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-xl w-full max-w-md p-6">
+            <h3 className="font-bold mb-4" style={{ color: "#121212" }}>Generate Bulk Invoices</h3>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              const r = await fees.generateInvoices(genForm);
+              toast(`${r.count} invoices generated`, "success");
+              setShowGenModal(false); loadTab();
+            }} className="space-y-3">
+              <div>
+                <p className="text-xs font-semibold mb-1" style={{ color: "#666" }}>FEE STRUCTURE</p>
+                <select required value={genForm.fee_structure_id} onChange={(e) => setGenForm((f) => ({ ...f, fee_structure_id: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+                  <option value="">Select…</option>
+                  {structures.map((s) => <option key={s.id} value={s.id}>{s.name} — {s.amount.toLocaleString()} RWF</option>)}
+                </select>
+              </div>
+              <div>
+                <p className="text-xs font-semibold mb-1" style={{ color: "#666" }}>DUE DATE</p>
+                <input required type="date" value={genForm.due_date} onChange={(e) => setGenForm((f) => ({ ...f, due_date: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none" />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={() => setShowGenModal(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm">Cancel</button>
+                <button type="submit" className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white" style={{ background: "#1D4ED8" }}>Run Billing</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <div className="h-full flex flex-col overflow-hidden">
+        <div className="flex items-center gap-3 px-3 md:px-4 pt-1 pb-3 flex-shrink-0">
+          <div>
+            <h1 className="text-lg font-bold" style={{ color: "#121212" }}>Fees & Finance</h1>
+            <p className="text-xs" style={{ color: "#666" }}>Tap student card to check payment status</p>
+          </div>
+        </div>
+
+        <div className="flex flex-1 gap-3 px-3 md:px-4 pb-3 md:pb-4 overflow-hidden min-h-0 flex-col lg:flex-row">
+
+          {/* ── LEFT: Scanner ───────────────────────────────── */}
+          <div className="lg:w-72 flex-shrink-0 flex flex-col gap-3">
+            <div className="bg-white rounded-3xl p-5 flex flex-col items-center gap-3">
+              <div className="w-20 h-20 rounded-full flex items-center justify-center"
+                style={{ background: listening ? "#EFF6FF" : "#F5F5F5" }}>
+                {scanning
+                  ? <Loader2 size={32} className="animate-spin" style={{ color: "#1D4ED8" }} />
+                  : listening
+                  ? <Wallet size={32} className="animate-pulse" style={{ color: "#1D4ED8" }} />
+                  : <WifiOff size={32} style={{ color: "#ccc" }} />}
+              </div>
+              <p className="text-sm font-bold text-center" style={{ color: "#121212" }}>
+                {scanning ? "Reading card…" : listening ? "Waiting for card tap…" : "NFC not available"}
+              </p>
+              <p className="text-xs text-center text-gray-400">
+                {listening ? "Student holds card near device" : "Use manual entry below"}
+              </p>
+              <div className="w-full flex gap-2 pt-1">
+                <input value={cardInput} onChange={(e) => setCardInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleCardScan(cardInput)}
+                  placeholder="Card number…"
+                  className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-xs font-mono outline-none" />
+                <button onClick={() => handleCardScan(cardInput)} disabled={scanning || !cardInput.trim()}
+                  className="px-3 py-2 rounded-xl text-white text-xs font-bold disabled:opacity-50"
+                  style={{ background: "#121212" }}>
+                  {scanning ? <Loader2 size={12} className="animate-spin" /> : <CreditCard size={13} />}
+                </button>
+              </div>
+              <VirtualCardTap onTap={(cn) => handleCardScan(cn)} busy={scanning} />
             </div>
-          )}
-        </div>
 
-        {/* Tab Controls */}
-        <div className="flex border-b border-gray-100 gap-2">
-          {isBursarOrAdmin && (
-            <button onClick={() => setActiveTab("overview")} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-all ${activeTab === "overview" ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-400 hover:text-gray-600"}`}>
-              Overview
-            </button>
-          )}
-          {isBursarOrAdmin && (
-            <button onClick={() => setActiveTab("structures")} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-all ${activeTab === "structures" ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-400 hover:text-gray-600"}`}>
-              Fee Structures
-            </button>
-          )}
-          <button onClick={() => setActiveTab("invoices")} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-all ${activeTab === "invoices" ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-400 hover:text-gray-600"}`}>
-            Invoices & Billing
-          </button>
-          {isBursarOrAdmin && (
-            <button onClick={() => setActiveTab("refunds")} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-all ${activeTab === "refunds" ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-400 hover:text-gray-600"}`}>
-              Refunds Approval
-            </button>
-          )}
-        </div>
-
-        {/* Tab Content */}
-        {loading ? (
-          <div className="flex justify-center py-20"><Loader2 className="animate-spin text-indigo-600" size={28} /></div>
-        ) : (
-          <div className="space-y-4">
-            
-            {/* OVERVIEW TAB */}
-            {activeTab === "overview" && report && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-white rounded-2xl p-5 shadow-sm">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center"><CheckCircle size={20} className="text-green-500" /></div>
-                      <p className="text-sm text-gray-500">Total Collected</p>
-                    </div>
-                    <p className="text-2xl font-bold text-gray-800">{report.total_collected.toLocaleString()} RWF</p>
-                  </div>
-                  <div className="bg-white rounded-2xl p-5 shadow-sm">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="w-10 h-10 rounded-xl bg-yellow-50 flex items-center justify-center"><Clock size={20} className="text-yellow-500" /></div>
-                      <p className="text-sm text-gray-500">Pending Billing</p>
-                    </div>
-                    <p className="text-2xl font-bold text-gray-800">{report.pending.toLocaleString()} RWF</p>
-                  </div>
-                  <div className="bg-white rounded-2xl p-5 shadow-sm">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center"><TrendingUp size={20} className="text-blue-500" /></div>
-                      <p className="text-sm text-gray-500">Gross Projected Revenue</p>
-                    </div>
-                    <p className="text-2xl font-bold text-gray-800">{(report.total_collected + report.pending).toLocaleString()} RWF</p>
+            {/* Student summary (desktop) */}
+            {student && (
+              <div className="bg-white rounded-3xl p-4 hidden lg:block">
+                <div className="flex items-center gap-3 mb-4">
+                  {student.photo
+                    ? <img src={student.photo} alt={student.name} className="w-12 h-12 rounded-2xl object-cover flex-shrink-0" />
+                    : <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-bold flex-shrink-0"
+                        style={{ background: "#EFF6FF", color: "#1D4ED8" }}>{student.name.charAt(0)}</div>}
+                  <div className="min-w-0">
+                    <p className="font-bold text-sm truncate" style={{ color: "#121212" }}>{student.name}</p>
+                    <p className="text-xs text-gray-400">{student.class}</p>
                   </div>
                 </div>
 
-                {report.by_type && report.by_type.length > 0 && (
-                  <div className="bg-white rounded-2xl p-5 shadow-sm">
-                    <h3 className="font-semibold text-gray-700 mb-4">Collected Fees Breakdown</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {report.by_type.map((item: any) => (
-                        <div key={item.payment_type} className="p-4 bg-gray-50 rounded-xl text-center">
-                          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">{item.payment_type}</p>
-                          <p className="text-lg font-bold text-gray-800">{item._sum.amount?.toLocaleString() ?? 0} RWF</p>
-                          <p className="text-xs text-gray-400">{item._count} transaction{item._count !== 1 ? "s" : ""}</p>
-                        </div>
-                      ))}
+                {/* Payment status summary */}
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <div className="rounded-2xl p-3 text-center" style={{ background: "#DCFCE7" }}>
+                    <p className="text-xs text-green-600">Paid</p>
+                    <p className="text-sm font-bold text-green-700">{totalPaid.toLocaleString()}</p>
+                    <p className="text-[10px] text-green-600">RWF</p>
+                  </div>
+                  <div className="rounded-2xl p-3 text-center" style={{ background: outstanding > 0 ? "#FEE2E2" : "#F5F5F5" }}>
+                    <p className="text-xs" style={{ color: outstanding > 0 ? "#991B1B" : "#999" }}>Outstanding</p>
+                    <p className="text-sm font-bold" style={{ color: outstanding > 0 ? "#DC2626" : "#121212" }}>{outstanding.toLocaleString()}</p>
+                    <p className="text-[10px]" style={{ color: outstanding > 0 ? "#991B1B" : "#999" }}>RWF</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 p-3 rounded-2xl" style={{ background: allPaid ? "#DCFCE7" : "#FEF9C3" }}>
+                  {allPaid
+                    ? <><CheckCircle size={16} className="text-green-600" /><p className="text-xs font-bold text-green-700">All fees cleared</p></>
+                    : <><AlertCircle size={16} className="text-amber-600" /><p className="text-xs font-bold text-amber-700">{outstanding.toLocaleString()} RWF outstanding</p></>}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── RIGHT: Student invoices or school-wide ───────── */}
+          <div className="flex-1 flex flex-col gap-3 overflow-hidden min-h-0">
+
+            {/* Student card (mobile) */}
+            {student && (
+              <div className="bg-white rounded-3xl p-4 lg:hidden flex-shrink-0">
+                <div className="flex items-center gap-3 mb-3">
+                  {student.photo
+                    ? <img src={student.photo} alt={student.name} className="w-10 h-10 rounded-2xl object-cover flex-shrink-0" />
+                    : <div className="w-10 h-10 rounded-2xl flex items-center justify-center font-bold flex-shrink-0 text-sm"
+                        style={{ background: "#EFF6FF", color: "#1D4ED8" }}>{student.name.charAt(0)}</div>}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm truncate" style={{ color: "#121212" }}>{student.name}</p>
+                    <p className="text-xs text-gray-400">{student.class}</p>
+                  </div>
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold"
+                    style={{ background: allPaid ? "#DCFCE7" : "#FEE2E2", color: allPaid ? "#166534" : "#991B1B" }}>
+                    {allPaid ? <><CheckCircle size={11} /> Cleared</> : <>{outstanding.toLocaleString()} RWF due</>}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {student ? (
+              /* Student invoice list */
+              <div className="bg-white rounded-3xl flex-1 overflow-hidden flex flex-col">
+                <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0">
+                  <p className="text-sm font-bold" style={{ color: "#121212" }}>Invoices</p>
+                  <p className="text-xs text-gray-400">{studentInvoices.length} invoice{studentInvoices.length !== 1 ? "s" : ""}</p>
+                </div>
+                <div className="flex-1 overflow-y-auto px-4 py-3">
+                  {studentLoading ? (
+                    <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-gray-300" /></div>
+                  ) : studentInvoices.length === 0 ? (
+                    <div className="flex flex-col items-center py-10 text-gray-300">
+                      <Receipt size={32} className="mb-2" />
+                      <p className="text-sm">No invoices found for this student</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {studentInvoices.map((inv) => {
+                        const rem = inv.total_amount - inv.amount_paid;
+                        const st = STATUS_STYLE[inv.status] ?? STATUS_STYLE.PENDING;
+                        return (
+                          <div key={inv.id} className="rounded-2xl p-4" style={{ background: "#F9F9F9" }}>
+                            <div className="flex items-start justify-between gap-2 mb-3">
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-semibold"
+                                    style={{ background: st.bg, color: st.text }}>
+                                    {st.icon} {inv.status}
+                                  </span>
+                                  {inv.fee_structure && <span className="text-xs text-gray-500">{inv.fee_structure.name}</span>}
+                                </div>
+                                <p className="text-xs text-gray-400">Due: {new Date(inv.due_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</p>
+                              </div>
+                              <div className="text-right flex-shrink-0">
+                                <p className="text-sm font-bold" style={{ color: "#121212" }}>{inv.total_amount.toLocaleString()} RWF</p>
+                                <p className="text-xs text-green-600">Paid: {inv.amount_paid.toLocaleString()}</p>
+                              </div>
+                            </div>
+
+                            {/* Progress bar */}
+                            <div className="w-full h-1.5 rounded-full bg-gray-200 overflow-hidden mb-3">
+                              <div className="h-full rounded-full transition-all bg-green-500"
+                                style={{ width: `${Math.min(100, (inv.amount_paid / inv.total_amount) * 100)}%` }} />
+                            </div>
+
+                            {rem > 0 && isBursarOrAdmin && (
+                              <button onClick={() => setPayTarget(inv)}
+                                className="w-full py-2 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-1"
+                                style={{ background: "#1D4ED8" }}>
+                                <Receipt size={11} /> Record Payment · {rem.toLocaleString()} RWF due
+                              </button>
+                            )}
+                            {rem === 0 && (
+                              <p className="text-center text-xs text-green-600 font-semibold flex items-center justify-center gap-1">
+                                <CheckCircle size={11} /> Fully cleared
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* School-wide management panel */
+              <div className="bg-white rounded-3xl flex-1 overflow-hidden flex flex-col">
+                {/* Tab bar */}
+                {isBursarOrAdmin && (
+                  <div className="flex gap-1 p-3 border-b border-gray-100 flex-shrink-0 overflow-x-auto">
+                    {(["overview", "invoices", "structures", "refunds"] as const).map((tab) => (
+                      <button key={tab} onClick={() => setActiveTab(tab)}
+                        className="px-3 py-1.5 rounded-xl text-xs font-semibold transition whitespace-nowrap capitalize"
+                        style={activeTab === tab
+                          ? { background: "#EFF6FF", color: "#1D4ED8" }
+                          : { background: "transparent", color: "#999" }}>
+                        {tab}
+                      </button>
+                    ))}
+                    <div className="ml-auto flex gap-1 flex-shrink-0">
+                      {activeTab === "structures" && (
+                        <button onClick={() => setShowStructureModal(true)}
+                          className="px-3 py-1.5 rounded-xl text-xs font-bold text-white flex items-center gap-1"
+                          style={{ background: "#1D4ED8" }}>
+                          <Plus size={11} /> Structure
+                        </button>
+                      )}
+                      {activeTab === "structures" && structures.length > 0 && (
+                        <button onClick={() => { setGenForm({ fee_structure_id: structures[0].id, due_date: "" }); setShowGenModal(true); }}
+                          className="px-3 py-1.5 rounded-xl text-xs font-bold text-white flex items-center gap-1"
+                          style={{ background: "#121212" }}>
+                          <Receipt size={11} /> Bulk Bill
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
-              </div>
-            )}
 
-            {/* STRUCTURES TAB */}
-            {activeTab === "structures" && (
-              <div className="bg-white rounded-2xl p-6 shadow-sm space-y-4">
-                <div className="flex justify-between items-center">
-                  <h3 className="font-bold text-gray-800">Defined Fee Structures</h3>
-                  <button onClick={() => {
-                    if (structures.length === 0) { alert("Please create a fee structure first."); return; }
-                    setInvoiceGenForm({ fee_structure_id: structures[0].id, due_date: "" });
-                    setShowInvoiceGenModal(true);
-                  }} className="bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-4 py-2 rounded-xl text-sm font-semibold transition">
-                    Run Bulk Billing Run
-                  </button>
-                </div>
-                <div className="overflow-hidden border border-gray-100 rounded-xl">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-gray-50 text-xs font-semibold text-gray-400 uppercase">
-                        <th className="p-4">Structure Name</th>
-                        <th className="p-4">Billing Amount</th>
-                        <th className="p-4">Applies To</th>
-                        <th className="p-4">Created At</th>
-                        <th className="p-4 text-center">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50 text-sm">
-                      {structures.length === 0 ? (
-                        <tr><td colSpan={5} className="p-8 text-center text-gray-400 italic">No fee structures defined yet.</td></tr>
-                      ) : (
-                        structures.map((s) => (
-                          <tr key={s.id}>
-                            <td className="p-4 font-semibold text-gray-700">{s.name}</td>
-                            <td className="p-4 font-medium text-indigo-600">{s.amount.toLocaleString()} {s.currency}</td>
-                            <td className="p-4">
-                              {s.applies_to && s.applies_to.length > 0 ? (
-                                <div className="flex flex-wrap gap-1">
-                                  {s.applies_to.map((x, i) => (
-                                    <span key={i} className="bg-indigo-50 text-indigo-600 text-[10px] font-semibold px-2 py-0.5 rounded-full">{x}</span>
-                                  ))}
-                                </div>
-                              ) : (
-                                <span className="text-gray-400 italic text-xs">All Students</span>
-                              )}
-                            </td>
-                            <td className="p-4 text-gray-500">{new Date(s.created_at).toLocaleDateString()}</td>
-                            <td className="p-4 text-center">
-                              <button onClick={async () => {
-                                if (confirm("Delete this fee structure?")) {
-                                  await fees.deleteStructure(s.id);
-                                  loadData();
-                                }
-                              }} className="p-1 text-red-500 hover:bg-red-50 rounded-lg">
-                                <Trash2 size={16} />
-                              </button>
-                            </td>
-                          </tr>
-                        ))
+                <div className="flex-1 overflow-y-auto px-4 py-3">
+                  {tabLoading ? (
+                    <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-gray-300" /></div>
+                  ) : activeTab === "overview" && report ? (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="rounded-2xl p-4" style={{ background: "#DCFCE7" }}>
+                          <div className="flex items-center gap-2 mb-1"><CheckCircle size={16} className="text-green-600" /><p className="text-xs text-green-600">Total Collected</p></div>
+                          <p className="text-xl font-bold text-green-700">{report.total_collected.toLocaleString()} RWF</p>
+                        </div>
+                        <div className="rounded-2xl p-4" style={{ background: "#FEF9C3" }}>
+                          <div className="flex items-center gap-2 mb-1"><Clock size={16} className="text-amber-600" /><p className="text-xs text-amber-600">Pending</p></div>
+                          <p className="text-xl font-bold text-amber-700">{report.pending.toLocaleString()} RWF</p>
+                        </div>
+                      </div>
+                      <div className="rounded-2xl p-4" style={{ background: "#EFF6FF" }}>
+                        <div className="flex items-center gap-2 mb-1"><TrendingUp size={16} className="text-blue-600" /><p className="text-xs text-blue-600">Projected Total</p></div>
+                        <p className="text-xl font-bold text-blue-700">{(report.total_collected + report.pending).toLocaleString()} RWF</p>
+                      </div>
+                      {report.by_type?.length > 0 && (
+                        <div className="space-y-1">
+                          <p className="text-xs font-semibold px-1" style={{ color: "#666" }}>BREAKDOWN BY TYPE</p>
+                          {report.by_type.map((item) => (
+                            <div key={item.payment_type} className="flex items-center justify-between rounded-xl px-3 py-2" style={{ background: "#F9F9F9" }}>
+                              <span className="text-xs font-medium" style={{ color: "#444" }}>{item.payment_type}</span>
+                              <span className="text-xs font-bold" style={{ color: "#121212" }}>{(item._sum.amount ?? 0).toLocaleString()} RWF <span className="font-normal text-gray-400">({item._count})</span></span>
+                            </div>
+                          ))}
+                        </div>
                       )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* INVOICES TAB */}
-            {activeTab === "invoices" && (
-              <div className="bg-white rounded-2xl p-6 shadow-sm space-y-4">
-                <h3 className="font-bold text-gray-800">Student Invoices</h3>
-                <div className="overflow-hidden border border-gray-100 rounded-xl">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-gray-50 text-xs font-semibold text-gray-400 uppercase">
-                        <th className="p-4">Invoice ID</th>
-                        <th className="p-4">Student</th>
-                        <th className="p-4">Class</th>
-                        <th className="p-4">Total Amount</th>
-                        <th className="p-4">Paid</th>
-                        <th className="p-4">Status</th>
-                        <th className="p-4">Due Date</th>
-                        <th className="p-4 text-center">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50 text-sm">
-                      {invoices.length === 0 ? (
-                        <tr><td colSpan={8} className="p-8 text-center text-gray-400 italic">No invoices found.</td></tr>
-                      ) : (
-                        invoices.map((inv) => {
-                          const remaining = inv.total_amount - inv.amount_paid;
-                          const isRefundable = inv.status === "PAID" || inv.status === "PARTIAL";
+                    </div>
+                  ) : activeTab === "invoices" ? (
+                    <div className="space-y-2">
+                      {allInvoices.length === 0
+                        ? <p className="text-center text-sm text-gray-400 py-8">No invoices found</p>
+                        : allInvoices.map((inv) => {
+                          const rem = inv.total_amount - inv.amount_paid;
+                          const st = STATUS_STYLE[inv.status] ?? STATUS_STYLE.PENDING;
                           return (
-                            <tr key={inv.id}>
-                              <td className="p-4 font-mono text-xs text-gray-500">#{inv.id.substring(0, 8)}</td>
-                              <td className="p-4">
-                                <div className="font-semibold text-gray-700">{inv.student?.user.first_name} {inv.student?.user.last_name}</div>
-                                <div className="text-[10px] text-gray-400">{inv.student?.student_code}</div>
-                              </td>
-                              <td className="p-4 text-gray-600">{inv.student?.class?.name || "Unassigned"}</td>
-                              <td className="p-4 font-bold text-gray-800">{inv.total_amount.toLocaleString()} RWF</td>
-                              <td className="p-4 font-medium text-green-600">{inv.amount_paid.toLocaleString()} RWF</td>
-                              <td className="p-4">
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase
-                                  ${inv.status === "PAID" ? "bg-green-50 text-green-600" :
-                                    inv.status === "PARTIAL" ? "bg-yellow-50 text-yellow-600" : "bg-red-50 text-red-500"}`}
-                                >
-                                  {inv.status}
-                                </span>
-                              </td>
-                              <td className="p-4 text-gray-500">{new Date(inv.due_date).toLocaleDateString()}</td>
-                              <td className="p-4 text-center space-x-1.5">
-                                {remaining > 0 ? (
-                                  <button onClick={() => {
-                                    setPayForm({ amount: String(remaining), channel: "CASH", phone: "" });
-                                    setShowPayModal(inv);
-                                  }} className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs px-2.5 py-1 rounded-lg transition">
-                                    Record Payment
-                                  </button>
-                                ) : (
-                                  <span className="text-xs text-green-600 font-semibold">Fully Cleared</span>
-                                )}
-
-                                {isBursarOrAdmin && isRefundable && (
-                                  <button onClick={() => {
-                                    setShowRefundModal(inv);
-                                  }} className="bg-red-50 text-red-500 hover:bg-red-100 font-semibold text-xs px-2.5 py-1 rounded-lg transition">
-                                    Request Refund
-                                  </button>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* REFUNDS TAB */}
-            {activeTab === "refunds" && (
-              <div className="bg-white rounded-2xl p-6 shadow-sm space-y-4">
-                <h3 className="font-bold text-gray-800">Pending & Resolved Refunds</h3>
-                <div className="overflow-hidden border border-gray-100 rounded-xl">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-gray-50 text-xs font-semibold text-gray-400 uppercase">
-                        <th className="p-4">Request ID</th>
-                        <th className="p-4">Student</th>
-                        <th className="p-4">Transaction Details</th>
-                        <th className="p-4">Reason</th>
-                        <th className="p-4">Status</th>
-                        <th className="p-4">Requested By</th>
-                        <th className="p-4 text-center">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50 text-sm">
-                      {refunds.length === 0 ? (
-                        <tr><td colSpan={7} className="p-8 text-center text-gray-400 italic">No refund requests logged.</td></tr>
-                      ) : (
-                        refunds.map((r) => (
-                          <tr key={r.id}>
-                            <td className="p-4 font-mono text-xs text-gray-500">#{r.id.substring(0, 8)}</td>
-                            <td className="p-4 font-semibold text-gray-700">{r.wallet_transaction?.student?.user.first_name} {r.wallet_transaction?.student?.user.last_name}</td>
-                            <td className="p-4">
-                              <div className="font-bold text-gray-800">{r.wallet_transaction?.amount?.toLocaleString()} RWF</div>
-                              <div className="text-[10px] text-gray-400 uppercase font-semibold">{r.wallet_transaction?.type} · {new Date(r.wallet_transaction?.created_at).toLocaleDateString()}</div>
-                            </td>
-                            <td className="p-4 text-gray-600">{r.reason}</td>
-                            <td className="p-4">
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase
-                                ${r.status === "APPROVED" ? "bg-green-50 text-green-600" :
-                                  r.status === "PENDING" ? "bg-yellow-50 text-yellow-600" : "bg-red-50 text-red-500"}`}
-                              >
-                                {r.status}
-                              </span>
-                            </td>
-                            <td className="p-4 text-gray-500">{r.requester?.first_name} {r.requester?.last_name}</td>
-                            <td className="p-4 text-center">
-                              {r.status === "PENDING" ? (
-                                <div className="flex justify-center gap-1">
-                                  <button onClick={() => handleResolveRefund(r.id, "APPROVED")} className="bg-green-600 hover:bg-green-700 text-white font-semibold text-xs px-2 py-1 rounded-lg">Approve</button>
-                                  <button onClick={() => handleResolveRefund(r.id, "REJECTED")} className="bg-red-600 hover:bg-red-700 text-white font-semibold text-xs px-2 py-1 rounded-lg">Reject</button>
+                            <div key={inv.id} className="rounded-2xl p-3 flex items-center gap-3" style={{ background: "#F9F9F9" }}>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-0.5">
+                                  <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full font-semibold" style={{ background: st.bg, color: st.text }}>{st.icon} {inv.status}</span>
+                                  <span className="text-xs font-semibold truncate" style={{ color: "#121212" }}>{inv.student?.user?.first_name} {inv.student?.user?.last_name}</span>
                                 </div>
-                              ) : (
-                                <span className="text-xs text-gray-400">Resolved by {r.approver?.first_name || "Bursar"}</span>
+                                <p className="text-xs text-gray-400">{inv.student?.class?.name} · {inv.total_amount.toLocaleString()} RWF total</p>
+                              </div>
+                              {rem > 0 && (
+                                <button onClick={() => setPayTarget(inv)}
+                                  className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-white flex-shrink-0"
+                                  style={{ background: "#1D4ED8" }}>
+                                  Pay {rem.toLocaleString()}
+                                </button>
                               )}
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  ) : activeTab === "structures" ? (
+                    <div className="space-y-2">
+                      {structures.length === 0
+                        ? <p className="text-center text-sm text-gray-400 py-8">No fee structures yet</p>
+                        : structures.map((s) => (
+                          <div key={s.id} className="rounded-2xl p-3 flex items-center gap-3" style={{ background: "#F9F9F9" }}>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold" style={{ color: "#121212" }}>{s.name}</p>
+                              <p className="text-xs text-gray-400">{s.amount.toLocaleString()} RWF
+                                {s.applies_to?.length ? ` · ${s.applies_to.join(", ")}` : " · All students"}
+                              </p>
+                            </div>
+                            <button onClick={async () => { if (confirm("Delete?")) { await fees.deleteStructure(s.id); loadTab(); } }}
+                              className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 flex-shrink-0"><Trash2 size={13} /></button>
+                          </div>
+                        ))}
+                    </div>
+                  ) : activeTab === "refunds" ? (
+                    <div className="space-y-2">
+                      {refunds.length === 0
+                        ? <p className="text-center text-sm text-gray-400 py-8">No refund requests</p>
+                        : refunds.map((r) => (
+                          <div key={r.id} className="rounded-2xl p-3" style={{ background: "#F9F9F9" }}>
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1">
+                                <p className="text-xs font-semibold" style={{ color: "#121212" }}>{r.wallet_transaction?.student?.user?.first_name} {r.wallet_transaction?.student?.user?.last_name}</p>
+                                <p className="text-xs text-gray-500">{r.reason}</p>
+                                <p className="text-xs font-bold mt-0.5" style={{ color: "#121212" }}>{r.wallet_transaction?.amount?.toLocaleString()} RWF</p>
+                              </div>
+                              {r.status === "PENDING" && (
+                                <div className="flex gap-1 flex-shrink-0">
+                                  <button onClick={async () => { await fees.resolveRefund(r.id, "APPROVED"); toast("Refund approved", "success"); loadTab(); }}
+                                    className="px-2 py-1 rounded-lg text-xs font-bold text-white" style={{ background: "#16A34A" }}>Approve</button>
+                                  <button onClick={async () => { await fees.resolveRefund(r.id, "REJECTED"); toast("Refund rejected", "error"); loadTab(); }}
+                                    className="px-2 py-1 rounded-lg text-xs font-bold text-white" style={{ background: "#DC2626" }}>Reject</button>
+                                </div>
+                              )}
+                              {r.status !== "PENDING" && (
+                                <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={r.status === "APPROVED" ? { background: "#DCFCE7", color: "#166534" } : { background: "#FEE2E2", color: "#991B1B" }}>{r.status}</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             )}
-
           </div>
-        )}
+        </div>
       </div>
-
-      {/* Structure Modal */}
-      {showStructureModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-xl w-full max-w-md p-6 space-y-4">
-            <h3 className="font-bold text-gray-800">Add Fee Structure</h3>
-            <form onSubmit={handleCreateStructure} className="space-y-3">
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Structure Title</label>
-                <input required value={structureForm.name} onChange={(e) => setStructureForm({ ...structureForm, name: e.target.value })}
-                  placeholder="e.g. Senior 5 Term 1 Tuition" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-indigo-500" />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Applies To (Comma separated levels/classes)</label>
-                <input value={structureForm.applies_to} onChange={(e) => setStructureForm({ ...structureForm, applies_to: e.target.value })}
-                  placeholder="e.g. Senior 5, Senior 6 (Leave blank for all)" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-indigo-500" />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Amount (RWF)</label>
-                <input required type="number" min={1} value={structureForm.amount} onChange={(e) => setStructureForm({ ...structureForm, amount: e.target.value })}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-indigo-500" />
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowStructureModal(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600">Cancel</button>
-                <button type="submit" className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-sm text-white font-medium hover:bg-indigo-700 transition">Save Structure</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Bulk Invoice Gen Modal */}
-      {showInvoiceGenModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-xl w-full max-w-md p-6 space-y-4">
-            <h3 className="font-bold text-gray-800">Generate Bulk Student Invoices</h3>
-            <form onSubmit={handleGenerateInvoices} className="space-y-3">
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Target Fee Structure</label>
-                <select required value={invoiceGenForm.fee_structure_id} onChange={(e) => setInvoiceGenForm({ ...invoiceGenForm, fee_structure_id: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-                  {structures.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.amount.toLocaleString()} RWF)</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Payment Due Date</label>
-                <input required type="date" value={invoiceGenForm.due_date} onChange={(e) => setInvoiceGenForm({ ...invoiceGenForm, due_date: e.target.value })}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none" />
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowInvoiceGenModal(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600">Cancel</button>
-                <button type="submit" className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-sm text-white font-medium hover:bg-indigo-700 transition">Run Billing Run</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Pay Invoice Modal */}
-      {showPayModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-xl w-full max-w-md p-6 space-y-4">
-            <h3 className="font-bold text-gray-800">Process Invoice Payment</h3>
-            <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-2xl">
-              <p className="text-xs text-gray-500">Student</p>
-              <p className="text-sm font-semibold text-indigo-700">{showPayModal.student?.user.first_name} {showPayModal.student?.user.last_name}</p>
-              <p className="text-xs text-gray-500 mt-1">Remaining Balance</p>
-              <p className="text-base font-bold text-gray-800">{(showPayModal.total_amount - showPayModal.amount_paid).toLocaleString()} RWF</p>
-            </div>
-            <form onSubmit={handlePayInvoice} className="space-y-3">
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Payment Channel</label>
-                <select required value={payForm.channel} onChange={(e) => setPayForm({ ...payForm, channel: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-                  <option value="CASH">Cash</option>
-                  <option value="BANK">Bank Transfer</option>
-                  <option value="CARD">Credit/Debit Card</option>
-                  <option value="WALLET">Knotty Card Wallet balance</option>
-                  <option value="MOMO">MTN MoMo</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Payment Amount</label>
-                <input required type="number" min={1} max={showPayModal.total_amount - showPayModal.amount_paid} value={payForm.amount} onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-indigo-500" />
-              </div>
-              {payForm.channel === "MOMO" && (
-                <div>
-                  <label className="text-xs text-gray-500 mb-1 block">MoMo Phone Number</label>
-                  <input required placeholder="250780000000" value={payForm.phone} onChange={(e) => setPayForm({ ...payForm, phone: e.target.value })}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-indigo-500" />
-                </div>
-              )}
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowPayModal(null)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600">Cancel</button>
-                <button type="submit" className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-sm text-white font-medium hover:bg-indigo-700 transition">Record Payment</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Request Refund Modal */}
-      {showRefundModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-xl w-full max-w-md p-6 space-y-4">
-            <h3 className="font-bold text-gray-800">Request Fee Refund</h3>
-            <p className="text-xs text-gray-500">Refunds are reversed directly to the student's Knotty Card wallet and will adjust invoice totals accordingly.</p>
-            <form onSubmit={handleRequestRefund} className="space-y-3">
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Reason for Refund</label>
-                <textarea required value={refundForm.reason} onChange={(e) => setRefundForm({ reason: e.target.value })}
-                  placeholder="e.g. Duplicate payment, family withdrawal..." className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-indigo-500 h-20 resize-none" />
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowRefundModal(null)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600">Cancel</button>
-                <button type="submit" className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-medium text-sm transition">Submit Request</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </DashboardShell>
   );
 }

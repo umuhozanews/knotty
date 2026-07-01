@@ -14,6 +14,25 @@ import { useAuth } from "@/context/AuthContext";
 const CATEGORIES = ["All", "Snacks", "Drinks", "Meals", "Fruits", "Bread", "Other"];
 
 type MenuItem = { id: string; name: string; price: number; emoji: string; img: string | null; cat: string; fromApi?: boolean };
+
+const MENU_ITEMS: MenuItem[] = [
+  { id: "amandazi",    name: "Amandazi",      price: 200,  emoji: "🍩", img: "/canteen/amandazi.png", cat: "Snacks" },
+  { id: "sambusa",     name: "Sambusa",        price: 300,  emoji: "🥟", img: "/canteen/sambusa.png",  cat: "Snacks" },
+  { id: "egg",         name: "Boiled Egg",     price: 200,  emoji: "🥚", img: "/canteen/egg.png",      cat: "Snacks" },
+  { id: "maria",       name: "Bolacha Maria",  price: 300,  emoji: "🍪", img: "/canteen/maria.png",    cat: "Snacks" },
+  { id: "inyange",     name: "Inyange Juice",  price: 500,  emoji: "🧃", img: "/canteen/inyange.png",  cat: "Drinks" },
+  { id: "fanta",       name: "Fanta",          price: 600,  emoji: "🥤", img: "/canteen/fanta.png",    cat: "Drinks" },
+  { id: "milk",        name: "Milk",           price: 400,  emoji: "🥛", img: "/canteen/milk.png",     cat: "Drinks" },
+  { id: "water",       name: "Water",          price: 200,  emoji: "💧", img: "/canteen/water.png",    cat: "Drinks" },
+  { id: "rice_beans",  name: "Rice & Beans",   price: 1500, emoji: "🍛", img: null,                    cat: "Meals"  },
+  { id: "rice_meat",   name: "Rice & Meat",    price: 2000, emoji: "🍖", img: null,                    cat: "Meals"  },
+  { id: "porridge",    name: "Porridge",       price: 500,  emoji: "🥣", img: null,                    cat: "Meals"  },
+  { id: "embe",        name: "Embe (Mango)",   price: 300,  emoji: "🥭", img: null,                    cat: "Fruits" },
+  { id: "banana",      name: "Banana",         price: 150,  emoji: "🍌", img: "/canteen/banana.png",   cat: "Fruits" },
+  { id: "avocado",     name: "Avocado",        price: 300,  emoji: "🥑", img: "/canteen/avocado.png",  cat: "Fruits" },
+  { id: "chapati",     name: "Chapati",        price: 300,  emoji: "🫓", img: "/canteen/chapati.png",  cat: "Bread"  },
+  { id: "mandazi_big", name: "Mandazi (Big)",  price: 300,  emoji: "🍞", img: null,                    cat: "Bread"  },
+];
 type CartMap = Record<string, number>;
 type PayResult = { student: CardScanResult["student"]; total: number; new_balance: number };
 
@@ -141,7 +160,7 @@ export default function CanteenPage() {
   const [activeCategory, setActiveCategory] = useState("All");
   const [search, setSearch] = useState("");
 
-  const allMenu: MenuItem[] = apiProducts;
+  const allMenu: MenuItem[] = [...MENU_ITEMS, ...apiProducts];
 
   const visible = allMenu.filter((m) => {
     const matchCat = activeCategory === "All" || m.cat === activeCategory;
@@ -330,15 +349,9 @@ export default function CanteenPage() {
 
             {/* Menu grid */}
             <div className="flex-1 overflow-y-auto">
-              {visible.length === 0 && !search && (
+              {visible.length === 0 && search && (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <span className="text-5xl mb-3">🍽️</span>
-                  <p className="font-semibold text-gray-400 text-sm">No menu items yet</p>
-                  {(user?.role === "ADMIN" || user?.role === "CANTEEN") && (
-                    <button onClick={() => setShowAddProduct(true)} className="mt-3 px-4 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: "#FF7A22" }}>
-                      + Add First Product
-                    </button>
-                  )}
+                  <p className="font-semibold text-gray-400 text-sm">No items match &quot;{search}&quot;</p>
                 </div>
               )}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-4 gap-2.5">

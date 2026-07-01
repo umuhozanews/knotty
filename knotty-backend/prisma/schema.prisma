@@ -153,6 +153,7 @@ model School {
   books          Book[]
   book_copies    BookCopy[]
   borrow_records BorrowRecord[]
+  reservations   Reservation[]
 
   // New models added for alignment
   campuses              Campus[]
@@ -263,6 +264,7 @@ model Student {
   achievements   Achievement[]
   reports        AcademicReport[]
   borrow_records BorrowRecord[]
+  reservations   Reservation[]
 
   // New models added for alignment
   campus_id      String?
@@ -304,6 +306,7 @@ model KnottyCard {
   access_logs  AccessLog[]
 
   @@index([card_number])
+  @@index([nfc_uid])
 }
 
 model Level {
@@ -467,6 +470,7 @@ model DisciplineRecord {
   description     String?
   action_taken    String?
   severity        DisciplineSeverity @default(MINOR)
+  marks_deducted  Int                @default(0)
   parent_notified Boolean            @default(false)
   recorded_at     DateTime           @default(now())
   created_at      DateTime           @default(now())
@@ -605,55 +609,87 @@ model Material {
 }
 
 model Book {
-  id           String     @id @default(uuid())
-  school_id    String
-  title        String
-  author       String
-  isbn         String?
-  category     String?
-  total_copies Int        @default(1)
-  created_at   DateTime   @default(now())
-  updated_at   DateTime   @updatedAt
+  id             String        @id @default(uuid())
+  school_id      String
+  title          String
+  author         String
+  isbn           String?
+  category       String?
+  total_copies   Int           @default(1)
+  description    String?
+  publisher      String?
+  published_year Int?
+  language       String?       @default("English")
+  cover_url      String?
+  subject        String?
+  location       String?
+  created_at     DateTime      @default(now())
+  updated_at     DateTime      @updatedAt
 
-  school       School     @relation(fields: [school_id], references: [id])
-  copies       BookCopy[]
+  school         School        @relation(fields: [school_id], references: [id])
+  copies         BookCopy[]
+  reservations   Reservation[]
 
   @@index([school_id])
 }
 
 model BookCopy {
-  id         String     @id @default(uuid())
-  school_id  String
-  book_id    String
-  copy_tag   String     @unique
-  status     String     @default("AVAILABLE") // AVAILABLE, BORROWED, LOST, DAMAGED, WITHDRAWN
-  created_at DateTime   @default(now())
-  updated_at DateTime   @updatedAt
+  id           String        @id @default(uuid())
+  school_id    String
+  book_id      String
+  copy_tag     String        @unique
+  status       String        @default("AVAILABLE")
+  condition    String?       @default("GOOD")
+  notes        String?
+  created_at   DateTime      @default(now())
+  updated_at   DateTime      @updatedAt
 
-  school     School     @relation(fields: [school_id], references: [id])
-  book       Book       @relation(fields: [book_id], references: [id], onDelete: Cascade)
-  borrows    BorrowRecord[]
+  school       School        @relation(fields: [school_id], references: [id])
+  book         Book          @relation(fields: [book_id], references: [id], onDelete: Cascade)
+  borrows      BorrowRecord[]
 
   @@index([school_id])
   @@index([book_id])
 }
 
 model BorrowRecord {
-  id           String     @id @default(uuid())
-  school_id    String
-  book_copy_id String
-  student_id   String
-  borrowed_at  DateTime   @default(now())
-  due_at       DateTime
-  returned_at  DateTime?
-  fine_amount  Int        @default(0)
+  id            String     @id @default(uuid())
+  school_id     String
+  book_copy_id  String
+  student_id    String
+  borrowed_at   DateTime   @default(now())
+  due_at        DateTime
+  returned_at   DateTime?
+  fine_amount   Int        @default(0)
+  fine_waived   Boolean    @default(false)
+  renewed_count Int        @default(0)
+  notes         String?
 
-  school       School     @relation(fields: [school_id], references: [id])
-  copy         BookCopy   @relation(fields: [book_copy_id], references: [id])
-  student      Student    @relation(fields: [student_id], references: [id])
+  school        School     @relation(fields: [school_id], references: [id])
+  copy          BookCopy   @relation(fields: [book_copy_id], references: [id])
+  student       Student    @relation(fields: [student_id], references: [id])
 
   @@index([school_id])
   @@index([book_copy_id])
+  @@index([student_id])
+}
+
+model Reservation {
+  id          String    @id @default(uuid())
+  school_id   String
+  book_id     String
+  student_id  String
+  status      String    @default("PENDING") // PENDING, FULFILLED, CANCELLED, EXPIRED
+  reserved_at DateTime  @default(now())
+  expires_at  DateTime
+  notes       String?
+
+  school      School    @relation(fields: [school_id], references: [id])
+  book        Book      @relation(fields: [book_id], references: [id], onDelete: Cascade)
+  student     Student   @relation(fields: [student_id], references: [id])
+
+  @@index([school_id])
+  @@index([book_id])
   @@index([student_id])
 }
 
@@ -967,6 +1003,7 @@ model Exam {
   academic_term_id String
   exam_date        DateTime
   max_score        Int      @default(100)
+  category         String   @default("EU") // EU, PR, ET
   created_at       DateTime @default(now())
   updated_at       DateTime @updatedAt
 

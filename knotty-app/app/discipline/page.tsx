@@ -1,106 +1,221 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
-import { Loader2, Plus, Search, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useState, useRef, useCallback, useEffect } from "react";
+import {
+  Wifi, WifiOff, Loader2, AlertTriangle, Shield, ShieldAlert,
+  Plus, X, CheckCircle, Search, CreditCard, ChevronLeft, ChevronRight,
+} from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
-import { discipline, students, Student, DisciplineRecord } from "@/lib/api";
+import VirtualCardTap from "@/components/VirtualCardTap";
+import { cards, discipline, DisciplineRecord, CardScanResult } from "@/lib/api";
+import { useNFC } from "@/hooks/useNFC";
+import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
 
-const SEV_COLOR: Record<string, string> = {
-  SERIOUS: "bg-red-50 text-red-500",
-  MODERATE: "bg-orange-50 text-orange-500",
-  MINOR: "bg-yellow-50 text-yellow-600",
+const TOTAL_MARKS = 40;
+
+const SEV_STYLE: Record<string, { bg: string; text: string }> = {
+  MINOR:    { bg: "#FFF9C4", text: "#856404" },
+  MODERATE: { bg: "#FFF3E0", text: "#E65100" },
+  SERIOUS:  { bg: "#FFEBEE", text: "#C62828" },
+};
+const TYPE_LABEL: Record<string, string> = {
+  WARNING:       "Warning",
+  SUSPENSION:    "Suspension",
+  MISCONDUCT:    "Misconduct",
+  RULE_VIOLATION:"Rule Violation",
+  OTHER:         "Other",
 };
 
-const TYPE_COLOR: Record<string, string> = {
-  WARNING: "bg-yellow-50 text-yellow-600",
-  SUSPENSION: "bg-red-50 text-red-500",
-  MISCONDUCT: "bg-orange-50 text-orange-500",
-  RULE_VIOLATION: "bg-purple-50 text-purple-500",
-  OTHER: "bg-gray-100 text-gray-500",
+const DEFAULT_MARKS: Record<string, number> = {
+  MINOR: 1,
+  MODERATE: 3,
+  SERIOUS:  5,
 };
 
-function AddModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const [search, setSearch] = useState("");
-  const [results, setResults] = useState<Student[]>([]);
-  const [selected, setSelected] = useState<Student | null>(null);
-  const [form, setForm] = useState({ type: "WARNING", title: "", description: "", action_taken: "", severity: "MINOR" });
+type ScannedStudent = CardScanResult["student"];
+
+/* ── New Offense Modal ─────────────────────────────────────────── */
+function OffenseModal({
+  student,
+  onClose,
+  onSuccess,
+}: {
+  student: ScannedStudent;
+  onClose: () => void;
+  onSuccess: (record: DisciplineRecord) => void;
+}) {
+  const [form, setForm] = useState({
+    type: "WARNING",
+    severity: "MINOR",
+    marks_deducted: 1,
+    title: "",
+    description: "",
+    action_taken: "",
+  });
   const [loading, setLoading] = useState(false);
-  const [searching, setSearching] = useState(false);
+  const { toast } = useToast();
 
-  useEffect(() => {
-    if (!search.trim()) { setResults([]); return; }
-    const t = setTimeout(async () => {
-      setSearching(true);
-      try { const r = await students.list({ search, limit: 6 }); setResults(r.data); } catch { /* ignore */ }
-      finally { setSearching(false); }
-    }, 300);
-    return () => clearTimeout(t);
-  }, [search]);
+  function setSeverity(sev: string) {
+    setForm((f) => ({ ...f, severity: sev, marks_deducted: DEFAULT_MARKS[sev] ?? 1 }));
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!selected) return;
+    if (!form.title.trim()) return;
     setLoading(true);
-    try { await discipline.create({ ...form, student_id: selected.id }); onSuccess(); onClose(); }
-    catch (err) { alert(err instanceof Error ? err.message : "Error"); }
-    finally { setLoading(false); }
+    try {
+      const res = await discipline.create({
+        student_id: student.id,
+        type: form.type,
+        severity: form.severity,
+        marks_deducted: Number(form.marks_deducted),
+        title: form.title,
+        description: form.description || undefined,
+        action_taken: form.action_taken || undefined,
+      });
+      toast(`Offense recorded · -${form.marks_deducted} marks`, "success");
+      onSuccess(res.data);
+      onClose();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to save", "error");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-        <h3 className="font-bold text-gray-800 mb-4">New Discipline Record</h3>
-        <form onSubmit={submit} className="space-y-3">
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-xl overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">Student</label>
-            {selected ? (
-              <div className="flex items-center justify-between p-2.5 bg-blue-50 rounded-xl">
-                <span className="text-sm font-medium text-blue-600">{selected.user.first_name} {selected.user.last_name}</span>
-                <button type="button" onClick={() => setSelected(null)} className="text-xs text-gray-400">Change</button>
-              </div>
-            ) : (
-              <div className="relative">
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search student…" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500" />
-                {searching && <Loader2 size={14} className="animate-spin absolute right-3 top-3 text-gray-400" />}
-                {results.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 bg-white border border-gray-100 rounded-xl shadow-lg mt-1 z-10 overflow-hidden">
-                    {results.map((s) => <button key={s.id} type="button" onClick={() => { setSelected(s); setSearch(""); setResults([]); }} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">{s.user.first_name} {s.user.last_name} <span className="text-gray-400 text-xs">{s.student_code}</span></button>)}
-                  </div>
-                )}
-              </div>
-            )}
+            <p className="font-bold text-sm" style={{ color: "#121212" }}>Record Offense</p>
+            <p className="text-xs text-gray-400">{student.name} · {student.class}</p>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">Type</label>
-              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-                {["WARNING", "SUSPENSION", "MISCONDUCT", "RULE_VIOLATION", "OTHER"].map((t) => <option key={t}>{t}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">Severity</label>
-              <select value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-                {["MINOR", "MODERATE", "SERIOUS"].map((s) => <option key={s}>{s}</option>)}
-              </select>
+          <button onClick={onClose} className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center text-gray-500">
+            <X size={14} />
+          </button>
+        </div>
+
+        <form onSubmit={submit} className="p-5 space-y-4">
+          {/* Type */}
+          <div>
+            <p className="text-xs font-semibold mb-2" style={{ color: "#666" }}>TYPE</p>
+            <div className="grid grid-cols-3 gap-1.5">
+              {["WARNING", "MISCONDUCT", "RULE_VIOLATION", "SUSPENSION", "OTHER"].map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, type: t }))}
+                  className="py-1.5 px-2 rounded-xl text-xs font-medium border transition"
+                  style={form.type === t
+                    ? { background: "#121212", color: "#fff", borderColor: "#121212" }
+                    : { background: "#fff", color: "#666", borderColor: "#e5e5e5" }}
+                >
+                  {TYPE_LABEL[t]}
+                </button>
+              ))}
             </div>
           </div>
+
+          {/* Severity */}
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">Title</label>
-            <input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500" />
+            <p className="text-xs font-semibold mb-2" style={{ color: "#666" }}>SEVERITY</p>
+            <div className="grid grid-cols-3 gap-1.5">
+              {(["MINOR", "MODERATE", "SERIOUS"] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setSeverity(s)}
+                  className="py-1.5 rounded-xl text-xs font-semibold border transition"
+                  style={form.severity === s
+                    ? { background: SEV_STYLE[s].bg, color: SEV_STYLE[s].text, borderColor: SEV_STYLE[s].text }
+                    : { background: "#fff", color: "#999", borderColor: "#e5e5e5" }}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
           </div>
+
+          {/* Marks deducted */}
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">Description</label>
-            <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none" />
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold" style={{ color: "#666" }}>MARKS TO DEDUCT</p>
+              <span className="text-xs font-bold text-red-500">-{form.marks_deducted} / {TOTAL_MARKS}</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={1}
+                max={TOTAL_MARKS}
+                value={form.marks_deducted}
+                onChange={(e) => setForm((f) => ({ ...f, marks_deducted: Number(e.target.value) }))}
+                className="flex-1 accent-red-500"
+              />
+              <input
+                type="number"
+                min={1}
+                max={TOTAL_MARKS}
+                value={form.marks_deducted}
+                onChange={(e) => setForm((f) => ({ ...f, marks_deducted: Math.min(TOTAL_MARKS, Math.max(1, Number(e.target.value))) }))}
+                className="w-14 text-center border border-gray-200 rounded-xl py-1.5 text-sm font-bold"
+                style={{ color: "#C62828" }}
+              />
+            </div>
           </div>
+
+          {/* Title */}
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">Action Taken</label>
-            <input value={form.action_taken} onChange={(e) => setForm({ ...form, action_taken: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" />
+            <p className="text-xs font-semibold mb-1.5" style={{ color: "#666" }}>OFFENSE TITLE *</p>
+            <input
+              required
+              value={form.title}
+              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+              placeholder="e.g. Fighting in the corridor"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-400"
+            />
           </div>
-          <div className="flex gap-3 pt-1">
-            <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600">Cancel</button>
-            <button type="submit" disabled={loading || !selected} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-sm text-white font-medium disabled:opacity-60">
-              {loading ? <Loader2 size={14} className="animate-spin mx-auto" /> : "Save Record"}
+
+          {/* Description */}
+          <div>
+            <p className="text-xs font-semibold mb-1.5" style={{ color: "#666" }}>DESCRIPTION (optional)</p>
+            <textarea
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              rows={2}
+              placeholder="Brief details of the incident…"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none outline-none focus:border-gray-400"
+            />
+          </div>
+
+          {/* Action taken */}
+          <div>
+            <p className="text-xs font-semibold mb-1.5" style={{ color: "#666" }}>ACTION TAKEN (optional)</p>
+            <input
+              value={form.action_taken}
+              onChange={(e) => setForm((f) => ({ ...f, action_taken: e.target.value }))}
+              placeholder="e.g. Written warning issued, parent called"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-400"
+            />
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-3 rounded-2xl text-sm font-medium"
+              style={{ background: "#F5F5F5", color: "#666" }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading || !form.title.trim()}
+              className="flex-1 py-3 rounded-2xl text-sm font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2"
+              style={{ background: "#C62828" }}
+            >
+              {loading ? <Loader2 size={14} className="animate-spin" /> : <><ShieldAlert size={14} /> Punish & Deduct</>}
             </button>
           </div>
         </form>
@@ -109,105 +224,390 @@ function AddModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () =
   );
 }
 
+/* ── Main Page ─────────────────────────────────────────────────── */
 export default function DisciplinePage() {
-  const router = useRouter();
   const { loading: authLoading } = useAuth();
-  const [data, setData] = useState<DisciplineRecord[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
-  const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const limit = 20;
+  const { toast } = useToast();
+  const { startListen, stopListen, listening, isSupported } = useNFC();
 
-  const fetchData = useCallback(async () => {
-    if (authLoading) return;
-    setLoading(true);
+  /* ── Scanner state ─────────────────────────────────────────── */
+  const [cardInput, setCardInput] = useState("");
+  const [scanning, setScanning] = useState(false);
+
+  /* ── Student + records ─────────────────────────────────────── */
+  const [student, setStudent]       = useState<ScannedStudent | null>(null);
+  const [records, setRecords]       = useState<DisciplineRecord[]>([]);
+  const [recordsLoading, setRecordsLoading] = useState(false);
+  const [showOffenseModal, setShowOffenseModal] = useState(false);
+
+  /* ── School-wide list (bottom) ─────────────────────────────── */
+  const [schoolRecords, setSchoolRecords]     = useState<DisciplineRecord[]>([]);
+  const [schoolTotal, setSchoolTotal]         = useState(0);
+  const [schoolPage, setSchoolPage]           = useState(1);
+  const [schoolSearch, setSchoolSearch]       = useState("");
+  const [schoolQuery, setSchoolQuery]         = useState("");
+  const [schoolLoading, setSchoolLoading]     = useState(true);
+  const LIMIT = 20;
+
+  /* ── Processing guard ──────────────────────────────────────── */
+  const processingRef = useRef(false);
+
+  /* ── Fetch records for scanned student ─────────────────────── */
+  const loadStudentRecords = useCallback(async (studentId: string) => {
+    setRecordsLoading(true);
     try {
-      const res = await discipline.schoolList({ page, limit, search: query || undefined });
-      setData(res.data as DisciplineRecord[]);
-      const p = res.pagination as { total: number };
-      setTotal(p.total);
-    } catch (err) { console.error(err); }
-    finally { setLoading(false); }
-  }, [page, query, authLoading]);
+      const res = await discipline.studentList(studentId);
+      setRecords(res.data as DisciplineRecord[]);
+    } catch { /* ignore */ }
+    finally { setRecordsLoading(false); }
+  }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
-  useEffect(() => { const t = setTimeout(() => { setQuery(search); setPage(1); }, 400); return () => clearTimeout(t); }, [search]);
+  /* ── Card scan handler ─────────────────────────────────────── */
+  async function handleCardScan(cardNum: string, isNFC = false) {
+    if (!cardNum.trim() || processingRef.current) return;
+    processingRef.current = true;
+    setScanning(true);
+    try {
+      const res = isNFC
+        ? await cards.scanNFC(cardNum)
+        : await cards.scan(cardNum.trim());
+      const scanned = res.data.student;
+      setStudent(scanned);
+      setCardInput("");
+      await loadStudentRecords(scanned.id);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Card not found", "error");
+    } finally {
+      setScanning(false);
+      processingRef.current = false;
+    }
+  }
 
-  const pages = Math.ceil(total / limit);
+  // Ref so the NFC callback always calls the latest handleCardScan (avoids stale closure)
+  const scanHandlerRef = useRef(handleCardScan);
+  scanHandlerRef.current = handleCardScan;
+
+  /* ── Start NFC on mount ────────────────────────────────────── */
+  useEffect(() => {
+    if (!authLoading && isSupported) {
+      startListen((result) => {
+        scanHandlerRef.current(result.value, result.type === "uid");
+      });
+    }
+    return () => { stopListen(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, isSupported]);
+
+  /* ── School-wide records ───────────────────────────────────── */
+  const loadSchool = useCallback(async () => {
+    if (authLoading) return;
+    setSchoolLoading(true);
+    try {
+      const res = await discipline.schoolList({ page: schoolPage, limit: LIMIT, search: schoolQuery || undefined });
+      setSchoolRecords(res.data as DisciplineRecord[]);
+      setSchoolTotal((res.pagination as { total: number }).total);
+    } catch { /* ignore */ }
+    finally { setSchoolLoading(false); }
+  }, [schoolPage, schoolQuery, authLoading]);
+
+  useEffect(() => { loadSchool(); }, [loadSchool]);
+  useEffect(() => {
+    const t = setTimeout(() => { setSchoolQuery(schoolSearch); setSchoolPage(1); }, 400);
+    return () => clearTimeout(t);
+  }, [schoolSearch]);
+
+  /* ── Computed marks ────────────────────────────────────────── */
+  const totalDeducted = records.reduce((s, r) => s + (r.marks_deducted ?? 0), 0);
+  const currentMarks  = Math.max(0, TOTAL_MARKS - totalDeducted);
+  const marksPct      = (currentMarks / TOTAL_MARKS) * 100;
+  const marksColor    = currentMarks >= 30 ? "#16a34a" : currentMarks >= 20 ? "#d97706" : "#dc2626";
+
+  const schoolPages = Math.ceil(schoolTotal / LIMIT);
 
   return (
     <DashboardShell>
-      {showModal && <AddModal onClose={() => setShowModal(false)} onSuccess={fetchData} />}
-      <div className="p-4 space-y-4">
-        <div className="flex items-center justify-between">
+      {showOffenseModal && student && (
+        <OffenseModal
+          student={student}
+          onClose={() => setShowOffenseModal(false)}
+          onSuccess={(rec) => {
+            setRecords((prev) => [rec, ...prev]);
+            loadSchool();
+          }}
+        />
+      )}
+
+      <div className="h-full flex flex-col overflow-hidden">
+
+        {/* ── Top bar ──────────────────────────────────────────── */}
+        <div className="flex items-center gap-3 px-3 md:px-4 pt-1 pb-3 flex-shrink-0">
           <div>
-            <h1 className="text-xl font-bold text-gray-800">Discipline</h1>
-            <p className="text-sm text-gray-400">{total} records</p>
+            <h1 className="text-lg font-bold" style={{ color: "#121212" }}>Discipline</h1>
+            <p className="text-xs" style={{ color: "#666" }}>Tap student card to view records</p>
           </div>
-          <button onClick={() => setShowModal(true)} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition">
-            <Plus size={16} /> Add Record
-          </button>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2 mb-4 max-w-xs">
-            <Search size={14} className="text-gray-400" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search records…" className="outline-none bg-transparent text-sm flex-1" />
-          </div>
+        <div className="flex flex-1 gap-3 px-3 md:px-4 pb-3 md:pb-4 overflow-hidden min-h-0 flex-col lg:flex-row">
 
-          {loading ? (
-            <div className="flex justify-center py-12"><Loader2 className="animate-spin text-blue-600" size={24} /></div>
-          ) : data.length === 0 ? (
-            <div className="flex flex-col items-center py-12 text-gray-300">
-              <AlertTriangle size={36} className="mb-2" />
-              <p className="text-sm">No discipline records</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {data.map((d) => (
-                <div key={d.id} className="flex items-start justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition cursor-pointer" onClick={() => d.student && router.push(`/students/${(d as { student_id?: string }).student_id}`)}>
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-red-50 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <AlertTriangle size={14} className="text-red-500" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">{d.title}</p>
-                      {d.student && (
-                        <p className="text-xs text-blue-600">{d.student.user.first_name} {d.student.user.last_name}</p>
-                      )}
-                      {d.description && <p className="text-xs text-gray-400 mt-0.5">{d.description}</p>}
-                      {d.action_taken && <p className="text-xs text-blue-500 mt-0.5">Action: {d.action_taken}</p>}
-                      <p className="text-xs text-gray-300 mt-1">
-                        {new Date(d.recorded_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
-                        {d.recorder && ` · by ${d.recorder.first_name} ${d.recorder.last_name}`}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-1.5 flex-shrink-0 ml-2">
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${SEV_COLOR[d.severity] || "bg-gray-100 text-gray-500"}`}>{d.severity}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${TYPE_COLOR[d.type] || "bg-gray-100 text-gray-500"}`}>{d.type}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          {/* ── LEFT: Scanner ─────────────────────────────────── */}
+          <div className="lg:w-72 flex-shrink-0 flex flex-col gap-3">
 
-          {pages > 1 && (
-            <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-50">
-              <p className="text-xs text-gray-400">Page {page} of {pages}</p>
-              <div className="flex gap-1">
-                <button disabled={page === 1} onClick={() => setPage((p) => p - 1)} className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 disabled:opacity-40">
-                  <ChevronLeft size={14} />
-                </button>
-                <button disabled={page === pages} onClick={() => setPage((p) => p + 1)} className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 disabled:opacity-40">
-                  <ChevronRight size={14} />
+            {/* NFC panel */}
+            <div className="bg-white rounded-3xl p-5 flex flex-col items-center gap-3">
+              <div
+                className="w-20 h-20 rounded-full flex items-center justify-center"
+                style={{ background: listening ? "#FEE2E2" : "#F5F5F5" }}
+              >
+                {scanning
+                  ? <Loader2 size={32} className="animate-spin" style={{ color: "#C62828" }} />
+                  : listening
+                  ? <Shield size={32} className="animate-pulse" style={{ color: "#C62828" }} />
+                  : <WifiOff size={32} style={{ color: "#ccc" }} />}
+              </div>
+              <p className="text-sm font-bold text-center" style={{ color: "#121212" }}>
+                {scanning ? "Reading card…" : listening ? "Waiting for card tap…" : "NFC not available"}
+              </p>
+              <p className="text-xs text-center text-gray-400">
+                {listening
+                  ? "Student holds NFC card or phone near device"
+                  : "Use manual card entry below"}
+              </p>
+
+              {/* Manual entry */}
+              <div className="w-full flex gap-2 pt-1">
+                <input
+                  value={cardInput}
+                  onChange={(e) => setCardInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleCardScan(cardInput)}
+                  placeholder="Card number…"
+                  className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-xs font-mono outline-none"
+                />
+                <button
+                  onClick={() => handleCardScan(cardInput)}
+                  disabled={scanning || !cardInput.trim()}
+                  className="px-3 py-2 rounded-xl text-white text-xs font-bold disabled:opacity-50"
+                  style={{ background: "#121212" }}
+                >
+                  {scanning ? <Loader2 size={12} className="animate-spin" /> : <CreditCard size={13} />}
                 </button>
               </div>
+
+              <VirtualCardTap onTap={(cn) => handleCardScan(cn)} busy={scanning} />
             </div>
-          )}
+
+            {/* Student card (desktop side panel) */}
+            {student && (
+              <div className="bg-white rounded-3xl p-4 hidden lg:block">
+                <div className="flex items-center gap-3 mb-4">
+                  {student.photo
+                    ? <img src={student.photo} alt={student.name} className="w-12 h-12 rounded-2xl object-cover flex-shrink-0" />
+                    : (
+                      <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 text-lg font-bold"
+                        style={{ background: "#F5F5F5", color: "#121212" }}>
+                        {student.name.charAt(0)}
+                      </div>
+                    )}
+                  <div className="min-w-0">
+                    <p className="font-bold text-sm truncate" style={{ color: "#121212" }}>{student.name}</p>
+                    <p className="text-xs text-gray-400">{student.class}</p>
+                    <p className="text-xs text-gray-400">{student.student_code}</p>
+                  </div>
+                </div>
+
+                {/* Marks score */}
+                <div className="rounded-2xl p-3 mb-3" style={{ background: "#F5F5F5" }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold" style={{ color: "#666" }}>DISCIPLINE MARKS</span>
+                    <span className="text-lg font-bold" style={{ color: marksColor }}>{currentMarks}<span className="text-xs font-normal text-gray-400">/{TOTAL_MARKS}</span></span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-gray-200 overflow-hidden">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${marksPct}%`, background: marksColor }} />
+                  </div>
+                  {totalDeducted > 0 && (
+                    <p className="text-xs text-gray-400 mt-1.5">{totalDeducted} marks deducted across {records.length} offense{records.length !== 1 ? "s" : ""}</p>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => setShowOffenseModal(true)}
+                  className="w-full py-2.5 rounded-2xl text-sm font-bold text-white flex items-center justify-center gap-2"
+                  style={{ background: "#C62828" }}
+                >
+                  <Plus size={14} /> Record New Offense
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* ── RIGHT: Student detail + records ───────────────── */}
+          <div className="flex-1 flex flex-col gap-3 overflow-hidden min-h-0">
+
+            {/* Student card (mobile, shows after scan) */}
+            {student && (
+              <div className="bg-white rounded-3xl p-4 lg:hidden flex-shrink-0">
+                <div className="flex items-center gap-3 mb-3">
+                  {student.photo
+                    ? <img src={student.photo} alt={student.name} className="w-11 h-11 rounded-2xl object-cover flex-shrink-0" />
+                    : (
+                      <div className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 font-bold"
+                        style={{ background: "#F5F5F5", color: "#121212" }}>
+                        {student.name.charAt(0)}
+                      </div>
+                    )}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm truncate" style={{ color: "#121212" }}>{student.name}</p>
+                    <p className="text-xs text-gray-400">{student.class} · {student.student_code}</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-xl font-bold" style={{ color: marksColor }}>{currentMarks}<span className="text-xs font-normal text-gray-400">/{TOTAL_MARKS}</span></p>
+                    <p className="text-xs text-gray-400">marks left</p>
+                  </div>
+                </div>
+                <div className="w-full h-1.5 rounded-full bg-gray-200 overflow-hidden mb-3">
+                  <div className="h-full rounded-full transition-all" style={{ width: `${marksPct}%`, background: marksColor }} />
+                </div>
+                <button
+                  onClick={() => setShowOffenseModal(true)}
+                  className="w-full py-2.5 rounded-2xl text-sm font-bold text-white flex items-center justify-center gap-2"
+                  style={{ background: "#C62828" }}
+                >
+                  <Plus size={14} /> Record New Offense
+                </button>
+              </div>
+            )}
+
+            {/* Student records or empty/no-scan state */}
+            {student ? (
+              <div className="bg-white rounded-3xl flex-1 overflow-hidden flex flex-col">
+                <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0">
+                  <p className="text-sm font-bold" style={{ color: "#121212" }}>Offense History</p>
+                  <p className="text-xs text-gray-400">{records.length} record{records.length !== 1 ? "s" : ""}</p>
+                </div>
+                <div className="flex-1 overflow-y-auto px-4 py-3">
+                  {recordsLoading ? (
+                    <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-gray-300" /></div>
+                  ) : records.length === 0 ? (
+                    <div className="flex flex-col items-center py-10 text-gray-300">
+                      <CheckCircle size={32} className="mb-2 text-green-300" />
+                      <p className="text-sm font-medium text-green-500">No offenses on record</p>
+                      <p className="text-xs mt-1">This student has a clean discipline record</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {records.map((r) => {
+                        const sev = SEV_STYLE[r.severity] ?? SEV_STYLE.MINOR;
+                        return (
+                          <div key={r.id} className="rounded-2xl p-3" style={{ background: "#F9F9F9" }}>
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                                  <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: sev.bg, color: sev.text }}>
+                                    {r.severity}
+                                  </span>
+                                  <span className="text-xs text-gray-400">{TYPE_LABEL[r.type] ?? r.type}</span>
+                                </div>
+                                <p className="text-sm font-semibold" style={{ color: "#121212" }}>{r.title}</p>
+                                {r.description && <p className="text-xs text-gray-500 mt-0.5">{r.description}</p>}
+                                {r.action_taken && <p className="text-xs mt-0.5" style={{ color: "#666" }}>→ {r.action_taken}</p>}
+                                <p className="text-xs text-gray-400 mt-1">
+                                  {new Date(r.recorded_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                                  {r.recorder && ` · ${r.recorder.first_name} ${r.recorder.last_name}`}
+                                </p>
+                              </div>
+                              {(r.marks_deducted ?? 0) > 0 && (
+                                <div className="flex-shrink-0 text-right">
+                                  <span className="text-sm font-bold text-red-500">-{r.marks_deducted}</span>
+                                  <p className="text-xs text-gray-400">marks</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* No student scanned yet — show school-wide list */
+              <div className="bg-white rounded-3xl flex-1 overflow-hidden flex flex-col">
+                <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-bold" style={{ color: "#121212" }}>All Records</p>
+                    <p className="text-xs text-gray-400">{schoolTotal} total</p>
+                  </div>
+                  <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-2.5 py-1.5">
+                    <Search size={12} style={{ color: "#999" }} />
+                    <input
+                      value={schoolSearch}
+                      onChange={(e) => setSchoolSearch(e.target.value)}
+                      placeholder="Search…"
+                      className="text-xs bg-transparent outline-none w-28"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto px-4 py-3">
+                  {schoolLoading ? (
+                    <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-gray-300" /></div>
+                  ) : schoolRecords.length === 0 ? (
+                    <div className="flex flex-col items-center py-10 text-gray-300">
+                      <AlertTriangle size={32} className="mb-2" />
+                      <p className="text-sm">No discipline records</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {schoolRecords.map((r) => {
+                        const sev = SEV_STYLE[r.severity] ?? SEV_STYLE.MINOR;
+                        return (
+                          <div key={r.id} className="rounded-2xl p-3" style={{ background: "#F9F9F9" }}>
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                                  <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: sev.bg, color: sev.text }}>
+                                    {r.severity}
+                                  </span>
+                                  {r.student && (
+                                    <span className="text-xs font-semibold" style={{ color: "#121212" }}>
+                                      {r.student.user.first_name} {r.student.user.last_name}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-sm font-medium" style={{ color: "#444" }}>{r.title}</p>
+                                <p className="text-xs text-gray-400 mt-0.5">
+                                  {new Date(r.recorded_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                                  {r.recorder && ` · ${r.recorder.first_name} ${r.recorder.last_name}`}
+                                </p>
+                              </div>
+                              {(r.marks_deducted ?? 0) > 0 && (
+                                <span className="text-sm font-bold text-red-500 flex-shrink-0">-{r.marks_deducted}</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {schoolPages > 1 && (
+                  <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between flex-shrink-0">
+                    <p className="text-xs text-gray-400">Page {schoolPage} of {schoolPages}</p>
+                    <div className="flex gap-1">
+                      <button disabled={schoolPage === 1} onClick={() => setSchoolPage((p) => p - 1)}
+                        className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 disabled:opacity-40">
+                        <ChevronLeft size={12} />
+                      </button>
+                      <button disabled={schoolPage === schoolPages} onClick={() => setSchoolPage((p) => p + 1)}
+                        className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 disabled:opacity-40">
+                        <ChevronRight size={12} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </DashboardShell>

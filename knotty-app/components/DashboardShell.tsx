@@ -30,7 +30,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   if (loading && !resolvedUser) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg)" }}>
-        <Loader2 className="animate-spin text-blue-600" size={32} />
+        <Loader2 className="animate-spin" size={32} style={{ color: "#FF7A22" }} />
       </div>
     );
   }
@@ -38,7 +38,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   if (!resolvedUser) return null;
 
   return (
-    <div className="flex h-screen p-2 md:p-3 gap-2 md:gap-3 overflow-hidden relative" style={{ background: "var(--bg)" }}>
+    <div className="flex h-[100dvh] p-2 md:p-3 gap-2 md:gap-3 overflow-hidden relative" style={{ background: "var(--bg)" }}>
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       {sidebarOpen && (
         <div 

@@ -152,4 +152,26 @@ async function getDailyReport(schoolId, date) {
   };
 }
 
-module.exports = { purchase, getStudentTransactions, getDailyReport };
+async function listProducts(schoolId) {
+  return prisma.canteenProduct.findMany({
+    where: { school_id: schoolId, is_active: true },
+    orderBy: { created_at: 'asc' },
+  });
+}
+
+async function createProduct({ school_id, name, price, category, emoji, photo_url }) {
+  if (!name?.trim()) throw Object.assign(new Error('Product name required'), { status: 400 });
+  const p = Number(price);
+  if (!Number.isFinite(p) || p <= 0) throw Object.assign(new Error('Invalid price'), { status: 400 });
+  return prisma.canteenProduct.create({
+    data: { school_id, name: name.trim(), price: Math.round(p), category: category || 'Other', emoji: emoji || '🍽️', photo_url: photo_url || null },
+  });
+}
+
+async function deleteProduct(id, schoolId) {
+  const product = await prisma.canteenProduct.findFirst({ where: { id, school_id: schoolId } });
+  if (!product) throw Object.assign(new Error('Product not found'), { status: 404 });
+  await prisma.canteenProduct.update({ where: { id }, data: { is_active: false } });
+}
+
+module.exports = { purchase, getStudentTransactions, getDailyReport, listProducts, createProduct, deleteProduct };

@@ -74,11 +74,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       {/* Logo & Close */}
       <div className="flex items-center justify-between px-5 pt-6 pb-4">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "#FFF3EC" }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L2 7l10 5 10-5-10-5z" fill="#1d4ed8" />
-              <path d="M2 17l10 5 10-5" stroke="#1d4ed8" strokeWidth="2" strokeLinecap="round" />
-              <path d="M2 12l10 5 10-5" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" />
+              <path d="M12 2L2 7l10 5 10-5-10-5z" fill="#FF7A22" />
+              <path d="M2 17l10 5 10-5" stroke="#FF7A22" strokeWidth="2" strokeLinecap="round" />
+              <path d="M2 12l10 5 10-5" stroke="#FFB800" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </div>
           <span className="font-bold text-lg text-gray-800">KNOTTY</span>
@@ -98,7 +98,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           return (
             <Link key={href + label} href={href}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-2xl transition-all text-sm font-medium
-                ${active ? "bg-blue-50 text-blue-700" : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"}`}
+                ${active ? "bg-blue-50 text-blue-700" : "text-gray-500 hover:text-[#121212]"}`}
+              style={active ? { background: "#FFF3EC", color: "#FF7A22" } : undefined}
             >
               <span className="flex items-center gap-3"><Icon size={16} />{label}</span>
               {active && <ChevronRight size={14} />}
@@ -108,11 +109,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       </nav>
 
       {/* Role badge */}
-      <div className="mx-3 mb-3 mt-2 rounded-2xl bg-gradient-to-br from-blue-50 to-green-50 p-3">
-        <p className="text-xs font-semibold text-gray-700 mb-0.5">KNOTTY Smart School</p>
-        <p className="text-xs text-gray-400">Card-based management</p>
+      <div className="mx-3 mb-3 mt-2 rounded-2xl p-3" style={{ background: "#FFF3EC", border: "1px solid #FFD4B2" }}>
+        <p className="text-xs font-semibold mb-0.5" style={{ color: "#121212" }}>KNOTTY Smart School</p>
+        <p className="text-xs" style={{ color: "#666666" }}>Card-based management</p>
         {user && (
-          <p className="text-xs text-blue-700 mt-1 font-medium">{ROLE_LABELS[role] ?? role}</p>
+          <p className="text-xs mt-1 font-semibold" style={{ color: "#FF7A22" }}>{ROLE_LABELS[role] ?? role}</p>
         )}
       </div>
 
@@ -121,7 +122,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         {role === "ADMIN" && (
           <Link href="/settings"
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-medium transition
-              ${isActive("/settings") ? "bg-blue-50 text-blue-700" : "text-gray-500 hover:bg-gray-50"}`}
+              ${isActive("/settings") ? "" : "text-gray-500 hover:bg-gray-50"}`}
+            style={isActive("/settings") ? { background: "#FFF3EC", color: "#FF7A22" } : undefined}
           >
             <Settings size={16} />Settings
           </Link>

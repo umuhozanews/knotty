@@ -179,7 +179,15 @@ async function approveExamResult(req, res, next) {
   } catch (err) { next(err); }
 }
 
+async function listSubjects(req, res, next) {
+  try {
+    const result = await service.listSubjects(req.user.school_id);
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
 module.exports = {
+  listSubjects,
   listTerms,
   createTerm,
   updateTerm,

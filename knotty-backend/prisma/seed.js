@@ -4,7 +4,11 @@ const { PrismaPg } = require('@prisma/adapter-pg');
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const isSupabase = process.env.DATABASE_URL && process.env.DATABASE_URL.includes('supabase.co');
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ...(isSupabase ? { ssl: { rejectUnauthorized: false } } : {}),
+});
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
@@ -99,6 +103,36 @@ async function main() {
     update: {},
     create: { id: 'class-s6a-seed', school_id: school.id, level_id: s6.id, name: 'Science', academic_year: '2025-2026' },
   });
+
+  // 5b. Teacher record + class teacher assignment
+  await prisma.teacher.upsert({
+    where: { user_id: staff['TEACHER'].id },
+    update: {
+      subjects_taught: [
+        { class_id: classA.id, class_name: 'S5A', subject: 'Mathematics' },
+        { class_id: classA.id, class_name: 'S5A', subject: 'Physics' },
+        { class_id: classB.id, class_name: 'S5B', subject: 'Chemistry' },
+        { class_id: classC.id, class_name: 'S6 Science', subject: 'Biology' },
+      ],
+    },
+    create: {
+      user_id: staff['TEACHER'].id,
+      school_id: school.id,
+      employee_code: 'KMS-TCH-001',
+      subjects_taught: [
+        { class_id: classA.id, class_name: 'S5A', subject: 'Mathematics' },
+        { class_id: classA.id, class_name: 'S5A', subject: 'Physics' },
+        { class_id: classB.id, class_name: 'S5B', subject: 'Chemistry' },
+        { class_id: classC.id, class_name: 'S6 Science', subject: 'Biology' },
+      ],
+    },
+  });
+  // Make the teacher the class teacher of S5A so they can add students
+  await prisma.class.update({
+    where: { id: classA.id },
+    data: { class_teacher_id: staff['TEACHER'].id },
+  });
+  console.log('Teacher record and class assignment seeded');
 
   // 6. Students
   const studentPassword = await bcrypt.hash('Student@2024', 10);
@@ -257,8 +291,8 @@ async function main() {
     });
 
     let currentBalance = 20000;
-    // Simulate 4 canteen purchases over the last few days
-    for (let j = 4; j >= 0; j--) {
+    // Simulate canteen purchases for past days only (never today — today starts empty)
+    for (let j = 4; j >= 1; j--) {
       const date = new Date();
       date.setDate(date.getDate() - j);
       date.setHours(12, 15, 0, 0);
@@ -722,6 +756,148 @@ async function main() {
         host_user_id: hostUser.id,
         checked_in_at: new Date(Date.now() - 3 * 3600 * 1000), // 3 hours ago
         expected_checkout_at: new Date(Date.now() - 1 * 3600 * 1000),
+      }
+    });
+  }
+
+  // 15. Seeding Academics, Timetable and Enrollments
+  console.log('Seeding academics, timetable and enrollments...');
+  
+  // Clean old entries
+  await prisma.examResult.deleteMany({ where: { school_id: school.id } });
+  await prisma.exam.deleteMany({ where: { school_id: school.id } });
+  await prisma.timetableEntry.deleteMany({ where: { school_id: school.id } });
+  await prisma.enrollment.deleteMany({ where: { school_id: school.id } });
+  await prisma.classSection.deleteMany({ where: { school_id: school.id } });
+  await prisma.program.deleteMany({ where: { school_id: school.id } });
+  await prisma.academicTerm.deleteMany({ where: { school_id: school.id } });
+  await prisma.subject.deleteMany({ where: { school_id: school.id } });
+
+  // 1. Academic Term
+  const term = await prisma.academicTerm.create({
+    data: {
+      school_id: school.id,
+      name: 'Term 1 2026',
+      start_date: new Date('2026-01-01'),
+      end_date: new Date('2026-07-01'),
+    }
+  });
+
+  // 2. Program
+  const program = await prisma.program.create({
+    data: {
+      school_id: school.id,
+      name: 'MCB (Math-Chem-Bio)',
+    }
+  });
+
+  // 3. Class Section
+  const teacherUser = staff['TEACHER'];
+  const section = await prisma.classSection.create({
+    data: {
+      school_id: school.id,
+      program_id: program.id,
+      academic_term_id: term.id,
+      name: 'S5A Science',
+      homeroom_staff_id: teacherUser?.id || null,
+      capacity: 40,
+    }
+  });
+
+  // 4. Subjects
+  const subjectsData = [
+    { id: 'sub-math', name: 'Mathematics', code: 'MATH' },
+    { id: 'sub-phy', name: 'Physics', code: 'PHYS' },
+    { id: 'sub-chem', name: 'Chemistry', code: 'CHEM' },
+    { id: 'sub-bio', name: 'Biology', code: 'BIOL' },
+    { id: 'sub-eng', name: 'English', code: 'ENGL' },
+  ];
+
+  const subjectsList = [];
+  for (const s of subjectsData) {
+    const sub = await prisma.subject.create({
+      data: {
+        id: s.id,
+        school_id: school.id,
+        level_id: 'level-s5-seed',
+        name: s.name,
+        code: s.code,
+        teacher_id: teacherUser?.id || null,
+      }
+    });
+    subjectsList.push(sub);
+  }
+
+  // 5. Enroll Students in S5A Science
+  const dbStudents = await prisma.student.findMany({
+    where: { school_id: school.id, level_id: 'level-s5-seed' }
+  });
+
+  for (const s of dbStudents) {
+    await prisma.enrollment.create({
+      data: {
+        school_id: school.id,
+        student_id: s.id,
+        class_section_id: section.id,
+        academic_term_id: term.id,
+        status: 'ACTIVE',
+      }
+    });
+  }
+
+  // 6. Timetable Entries
+  const timetableEntries = [
+    { day: 1, start: '08:30', end: '10:00', subjectId: 'sub-math', room: 'Room 101' },
+    { day: 1, start: '10:30', end: '12:00', subjectId: 'sub-phy', room: 'Physics Lab' },
+    { day: 1, start: '13:30', end: '15:00', subjectId: 'sub-chem', room: 'Chemistry Lab' },
+    { day: 2, start: '08:30', end: '10:00', subjectId: 'sub-bio', room: 'Biology Lab' },
+    { day: 2, start: '10:30', end: '12:00', subjectId: 'sub-eng', room: 'Room 101' },
+    { day: 2, start: '13:30', end: '15:00', subjectId: 'sub-math', room: 'Room 101' },
+    { day: 3, start: '08:30', end: '10:00', subjectId: 'sub-chem', room: 'Room 101' },
+    { day: 3, start: '10:30', end: '12:00', subjectId: 'sub-phy', room: 'Room 101' },
+    { day: 3, start: '13:30', end: '15:00', subjectId: 'sub-bio', room: 'Room 101' },
+    { day: 4, start: '08:30', end: '10:00', subjectId: 'sub-eng', room: 'Room 102' },
+    { day: 4, start: '10:30', end: '12:00', subjectId: 'sub-math', room: 'Room 101' },
+    { day: 4, start: '13:30', end: '15:00', subjectId: 'sub-phy', room: 'Physics Lab' },
+    { day: 5, start: '08:30', end: '10:00', subjectId: 'sub-chem', room: 'Chemistry Lab' },
+    { day: 5, start: '10:30', end: '12:00', subjectId: 'sub-bio', room: 'Biology Lab' },
+    { day: 5, start: '13:30', end: '14:30', subjectId: 'sub-eng', room: 'Room 101' },
+    { day: 6, start: '09:00', end: '11:00', subjectId: 'sub-phy', room: 'Main Hall (Seminar)' },
+  ];
+
+  const seedNow = new Date();
+  const seedTodayDay = seedNow.getDay() === 0 ? 7 : seedNow.getDay();
+  const formatSeedTime = (d) => {
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    return `${h}:${m}`;
+  };
+  const seedLiveStart = new Date(seedNow.getTime() - 45 * 60 * 1000);
+  const seedLiveEnd = new Date(seedNow.getTime() + 45 * 60 * 1000);
+  const seedLiveStartTimeStr = formatSeedTime(seedLiveStart);
+  const seedLiveEndTimeStr = formatSeedTime(seedLiveEnd);
+  const seedLiveSubjects = ['sub-math', 'sub-phy', 'sub-chem', 'sub-bio', 'sub-eng'];
+  const seedTodayLiveSubject = seedLiveSubjects[seedTodayDay % seedLiveSubjects.length];
+
+  timetableEntries.push({
+    day: seedTodayDay,
+    start: seedLiveStartTimeStr,
+    end: seedLiveEndTimeStr,
+    subjectId: seedTodayLiveSubject,
+    room: seedTodayDay % 2 === 0 ? 'Science Lab (Live)' : 'Room 101 (Live)'
+  });
+
+  for (const entry of timetableEntries) {
+    await prisma.timetableEntry.create({
+      data: {
+        school_id: school.id,
+        class_section_id: section.id,
+        subject_id: entry.subjectId,
+        staff_id: teacherUser?.id || '',
+        day_of_week: entry.day,
+        start_time: entry.start,
+        end_time: entry.end,
+        room: entry.room,
       }
     });
   }

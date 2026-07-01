@@ -4,246 +4,148 @@
 @variant dark (&:where(.dark, .dark *));
 
 @theme {
-  /* Font Override */
+  /* Font */
   --font-sans: 'Plus Jakarta Sans', sans-serif;
 
-  /* Blue variants override to black/charcoal/gray */
-  --color-blue-50: rgba(18, 18, 18, 0.05);
-  --color-blue-100: #fcf9f8;
-  --color-blue-200: #dcd9d9;
-  --color-blue-300: #dcd9d9;
-  --color-blue-400: #888888;
-  --color-blue-500: #121212;
-  --color-blue-600: #121212;
-  --color-blue-700: #121212;
-  --color-blue-800: #121212;
-  --color-blue-900: #000000;
+  /* Brand colors */
+  --color-brand:        #FF7A22;
+  --color-brand-light:  #FFF3EC;
+  --color-brand-dark:   #E06615;
+  --color-gold:         #FFB800;
 
-  /* Indigo variants override to black/charcoal/gray */
-  --color-indigo-50: rgba(18, 18, 18, 0.05);
-  --color-indigo-100: #fcf9f8;
-  --color-indigo-200: #dcd9d9;
-  --color-indigo-300: #dcd9d9;
-  --color-indigo-400: #888888;
-  --color-indigo-500: #121212;
-  --color-indigo-600: #121212;
-  --color-indigo-700: #121212;
-  --color-indigo-800: #121212;
-  --color-indigo-900: #000000;
-
-  /* Green variants override to black/charcoal/gray */
-  --color-green-50: rgba(18, 18, 18, 0.05);
-  --color-green-100: #fcf9f8;
-  --color-green-200: #dcd9d9;
-  --color-green-300: #dcd9d9;
-  --color-green-400: #888888;
-  --color-green-500: #121212;
-  --color-green-600: #121212;
-  --color-green-700: #121212;
-  --color-green-800: #121212;
-  --color-green-900: #000000;
-
-  /* Teal / Emerald variants override to black/charcoal/gray */
-  --color-teal-50: rgba(18, 18, 18, 0.05);
-  --color-teal-100: #fcf9f8;
-  --color-teal-200: #dcd9d9;
-  --color-teal-500: #121212;
-  --color-teal-600: #121212;
-  --color-teal-700: #121212;
-
-  --color-emerald-50: rgba(18, 18, 18, 0.05);
-  --color-emerald-100: #fcf9f8;
-  --color-emerald-200: #dcd9d9;
-  --color-emerald-500: #121212;
-  --color-emerald-600: #121212;
-
-  /* Purple variants override to black/charcoal/gray */
-  --color-purple-50: rgba(18, 18, 18, 0.05);
-  --color-purple-100: #fcf9f8;
-  --color-purple-200: #dcd9d9;
-  --color-purple-500: #121212;
-  --color-purple-600: #121212;
-
-  /* Orange / Amber / Yellow variants override to black/charcoal/gray */
-  --color-orange-50: rgba(18, 18, 18, 0.05);
-  --color-orange-100: #fcf9f8;
-  --color-orange-200: #dcd9d9;
-  --color-orange-500: #121212;
-  --color-orange-600: #121212;
-
-  --color-amber-50: rgba(18, 18, 18, 0.05);
-  --color-amber-100: #fcf9f8;
-  --color-amber-200: #dcd9d9;
-  --color-amber-500: #121212;
-  --color-amber-600: #121212;
-
-  --color-yellow-50: rgba(18, 18, 18, 0.05);
-  --color-yellow-100: #fcf9f8;
-  --color-yellow-200: #dcd9d9;
-  --color-yellow-500: #121212;
-  --color-yellow-600: #121212;
-
-  /* Gray/Slate scale mapped to high contrast system */
-  --color-slate-50: #fcf9f8;
-  --color-slate-100: #fcf9f8;
-  --color-slate-200: #dcd9d9;
-  --color-slate-300: #dcd9d9;
-  --color-slate-400: #888888;
-  --color-slate-500: #555555;
-  --color-slate-600: #121212;
-  --color-slate-700: #121212;
-  --color-slate-800: #121212;
-
-  --color-gray-50: #fcf9f8;
-  --color-gray-100: #fcf9f8;
-  --color-gray-200: #dcd9d9;
-  --color-gray-300: #dcd9d9;
-  --color-gray-400: #888888;
-  --color-gray-500: #555555;
-  --color-gray-600: #121212;
-  --color-gray-700: #121212;
-  --color-gray-800: #121212;
-
-  /* Accent Lime Color mapped to Gray */
-  --color-lime-500: #dcd9d9;
-  --color-lime-600: #dcd9d9;
-  --color-lime-700: #dcd9d9;
-
-  /* Standardized Corner Radii to 8px */
-  --radius-xl: 8px;
-  --radius-2xl: 8px;
-  --radius-3xl: 8px;
-  --radius-lg: 8px;
-  --radius-md: 8px;
-  --radius-sm: 8px;
+  /* Standardised corner radii */
+  --radius-sm:  4px;
+  --radius-md:  6px;
+  --radius-lg:  8px;
+  --radius-xl:  8px;
+  --radius-2xl: 10px;
+  --radius-3xl: 12px;
 }
 
-:root, .dark {
-  --bg: #fcf9f8;
-  --card: #ffffff;
-  --border: #dcd9d9;
-  --text-primary: #121212;
-  --text-secondary: #555555;
-  --text-muted: #888888;
-  --sidebar-bg: #ffffff;
-  --header-bg: transparent;
-  --input-bg: #ffffff;
-  --hover-bg: #fcf9f8;
-  --brand: #121212;
+/* ── Design tokens ───────────────────────────────── */
+:root {
+  --bg:             #F5F5F5;
+  --card:           #ffffff;
+  --border:         #e5e5e5;
+  --text-primary:   #121212;
+  --text-secondary: #666666;
+  --text-muted:     #999999;
+  --accent:         #FF7A22;
+  --accent-light:   #FFF3EC;
+  --gold:           #FFB800;
 }
 
-body, html, html.dark body {
-  background: #fcf9f8 !important;
-  color: #121212 !important;
-  font-family: 'Plus Jakarta Sans', sans-serif !important;
-  transition: none !important;
+/* ── Base ────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  background-color: #F5F5F5 !important;
+  color:            #121212 !important;
+  font-family:      'Plus Jakarta Sans', sans-serif !important;
 }
 
-* {
-  box-sizing: border-box;
-}
+/* ── Brand accent — remap blue to orange throughout ─ */
+.bg-blue-50   { background-color: #FFF3EC !important; }
+.bg-blue-100  { background-color: #FFE4CC !important; }
+.bg-blue-400  { background-color: #FF7A22 !important; }
+.bg-blue-500  { background-color: #FF7A22 !important; }
+.bg-blue-600  { background-color: #FF7A22 !important; }
+.bg-blue-700  { background-color: #E06615 !important; }
+.text-blue-400 { color: #FF7A22 !important; }
+.text-blue-500 { color: #FF7A22 !important; }
+.text-blue-600 { color: #FF7A22 !important; }
+.text-blue-700 { color: #E06615 !important; }
+.border-blue-500 { border-color: #FF7A22 !important; }
+.border-blue-600 { border-color: #FF7A22 !important; }
+.ring-blue-500   { --tw-ring-color: #FF7A22 !important; }
+.hover\:bg-blue-50:hover  { background-color: #FFF3EC !important; }
+.hover\:bg-blue-600:hover { background-color: #E06615 !important; }
+.focus\:ring-blue-500:focus { --tw-ring-color: #FF7A22 !important; }
+.from-blue-400  { --tw-gradient-from: #FF7A22 !important; }
+.to-blue-600    { --tw-gradient-to:   #E06615 !important; }
 
-/* Force standard bg white sections to pure white, 1px border */
-[class*="bg-white"] {
-  background-color: #ffffff !important;
-  border: 1px solid #dcd9d9 !important;
-  border-radius: 8px !important;
+/* Gold accent */
+.text-yellow-400, .text-yellow-500 { color: #FFB800 !important; }
+.bg-yellow-400, .bg-yellow-500     { background-color: #FFB800 !important; }
+
+/* Teal → warm complement */
+.from-teal-400 { --tw-gradient-from: #FF9A50 !important; }
+.to-teal-400   { --tw-gradient-to:   #FF9A50 !important; }
+
+/* ── Card containers (div only, not img/span/input) ─ */
+div.bg-white {
+  border:     1px solid #e5e5e5;
   box-shadow: none !important;
 }
 
-/* Force custom inputs and select fields to design system standard */
-input:not([type="checkbox"]), select, textarea {
-  border: 1px solid #dcd9d9 !important;
-  border-radius: 8px !important;
+div.bg-white img,
+div.bg-white div.bg-white img {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* ── Flatten standard shadow utilities ────────────── */
+.shadow-sm,
+.shadow,
+.shadow-md,
+.shadow-lg,
+.shadow-xl,
+.shadow-2xl,
+.shadow-inner {
+  box-shadow: none !important;
+}
+
+/* ── Rounded corners ─────────────────────────────── */
+.rounded-sm  { border-radius:  4px !important; }
+.rounded-md  { border-radius:  6px !important; }
+.rounded-lg  { border-radius:  8px !important; }
+.rounded-xl  { border-radius:  8px !important; }
+.rounded-2xl { border-radius: 10px !important; }
+.rounded-3xl { border-radius: 12px !important; }
+
+/* ── Inputs & Selects ────────────────────────────── */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+select,
+textarea {
+  border:           1px solid #e5e5e5 !important;
+  border-radius:    8px !important;
   background-color: #ffffff !important;
-  color: #121212 !important;
-  outline: none !important;
+  color:            #121212 !important;
+  outline:          none !important;
+  box-shadow:       none !important;
 }
 input:focus, select:focus, textarea:focus {
-  border-color: #121212 !important;
+  border-color: #FF7A22 !important;
 }
 
-/* Reset all rounded corners to exactly 8px */
-.rounded-xl, .rounded-2xl, .rounded-3xl, .rounded-lg, .rounded-md {
-  border-radius: 8px !important;
-}
-
-/* Redefine shadow utilities to flat design system */
-[class*="shadow-"] {
-  box-shadow: none !important;
-}
-
-/* Sidebar active link styling */
-.bg-blue-50.text-blue-700,
-.bg-indigo-50.text-indigo-700 {
-  background-color: #121212 !important;
-  color: #ffffff !important;
-  border-radius: 8px !important;
-  border: 1px solid #121212 !important;
-}
-.bg-blue-50.text-blue-700 *,
-.bg-indigo-50.text-indigo-700 * {
-  color: #ffffff !important;
-}
-
-/* Buttons hover effect globally to light gray */
-button:hover,
-a.bg-blue-600:hover,
-a.bg-indigo-600:hover,
-button.bg-blue-600:hover,
-button.bg-indigo-600:hover,
-.bg-blue-600:hover,
-.bg-blue-500:hover,
-.bg-indigo-600:hover,
-.bg-indigo-500:hover,
-.hover\:bg-blue-700:hover,
-.hover\:bg-blue-600:hover,
-.hover\:bg-indigo-700:hover,
-.hover\:bg-indigo-600:hover {
-  background-color: #dcd9d9 !important;
-  color: #121212 !important;
-  border-color: #dcd9d9 !important;
-}
-
-/* Clean up gradients, force simple containers */
-.from-blue-50.to-green-50,
-.from-indigo-50.to-teal-50,
-.bg-gradient-to-br,
-.bg-gradient-to-r {
-  background: #ffffff !important;
-  border: 1px solid #dcd9d9 !important;
-}
-
-/* Custom table tweaks */
-table {
-  border-collapse: collapse !important;
-}
+/* ── Tables ──────────────────────────────────────── */
+table { border-collapse: collapse !important; }
 th {
-  background-color: #fcf9f8 !important;
-  color: #121212 !important;
-  font-weight: 800 !important;
-  border-bottom: 1px solid #dcd9d9 !important;
+  background-color: #f9f9f9 !important;
+  color:            #121212 !important;
+  font-weight:      700 !important;
+  border-bottom:    1px solid #e5e5e5 !important;
 }
-td {
-  border-bottom: 1px solid #dcd9d9 !important;
+td { border-bottom: 1px solid #e5e5e5 !important; }
+
+/* ── Sidebar active-link override ────────────────── */
+nav a.bg-blue-50.text-blue-700 {
+  background-color: #FFF3EC !important;
+  color:            #FF7A22 !important;
+  border:           1px solid #FFD4B2 !important;
+}
+nav a.bg-blue-50.text-blue-700 * { color: #FF7A22 !important; }
+
+/* Sidebar role-badge */
+.from-blue-50.to-green-50 {
+  background: #FFF3EC !important;
+  border: 1px solid #FFD4B2 !important;
 }
 
-/* Loader custom color */
-.animate-spin {
-  color: #121212 !important;
-}
+/* ── Scrollbars ──────────────────────────────────── */
+::-webkit-scrollbar       { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #ddd; border-radius: 4px; }
 
-/* Scrollbars styling */
-::-webkit-scrollbar {
-  width: 4px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #dcd9d9;
-  border-radius: 4px;
-}
-.dark ::-webkit-scrollbar-thumb {
-  background: #dcd9d9;
-}
+/* ── Loader ──────────────────────────────────────── */
+.animate-spin { color: #FF7A22 !important; }

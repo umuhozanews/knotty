@@ -18,6 +18,8 @@ async function main() {
   if (!teacher) throw new Error('Teacher not found.');
 
   // Clean old entries
+  await prisma.examResult.deleteMany({ where: { school_id: school.id } });
+  await prisma.exam.deleteMany({ where: { school_id: school.id } });
   await prisma.timetableEntry.deleteMany({ where: { school_id: school.id } });
   await prisma.enrollment.deleteMany({ where: { school_id: school.id } });
   await prisma.classSection.deleteMany({ where: { school_id: school.id } });

@@ -3,7 +3,10 @@ const { generateReportCard } = require('../../utils/pdfGenerator');
 const { paginate, paginatedResponse } = require('../../utils/helpers');
 
 async function create(data, schoolId) {
-  return prisma.academicReport.create({ data: { ...data, school_id: schoolId } });
+  const { student_id, term, academic_year, subjects, overall_grade, class_position, teacher_comment, principal_comment, conduct_grade } = data;
+  return prisma.academicReport.create({
+    data: { student_id, term, academic_year, subjects, overall_grade, class_position, teacher_comment, principal_comment, conduct_grade, school_id: schoolId },
+  });
 }
 
 async function listForStudent(studentId, { page, limit, publishedOnly = false }) {
@@ -16,8 +19,8 @@ async function listForStudent(studentId, { page, limit, publishedOnly = false })
   return paginatedResponse(data, total, page, limit);
 }
 
-async function getOne(id) {
-  const report = await prisma.academicReport.findUnique({ where: { id } });
+async function getOne(id, schoolId) {
+  const report = await prisma.academicReport.findFirst({ where: { id, school_id: schoolId } });
   if (!report) throw Object.assign(new Error('Report not found'), { status: 404 });
   return report;
 }

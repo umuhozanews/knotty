@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Loader2, Wifi, CheckCircle, XCircle, Clock, MinusCircle,
-  Radio, StopCircle, CreditCard, Settings, X, LogIn, LogOut, AlertTriangle,
+  Radio, StopCircle, CreditCard, Settings, X, LogIn, LogOut, AlertTriangle, Download,
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import KnottyCard from "@/components/KnottyCard";
@@ -92,10 +92,10 @@ export default function AttendancePage() {
   // ── Bulk mode ────────────────────────────────────────────────
   const [classes, setClasses]             = useState<Class[]>([]);
   const [selectedClass, setSelectedClass] = useState("");
-  const [date, setDate]                   = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate]                   = useState(() => new Date().toLocaleDateString('en-ZA', { timeZone: 'Africa/Kigali' }).replace(/\//g, '-'));
   const [scanType, setScanType]           = useState<"IN" | "OUT">("IN");
   const [tapInStart, setTapInStart]       = useState("07:00");
-  const [tapInEnd, setTapInEnd]           = useState("08:30");
+  const [tapInEnd, setTapInEnd]           = useState("12:00");
   const [tapOutStart, setTapOutStart]     = useState("15:00");
   const [tapOutEnd, setTapOutEnd]         = useState("17:00");
   const [scanning, setScanning]           = useState(false);
@@ -106,11 +106,33 @@ export default function AttendancePage() {
   const [submitting, setSubmitting]       = useState(false);
   const [submitted, setSubmitted]         = useState(false);
 
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  async function downloadAttendancePDF() {
+    if (!selectedClass) { toast("Select a class first", "error"); return; }
+    setPdfLoading(true);
+    try {
+      const url = await attendance.downloadPDF(selectedClass, date);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `attendance_${selectedClass}_${date}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      toast("PDF downloaded", "success");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "PDF download failed", "error");
+    } finally {
+      setPdfLoading(false);
+    }
+  }
+
   const loadTodaySummary = useCallback((classId?: string) => {
     attendance.todaySummary(classId).then((r) => {
-      setTodaySummary(r.summary);
-      setTotalToday(r.total);
-      if (r.recent) {
+      setTodaySummary(r?.summary || { PRESENT: 0, ABSENT: 0, LATE: 0, EXCUSED: 0 });
+      setTotalToday(r?.total || 0);
+      if (r?.recent) {
         const logs: ScanLogEntry[] = r.recent.map((rec: any) => ({
           id: rec.id || Math.random().toString(),
           name: `${rec.student.user.first_name} ${rec.student.user.last_name}`,
@@ -140,11 +162,34 @@ export default function AttendancePage() {
       return;
     }
     setLoadingStudents(true);
-    structure.classStudents(selectedClass)
-      .then((r) => { setClassStudents(r.data as ClassStudent[]); setStatuses({}); setSubmitted(false); })
-      .catch(console.error)
+    Promise.all([
+      structure.classStudents(selectedClass),
+      attendance.byClass(selectedClass, date),
+    ])
+      .then(([studRes, attRes]) => {
+        const studs = studRes.data as ClassStudent[];
+        setClassStudents(studs);
+        setSubmitted(false);
+        // Pre-fill existing attendance records for the day; default new students to PRESENT
+        const existing: Record<string, AttStatus> = {};
+        const attRecords = (attRes.data as Array<{ student_id: string; status: AttStatus }>) ?? [];
+        attRecords.forEach((r) => { existing[r.student_id] = r.status; });
+        const defaults: Record<string, AttStatus> = {};
+        studs.forEach((s) => { defaults[s.id] = existing[s.id] ?? "PRESENT"; });
+        setStatuses(defaults);
+      })
+      .catch(() => {
+        structure.classStudents(selectedClass).then((r) => {
+          const studs = r.data as ClassStudent[];
+          setClassStudents(studs);
+          setSubmitted(false);
+          const defaults: Record<string, AttStatus> = {};
+          studs.forEach((s) => { defaults[s.id] = "PRESENT"; });
+          setStatuses(defaults);
+        }).catch(console.error);
+      })
       .finally(() => setLoadingStudents(false));
-  }, [selectedClass]);
+  }, [selectedClass, date]);
 
   async function executeScan(cardNumber: string) {
     setCardLoading(true);
@@ -266,13 +311,13 @@ export default function AttendancePage() {
     }
 
     try {
-      const res = isNfc
-        ? (await cards.scanNFC(n)) as unknown as { success: boolean; data: CardScanFull }
-        : await cards.scan(n);
-      setCardData(res.data);
-      if (res.data.check_in_time && !res.data.check_out_time) setGlowColor("blue");
       if (isNfc) {
-        await executeScan(res.data.card_number);
+        // Resolve NFC UID → card number, then run attendance scan
+        const res = await (cards.scanNFC(n) as unknown as Promise<{ success: boolean; data: CardScanFull }>);
+        if (res.data.card_number) await executeScan(res.data.card_number);
+      } else {
+        // Regular card number — go straight to attendance scan
+        await executeScan(n);
       }
     } catch (err) {
       toast(err instanceof Error ? err.message : "Card not found", "error");
@@ -360,11 +405,11 @@ export default function AttendancePage() {
   }, [scanType, date, tapInStart, tapInEnd, tapOutStart, tapOutEnd, selectedClass]);
 
   const startScanner = async () => {
-    if (!selectedClass) {
-      toast("Please select a class first", "error");
-      return;
-    }
     setScanning(true);
+
+    // Give React a moment to render and mount the reader container in the DOM
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
     if (qrScannerRef.current) {
       try {
         if (qrScannerRef.current.isScanning) {
@@ -373,6 +418,13 @@ export default function AttendancePage() {
       } catch { /* ignore */ }
     }
     const { Html5Qrcode } = await import("html5-qrcode");
+
+    if (!document.getElementById("reader")) {
+      toast("Scanner element not found in DOM", "error");
+      setScanning(false);
+      return;
+    }
+
     const html5Qrcode = new Html5Qrcode("reader");
     qrScannerRef.current = html5Qrcode;
 
@@ -511,13 +563,13 @@ export default function AttendancePage() {
         {/* Global Class & Date Selector Panel */}
         <div className="bg-white rounded-2xl shadow-sm p-4 grid grid-cols-1 md:grid-cols-2 gap-4 border border-blue-50/50">
           <div>
-            <label className="text-xs font-semibold text-gray-500 mb-1 block">Class Selection (Required)</label>
+            <label className="text-xs font-semibold text-gray-500 mb-1 block">Class Filter <span className="font-normal text-gray-400">(optional)</span></label>
             <select
               value={selectedClass}
               onChange={(e) => setSelectedClass(e.target.value)}
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-500 font-medium text-gray-700 bg-white"
             >
-              <option value="">Select a class to take attendance...</option>
+              <option value="">All classes — tap any student card</option>
               {classes.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.level?.name} {c.name}
@@ -604,15 +656,12 @@ export default function AttendancePage() {
                   <div className="flex items-end">
                     <button
                       onClick={scanning ? stopScanner : startScanner}
-                      disabled={!selectedClass}
                       className={`w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all border
-                        ${!selectedClass
-                          ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed"
-                          : scanning 
-                          ? "bg-red-50 border-red-200 text-red-500 hover:bg-red-100" 
+                        ${scanning
+                          ? "bg-red-50 border-red-200 text-red-500 hover:bg-red-100"
                           : "bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100"}`}
                     >
-                      <div className={`w-2 h-2 rounded-full ${!selectedClass ? "bg-gray-400" : scanning ? "bg-red-500 animate-ping" : "bg-blue-500"}`} />
+                      <div className={`w-2 h-2 rounded-full ${scanning ? "bg-red-500 animate-ping" : "bg-blue-500"}`} />
                       {scanning ? "STOP WEBCAM SCANNER" : "START WEBCAM SCANNER"}
                     </button>
                   </div>
@@ -664,30 +713,18 @@ export default function AttendancePage() {
                   </div>
                 )}
 
-                {/* Class validation warning banner */}
-                {!selectedClass && (
-                  <div className="bg-blue-50 border border-blue-200/50 rounded-2xl p-4 flex items-start gap-3">
-                    <AlertTriangle className="text-blue-500 flex-shrink-0 mt-0.5" size={16} />
-                    <div>
-                      <p className="text-sm font-semibold text-blue-800">Class Selection Required</p>
-                      <p className="text-xs text-blue-600 mt-0.5">Please select a class from the top panel before scanning or looking up student cards.</p>
-                    </div>
-                  </div>
-                )}
-
                 {/* Card search bar */}
-                <div className={`bg-white rounded-2xl shadow-sm p-4 transition-all duration-200 ${!selectedClass ? "opacity-60" : "opacity-100"}`}>
+                <div className="bg-white rounded-2xl shadow-sm p-4">
                   <p className="text-xs font-medium text-gray-400 mb-2">Scan or enter card number</p>
                   <form onSubmit={(e) => { e.preventDefault(); lookupCard(cardInput); }} className="flex gap-2">
                     <input
                       value={cardInput}
                       onChange={(e) => setCardInput(e.target.value)}
-                      disabled={!selectedClass}
-                      placeholder={selectedClass ? "KNT-XXX-2026-00001" : "Select a class first..."}
-                      className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
+                      placeholder="KNT-XXX-2026-00001"
+                      className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:border-blue-500"
                     />
                     <button
-                      type="submit" disabled={cardLoading || !cardInput.trim() || !selectedClass}
+                      type="submit" disabled={cardLoading || !cardInput.trim()}
                       className="px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium disabled:opacity-50 flex items-center gap-1.5"
                     >
                       {cardLoading ? <Loader2 size={14} className="animate-spin" /> : <CreditCard size={14} />}
@@ -696,7 +733,6 @@ export default function AttendancePage() {
                     {isSupported && (
                       <button
                         type="button" onClick={toggleNFCListen}
-                        disabled={!selectedClass}
                         className={`px-3 py-2.5 rounded-xl text-sm font-medium flex items-center gap-1.5 border transition
                           ${listening
                             ? "bg-red-50 text-red-500 border-red-200"
@@ -860,7 +896,7 @@ export default function AttendancePage() {
                 {(["PRESENT", "ABSENT", "LATE", "EXCUSED"] as AttStatus[]).map((st) => (
                   <div key={st} className="bg-gray-50 rounded-xl p-2.5">
                     <div className={`w-2 h-2 rounded-full ${STATUS_CFG[st].dot} mb-1`} />
-                    <p className="text-lg font-bold text-gray-800">{todaySummary[st] ?? 0}</p>
+                    <p className="text-lg font-bold text-gray-800">{todaySummary?.[st] ?? 0}</p>
                     <p className="text-xs text-gray-400">{STATUS_CFG[st].label}</p>
                   </div>
                 ))}
@@ -869,6 +905,22 @@ export default function AttendancePage() {
                 <span className="text-xs text-gray-400">Total scanned</span>
                 <span className="text-sm font-bold text-blue-600">{totalToday}</span>
               </div>
+            </div>
+
+            {/* PDF Download */}
+            <div className="bg-white rounded-2xl shadow-sm p-4">
+              <p className="text-xs font-medium text-gray-400 mb-2">Attendance PDF</p>
+              <p className="text-xs text-gray-400 mb-3">
+                {selectedClass ? `Download daily report for selected class & date` : "Select a class to generate PDF"}
+              </p>
+              <button
+                onClick={downloadAttendancePDF}
+                disabled={pdfLoading || !selectedClass}
+                className="w-full py-2.5 rounded-xl bg-gray-900 text-white text-xs font-semibold flex items-center justify-center gap-2 hover:bg-gray-700 disabled:opacity-50 transition"
+              >
+                {pdfLoading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+                {pdfLoading ? "Generating…" : "Download PDF"}
+              </button>
             </div>
 
             {/* Scan log */}

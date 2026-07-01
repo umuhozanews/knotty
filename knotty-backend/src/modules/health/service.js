@@ -120,7 +120,14 @@ async function listImmunizations(studentId) {
   });
 }
 
-async function removeImmunizationRecord(id) {
+async function removeImmunizationRecord(id, schoolId) {
+  const record = await prisma.immunizationRecord.findFirst({
+    where: { id },
+    include: { student: { select: { school_id: true } } },
+  });
+  if (!record || record.student.school_id !== schoolId) {
+    throw Object.assign(new Error('Record not found'), { status: 404 });
+  }
   return prisma.immunizationRecord.delete({ where: { id } });
 }
 

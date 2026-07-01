@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { myAccount, cards } from "@/lib/api";
+import { myAccount, cards, canteen, CanteenTransaction } from "@/lib/api";
 import DashboardShell from "@/components/DashboardShell";
-import { Loader2, CreditCard, ArrowUpRight, ArrowDownLeft, TrendingUp } from "lucide-react";
+import { Loader2, CreditCard, ArrowUpRight, ArrowDownLeft, TrendingUp, ShoppingCart } from "lucide-react";
 
 export default function MyCardPage() {
   const { loading: authLoading } = useAuth();
@@ -12,10 +12,17 @@ export default function MyCardPage() {
   const [qrData, setQrData] = useState<{ qr_code: string; expires_at: string } | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
   const [timeLeft, setTimeLeft] = useState(30);
+  const [transactions, setTransactions] = useState<CanteenTransaction[]>([]);
 
   useEffect(() => {
     if (authLoading) return;
-    myAccount.profile().then((r) => setProfile(r.data as unknown as Record<string, unknown>)).catch(console.error).finally(() => setLoading(false));
+    Promise.all([
+      myAccount.profile(),
+      canteen.myTransactions(1, 10).catch(() => ({ data: [] })),
+    ]).then(([p, t]) => {
+      setProfile(p.data as unknown as Record<string, unknown>);
+      setTransactions((t.data as CanteenTransaction[]) ?? []);
+    }).catch(console.error).finally(() => setLoading(false));
   }, [authLoading]);
 
   const card = profile?.card as {
@@ -58,9 +65,6 @@ export default function MyCardPage() {
   return (
     <DashboardShell>
       <div className="p-4 sm:p-6 space-y-6 max-w-md mx-auto bg-[#fcf9f8] min-h-screen text-[#121212]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-        <style dangerouslySetInnerHTML={{ __html: `
-          @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-        `}} />
         <h1 className="text-2xl font-extrabold tracking-tight text-[#121212]">My Card & Wallet</h1>
 
         {loading ? (
@@ -161,6 +165,33 @@ export default function MyCardPage() {
                 <p className="text-xs font-bold text-[#121212]">Canteen</p>
                 <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold mt-1">Tap to pay</p>
               </div>
+            </div>
+
+            {/* Canteen Transaction History */}
+            <div className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <ShoppingCart size={14} className="text-[#121212]" />
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Recent Canteen Transactions</p>
+              </div>
+              {transactions.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-4">No canteen transactions yet</p>
+              ) : (
+                <div className="space-y-2">
+                  {transactions.map((tx) => (
+                    <div key={tx.id} className="flex items-center justify-between py-2 border-b border-[#dcd9d9] last:border-0">
+                      <div>
+                        <p className="text-xs font-bold text-[#121212]">
+                          {Array.isArray(tx.items_purchased) && tx.items_purchased.length > 0
+                            ? tx.items_purchased.map((i) => i.name).join(", ")
+                            : "Canteen purchase"}
+                        </p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">{new Date(tx.transaction_time).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</p>
+                      </div>
+                      <span className="text-sm font-extrabold text-red-500">-{(tx.total_amount ?? 0).toLocaleString()} RWF</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-5">

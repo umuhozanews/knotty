@@ -11,7 +11,18 @@ async function create(req, res, next) {
 async function list(req, res, next) {
   try {
     const { page = 1, limit = 20 } = req.query;
-    const result = await service.list(req.params.studentId, { page, limit });
+    const { studentId } = req.params;
+    const prisma = require('../../config/database');
+
+    if (req.user.role === 'STUDENT') {
+      const student = await prisma.student.findFirst({ where: { id: studentId, user_id: req.user.id } });
+      if (!student) return res.status(403).json({ success: false, message: 'Access denied' });
+    } else if (req.user.role === 'PARENT') {
+      const student = await prisma.student.findFirst({ where: { id: studentId, school_id: req.user.school_id, parent_id: req.user.id } });
+      if (!student) return res.status(403).json({ success: false, message: 'Access denied: not your child' });
+    }
+
+    const result = await service.list(studentId, { page, limit });
     res.json({ success: true, ...result });
   } catch (err) { next(err); }
 }
@@ -41,7 +52,18 @@ async function remove(req, res, next) {
 // ─── Advanced Medical Profile ───
 async function getMedicalProfile(req, res, next) {
   try {
-    const result = await service.getMedicalProfile(req.params.studentId, req.user.school_id);
+    const { studentId } = req.params;
+    const prisma = require('../../config/database');
+
+    if (req.user.role === 'STUDENT') {
+      const student = await prisma.student.findFirst({ where: { id: studentId, user_id: req.user.id } });
+      if (!student) return res.status(403).json({ success: false, message: 'Access denied' });
+    } else if (req.user.role === 'PARENT') {
+      const student = await prisma.student.findFirst({ where: { id: studentId, school_id: req.user.school_id, parent_id: req.user.id } });
+      if (!student) return res.status(403).json({ success: false, message: 'Access denied: not your child' });
+    }
+
+    const result = await service.getMedicalProfile(studentId, req.user.school_id);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }
@@ -63,14 +85,25 @@ async function addImmunizationRecord(req, res, next) {
 
 async function listImmunizations(req, res, next) {
   try {
-    const result = await service.listImmunizations(req.params.studentId);
+    const { studentId } = req.params;
+    const prisma = require('../../config/database');
+
+    if (req.user.role === 'STUDENT') {
+      const student = await prisma.student.findFirst({ where: { id: studentId, user_id: req.user.id } });
+      if (!student) return res.status(403).json({ success: false, message: 'Access denied' });
+    } else if (req.user.role === 'PARENT') {
+      const student = await prisma.student.findFirst({ where: { id: studentId, school_id: req.user.school_id, parent_id: req.user.id } });
+      if (!student) return res.status(403).json({ success: false, message: 'Access denied: not your child' });
+    }
+
+    const result = await service.listImmunizations(studentId);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }
 
 async function removeImmunizationRecord(req, res, next) {
   try {
-    await service.removeImmunizationRecord(req.params.id);
+    await service.removeImmunizationRecord(req.params.id, req.user.school_id);
     res.json({ success: true, message: 'Immunization record deleted successfully' });
   } catch (err) { next(err); }
 }
@@ -87,6 +120,16 @@ async function listClinicVisits(req, res, next) {
   try {
     const { studentId } = req.params;
     const { page = 1, limit = 20 } = req.query;
+    const prisma = require('../../config/database');
+
+    if (req.user.role === 'STUDENT') {
+      const student = await prisma.student.findFirst({ where: { id: studentId, user_id: req.user.id } });
+      if (!student) return res.status(403).json({ success: false, message: 'Access denied' });
+    } else if (req.user.role === 'PARENT') {
+      const student = await prisma.student.findFirst({ where: { id: studentId, school_id: req.user.school_id, parent_id: req.user.id } });
+      if (!student) return res.status(403).json({ success: false, message: 'Access denied: not your child' });
+    }
+
     const result = await service.listClinicVisits(studentId, req.user.school_id, {
       page: Number(page),
       limit: Number(limit)

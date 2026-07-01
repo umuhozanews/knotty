@@ -7,7 +7,7 @@ async function checkClassAccess(req, res, next) {
   }
 
   // Retrieve class ID from params, query, or body
-  const classId = req.params.classId || req.params.id || req.query.classId || req.body.class_id || req.body.classId;
+  const classId = req.params.classId || req.params.id || req.query.classId || req.body?.class_id || req.body?.classId;
 
   if (!classId) {
     // If no class ID is present in the request context, proceed

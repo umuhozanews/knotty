@@ -1,5 +1,4 @@
 require('dotenv').config();
-require('./utils/fix-teachers')().catch(console.error);
 process.on('uncaughtException', (e) => process.stderr.write('[UNCAUGHT] ' + e.stack + '\n'));
 process.on('unhandledRejection', (e) => process.stderr.write('[UNHANDLED] ' + e + '\n'));
 const express = require('express');
@@ -17,7 +16,7 @@ const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000')
   .split(',').map(o => o.trim());
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin || allowedOrigins.some(o => origin.startsWith(o))) return cb(null, true);
+    if (!origin || allowedOrigins.some(o => origin === o)) return cb(null, true);
     cb(new Error('Not allowed by CORS'));
   },
   credentials: true,

@@ -78,39 +78,69 @@ async function deleteLevel(id, schoolId) {
     const classIds = classes.map((c) => c.id);
 
     const students = await tx.student.findMany({
-      where: {
-        OR: [
-          { level_id: id },
-          { class_id: { in: classIds } }
-        ]
-      }
+      where: { OR: [{ level_id: id }, { class_id: { in: classIds } }] },
     });
     const studentIds = students.map((s) => s.id);
     const userIds = students.map((s) => s.user_id);
 
     if (studentIds.length > 0) {
-      await tx.attendance.deleteMany({ where: { student_id: { in: studentIds } } });
-      await tx.feePayment.deleteMany({ where: { student_id: { in: studentIds } } });
+      // Get card IDs for access log cleanup
+      const cards = await tx.knottyCard.findMany({ where: { student_id: { in: studentIds } }, select: { id: true } });
+      const cardIds = cards.map((c) => c.id);
+
+      // Library
+      await tx.borrowRecord.deleteMany({ where: { student_id: { in: studentIds } } });
+
+      // Health
+      await tx.medicationAdministration.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.clinicVisit.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.immunizationRecord.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.medicalProfile.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.healthRecord.deleteMany({ where: { student_id: { in: studentIds } } });
+
+      // Academics
+      await tx.examResult.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.enrollment.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.consentRecord.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.academicReport.deleteMany({ where: { student_id: { in: studentIds } } });
+
+      // Access logs referencing student cards
+      if (cardIds.length > 0) {
+        await tx.accessLog.deleteMany({ where: { card_id: { in: cardIds } } });
+      }
+
+      // Wallet transactions and linked payments/refunds
+      const walletTxns = await tx.walletTransaction.findMany({ where: { student_id: { in: studentIds } }, select: { id: true } });
+      const walletTxnIds = walletTxns.map((w) => w.id);
+      if (walletTxnIds.length > 0) {
+        await tx.refundRequest.deleteMany({ where: { wallet_transaction_id: { in: walletTxnIds } } });
+        await tx.payment.deleteMany({ where: { wallet_transaction_id: { in: walletTxnIds } } });
+      }
+
+      // Invoices and their payments
+      const invoices = await tx.invoice.findMany({ where: { student_id: { in: studentIds } }, select: { id: true } });
+      const invoiceIds = invoices.map((i) => i.id);
+      if (invoiceIds.length > 0) {
+        await tx.payment.deleteMany({ where: { invoice_id: { in: invoiceIds } } });
+        await tx.invoiceLine.deleteMany({ where: { invoice_id: { in: invoiceIds } } });
+        await tx.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
+      }
+
+      // Canteen, wallet, fees, core records
       await tx.canteenTransaction.deleteMany({ where: { student_id: { in: studentIds } } });
       await tx.walletTransaction.deleteMany({ where: { student_id: { in: studentIds } } });
-      await tx.healthRecord.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.feePayment.deleteMany({ where: { student_id: { in: studentIds } } });
+      await tx.attendance.deleteMany({ where: { student_id: { in: studentIds } } });
       await tx.disciplineRecord.deleteMany({ where: { student_id: { in: studentIds } } });
       await tx.achievement.deleteMany({ where: { student_id: { in: studentIds } } });
-      await tx.academicReport.deleteMany({ where: { student_id: { in: studentIds } } });
       await tx.knottyCard.deleteMany({ where: { student_id: { in: studentIds } } });
       await tx.student.deleteMany({ where: { id: { in: studentIds } } });
       await tx.user.deleteMany({ where: { id: { in: userIds } } });
     }
 
-    await tx.material.deleteMany({
-      where: {
-        OR: [
-          { level_id: id },
-          { class_id: { in: classIds } }
-        ]
-      }
-    });
-
+    await tx.material.deleteMany({ where: { OR: [{ level_id: id }, { class_id: { in: classIds } }] } });
+    await tx.attendance.deleteMany({ where: { class_id: { in: classIds } } });
+    await tx.academicReport.deleteMany({ where: { class_id: { in: classIds } } });
     await tx.subject.deleteMany({ where: { level_id: id } });
     await tx.class.deleteMany({ where: { level_id: id } });
     return tx.level.delete({ where: { id } });

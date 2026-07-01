@@ -1,6 +1,9 @@
 const prisma = require('../../config/database');
+const redis = require('../../config/redis');
 const { sendAttendanceAlert } = require('../../integrations/africas-talking');
 const { paginate, paginatedResponse } = require('../../utils/helpers');
+
+const SUMMARY_TTL = 5; // seconds — stale-by-5s is fine for a dashboard counter
 
 async function scanAttendance(cardNumber, recordedBy, options = {}) {
   const {
@@ -94,7 +97,7 @@ async function scanAttendance(cardNumber, recordedBy, options = {}) {
       }
     }
 
-    const isLate = (kigaliHr > lateHr) || (kigaliHr === lateHr && kigaliMn > lateMn);
+    const isLate = (kigaliHr > lateHr) || (kigaliHr === lateHr && kigaliMn >= lateMn);
     const status = isLate ? 'LATE' : 'PRESENT';
 
     if (existing) {
@@ -128,6 +131,7 @@ async function scanAttendance(cardNumber, recordedBy, options = {}) {
       ).catch(console.error);
     }
 
+    invalidateSummaryCache(student.school_id);
     return {
       ...created,
       action: 'TAP_IN',
@@ -160,6 +164,7 @@ async function scanAttendance(cardNumber, recordedBy, options = {}) {
       include: studentInclude,
     });
 
+    invalidateSummaryCache(student.school_id);
     return { ...updated, action: 'TAP_OUT', card_number: card.card_number };
   }
 }
@@ -229,7 +234,7 @@ async function getStudentAttendance(studentId, { page, limit }) {
 
 async function getClassAttendance(classId, date) {
   const targetDate = date ? new Date(date) : new Date();
-  targetDate.setHours(0, 0, 0, 0);
+  targetDate.setUTCHours(0, 0, 0, 0);
 
   return prisma.attendance.findMany({
     where: { class_id: classId, date: targetDate },
@@ -258,13 +263,55 @@ async function getAttendanceReport(studentId, { from, to }) {
   return { records, summary, total: records.length };
 }
 
-async function scanAttendanceByNFC(nfcUid, recordedBy, options = {}) {
-  const card = await prisma.knottyCard.findFirst({ where: { nfc_uid: nfcUid } });
+async function classPDF(classId, date, schoolId) {
+  const { generateAttendancePDF } = require('../../utils/pdfGenerator');
+
+  const targetDate = date ? new Date(date) : new Date();
+  targetDate.setUTCHours(0, 0, 0, 0);
+
+  const [school, classInfo, allStudents, attendanceRecords] = await Promise.all([
+    prisma.school.findUnique({ where: { id: schoolId }, select: { id: true, name: true, logo: true, address: true, phone: true } }),
+    prisma.class.findUnique({ where: { id: classId }, include: { level: { select: { name: true } } } }),
+    prisma.student.findMany({
+      where: { class_id: classId, school_id: schoolId },
+      include: { user: { select: { first_name: true, last_name: true } } },
+      orderBy: [{ user: { last_name: 'asc' } }, { user: { first_name: 'asc' } }],
+    }),
+    prisma.attendance.findMany({
+      where: { class_id: classId, date: targetDate },
+      select: { student_id: true, status: true, check_in_time: true, check_out_time: true, note: true },
+    }),
+  ]);
+
+  if (!classInfo) throw Object.assign(new Error('Class not found'), { status: 404 });
+
+  const attendanceMap = {};
+  attendanceRecords.forEach((r) => { attendanceMap[r.student_id] = r; });
+
+  const dateStr = targetDate.toISOString().slice(0, 10);
+  return generateAttendancePDF(classInfo, allStudents, attendanceMap, dateStr, school || {});
+}
+
+async function scanAttendanceByNFC(nfcUid, recordedBy, options = {}, schoolId) {
+  const where = { nfc_uid: nfcUid, ...(schoolId && { school_id: schoolId }) };
+  const card = await prisma.knottyCard.findFirst({ where });
   if (!card) throw Object.assign(new Error('NFC tag not linked to any card'), { status: 404 });
   return scanAttendance(card.card_number, recordedBy, options);
 }
 
+function invalidateSummaryCache(schoolId) {
+  // Bust all summary keys for this school (class-specific and school-wide)
+  // We store a pattern list; simpler: just use school-level key
+  redis.del(`att_summary:${schoolId}:all`).catch(() => {});
+}
+
 async function getTodaySummary(schoolId, classId, user) {
+  const cacheKey = `att_summary:${schoolId}:${classId || 'all'}`;
+  try {
+    const cached = await redis.get(cacheKey);
+    if (cached) return JSON.parse(cached);
+  } catch (_) {}
+
   const now = new Date();
   const kigaliDateStr = now.toLocaleDateString('en-ZA', { timeZone: 'Africa/Kigali' });
   const today = new Date(kigaliDateStr.replace(/\//g, '-'));
@@ -324,7 +371,9 @@ async function getTodaySummary(schoolId, classId, user) {
   const checkedIn = summary.PRESENT + summary.LATE + summary.EXCUSED;
   summary.ABSENT = Math.max(0, totalStudents - checkedIn);
 
-  return { summary, total: records.length, recent: records.slice(0, 10) };
+  const result = { summary, total: records.length, recent: records.slice(0, 10) };
+  redis.set(`att_summary:${schoolId}:${classId || 'all'}`, JSON.stringify(result), 'EX', SUMMARY_TTL).catch(() => {});
+  return result;
 }
 
 async function scanAttendanceSecure(token, recordedBy, options = {}) {
@@ -368,4 +417,4 @@ async function scanAttendanceSecure(token, recordedBy, options = {}) {
   }
 }
 
-module.exports = { scanAttendance, bulkMarkAttendance, getStudentAttendance, getClassAttendance, getAttendanceReport, scanAttendanceByNFC, getTodaySummary, scanAttendanceSecure };
+module.exports = { scanAttendance, bulkMarkAttendance, getStudentAttendance, getClassAttendance, getAttendanceReport, scanAttendanceByNFC, getTodaySummary, scanAttendanceSecure, invalidateSummaryCache, classPDF };

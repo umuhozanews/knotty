@@ -18,6 +18,13 @@ async function verify(req, res, next) {
 
 async function studentFees(req, res, next) {
   try {
+    if (req.user.role === 'STUDENT' || req.user.role === 'PARENT') {
+      const where = req.user.role === 'STUDENT'
+        ? { id: req.params.studentId, user_id: req.user.id }
+        : { id: req.params.studentId, school_id: req.user.school_id, parent_id: req.user.id };
+      const ok = await prisma.student.findFirst({ where });
+      if (!ok) return res.status(403).json({ success: false, message: 'Access denied' });
+    }
     const { page = 1, limit = 20 } = req.query;
     const result = await service.getStudentFees(req.params.studentId, { page, limit });
     res.json({ success: true, ...result });

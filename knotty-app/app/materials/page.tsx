@@ -94,9 +94,6 @@ export default function MaterialsPage() {
   return (
     <DashboardShell>
       <div className="p-4 sm:p-6 space-y-6 max-w-5xl mx-auto bg-[#fcf9f8] min-h-screen text-[#121212]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-        <style dangerouslySetInnerHTML={{ __html: `
-          @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-        `}} />
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>

@@ -2,7 +2,7 @@ const authService = require('./service');
 const prisma = require('../../config/database');
 
 async function login(req, res, next) {
-  process.stdout.write('[AUTH] login attempt: ' + req.body.email + '\n');
+  process.stdout.write('[AUTH] login attempt\n');
   try {
     const result = await authService.login(req.body.email, req.body.password);
     process.stdout.write('[AUTH] login success\n');

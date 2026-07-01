@@ -31,6 +31,18 @@ export default function AcademicsPage() {
   const [showExamModal, setShowExamModal] = useState(false);
   const [showEnrollModal, setShowEnrollModal] = useState(false);
   const [selectedSection, setSelectedSection] = useState<ClassSection | null>(null);
+  const [showGradingModal, setShowGradingModal] = useState(false);
+  const [gradingForm, setGradingForm] = useState<{ name: string; bands: Array<{ min: number; max: number; letter: string; gpa: number }> }>({
+    name: "Default Scale",
+    bands: [
+      { min: 90, max: 100, letter: "A", gpa: 4.0 },
+      { min: 80, max: 89, letter: "B", gpa: 3.0 },
+      { min: 70, max: 79, letter: "C", gpa: 2.0 },
+      { min: 60, max: 69, letter: "D", gpa: 1.0 },
+      { min: 50, max: 59, letter: "E", gpa: 0.5 },
+      { min: 0, max: 49, letter: "F", gpa: 0.0 }
+    ]
+  });
 
   // Grading manager
   const [activeExam, setActiveExam] = useState<Exam | null>(null);
@@ -43,7 +55,7 @@ export default function AcademicsPage() {
   const [progForm, setProgForm] = useState({ name: "" });
   const [sectionForm, setSectionForm] = useState({ name: "", program_id: "", academic_term_id: "", homeroom_staff_id: "", capacity: "40" });
   const [ttForm, setTtForm] = useState({ class_section_id: "", subject_id: "", staff_id: "", day_of_week: "1", start_time: "08:30", end_time: "09:30", room: "" });
-  const [examForm, setExamForm] = useState({ name: "", subject_id: "", academic_term_id: "", exam_date: "", max_score: "100" });
+  const [examForm, setExamForm] = useState({ name: "", subject_id: "", academic_term_id: "", exam_date: "", max_score: "100", category: "EU" });
   const [enrollForm, setEnrollForm] = useState({ student_id: "", class_section_id: "", academic_term_id: "" });
 
   // Options for dropdowns
@@ -73,43 +85,35 @@ export default function AcademicsPage() {
         setPrograms(rP.data);
         setTerms(rT.data);
 
-        // Load staff list for homeroom teachers
-        const staffRes = await structure.staff();
-        setTeachersList(staffRes.data.filter((s) => s.role === "TEACHER" || s.role === "ADMIN"));
+        // Load staff list for homeroom teachers (admin/teacher only)
+        if (isStaff) {
+          const staffRes = await structure.staff().catch(() => ({ data: [] }));
+          setTeachersList(staffRes.data.filter((s: any) => s.role === "TEACHER" || s.role === "ADMIN"));
+        }
       } else if (activeTab === "timetable") {
-        const [rS, rT, rSect] = await Promise.all([
+        const [rS, rSect, rSub] = await Promise.all([
           academics.timetable(),
-          structure.staff(), // For teachers
           academics.sections(),
+          academics.subjects(),
         ]);
         setTimetable(rS.data);
-        setTeachersList(rT.data.filter((s) => s.role === "TEACHER" || s.role === "ADMIN"));
         setSections(rSect.data);
-
-        // Fetch subjects
-        setSubjects([
-          { id: "sub-math", name: "Mathematics", code: "MATH" },
-          { id: "sub-phy", name: "Physics", code: "PHYS" },
-          { id: "sub-chem", name: "Chemistry", code: "CHEM" },
-          { id: "sub-bio", name: "Biology", code: "BIOL" },
-          { id: "sub-eng", name: "English", code: "ENGL" },
-        ]);
+        setSubjects(rSub.data);
+        if (isStaff) {
+          const rT = await structure.staff().catch(() => ({ data: [] }));
+          setTeachersList(rT.data.filter((s: any) => s.role === "TEACHER" || s.role === "ADMIN"));
+        }
       } else if (activeTab === "exams") {
-        const [rE, rT, rSect] = await Promise.all([
+        const [rE, rT, rSect, rSub] = await Promise.all([
           academics.exams(),
           academics.terms(),
           academics.sections(),
+          academics.subjects(),
         ]);
         setExams(rE.data);
         setTerms(rT.data);
         setSections(rSect.data);
-        setSubjects([
-          { id: "sub-math", name: "Mathematics", code: "MATH" },
-          { id: "sub-phy", name: "Physics", code: "PHYS" },
-          { id: "sub-chem", name: "Chemistry", code: "CHEM" },
-          { id: "sub-bio", name: "Biology", code: "BIOL" },
-          { id: "sub-eng", name: "English", code: "ENGL" },
-        ]);
+        setSubjects(rSub.data);
       } else if (activeTab === "grading") {
         const rG = await academics.gradingScale();
         setGradingScale(rG.data);
@@ -174,6 +178,7 @@ export default function AcademicsPage() {
         max_score: Number(examForm.max_score),
       });
       setShowExamModal(false);
+      setExamForm({ name: "", subject_id: "", academic_term_id: "", exam_date: "", max_score: "100", category: "EU" });
       loadData();
     } catch (err) { alert(err instanceof Error ? err.message : "Error"); }
   }
@@ -183,6 +188,15 @@ export default function AcademicsPage() {
     try {
       await academics.enroll(enrollForm);
       setShowEnrollModal(false);
+      loadData();
+    } catch (err) { alert(err instanceof Error ? err.message : "Error"); }
+  }
+
+  async function handleSaveGradingScale(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      await academics.saveGradingScale(gradingForm);
+      setShowGradingModal(false);
       loadData();
     } catch (err) { alert(err instanceof Error ? err.message : "Error"); }
   }
@@ -208,6 +222,7 @@ export default function AcademicsPage() {
   async function selectExamForGrading(exam: Exam) {
     setActiveExam(exam);
     setRecordScores({});
+    setSelectedSection(null);
     try {
       const resultsRes = await academics.examResults(exam.id);
       setExamResults(resultsRes.data);
@@ -220,7 +235,7 @@ export default function AcademicsPage() {
       setRecordScores(scores);
 
       if (sections.length > 0) {
-        const classSect = sections[0]; // fallback
+        const classSect = sections[0];
         const details = await academics.sectionDetails(classSect.id);
         setSelectedSection(details.data);
       }
@@ -233,10 +248,12 @@ export default function AcademicsPage() {
     if (!activeExam) return;
     setSavingResults(true);
     try {
-      const resultsPayload = Object.entries(recordScores).map(([student_id, scoreStr]) => ({
-        student_id,
-        score: parseFloat(scoreStr),
-      }));
+      const resultsPayload = Object.entries(recordScores)
+        .filter(([_, scoreStr]) => scoreStr !== undefined && scoreStr !== "")
+        .map(([student_id, scoreStr]) => ({
+          student_id,
+          score: parseFloat(scoreStr),
+        }));
 
       await academics.recordResults(activeExam.id, resultsPayload);
       alert("Exam results saved and auto-graded!");
@@ -264,63 +281,6 @@ export default function AcademicsPage() {
   return (
     <DashboardShell>
       <div className="p-4 space-y-4">
-        <style dangerouslySetInnerHTML={{ __html: `
-          @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-          
-          /* Precision Design System overrides */
-          .p-4.space-y-4 {
-            padding: 24px !important;
-            background-color: #fcf9f8 !important;
-            font-family: 'Plus Jakarta Sans', sans-serif !important;
-            min-height: 100vh;
-          }
-          
-          .bg-white {
-            background-color: #ffffff !important;
-            border: 1px solid #dcd9d9 !important;
-            border-radius: 8px !important;
-            box-shadow: none !important;
-          }
-          
-          .rounded-xl, .rounded-2xl, .rounded-3xl {
-            border-radius: 8px !important;
-          }
-          
-          .bg-indigo-600, .bg-indigo-500, .bg-blue-600, .bg-blue-500, .bg-green-600, .bg-teal-500 {
-            background-color: #121212 !important;
-            color: #ffffff !important;
-            border-radius: 8px !important;
-            border: 1px solid #121212 !important;
-          }
-          .bg-indigo-600:hover, .bg-indigo-500:hover, .bg-blue-600:hover, .bg-blue-500:hover, .bg-green-600:hover, .bg-teal-500:hover {
-            background-color: #dcd9d9 !important;
-            color: #121212 !important;
-            border-color: #dcd9d9 !important;
-          }
-          
-          .text-indigo-600, .text-blue-600, .text-indigo-500 {
-            color: #121212 !important;
-          }
-          .border-indigo-600, .border-blue-600, .border-indigo-500 {
-            border-color: #121212 !important;
-          }
-          
-          .border-indigo-600.text-indigo-600 {
-            border-color: #121212 !important;
-            color: #121212 !important;
-            font-weight: 800 !important;
-          }
-          
-          .bg-gray-50 {
-            background-color: #fcf9f8 !important;
-            border-bottom: 1px solid #dcd9d9 !important;
-          }
-          
-          .hover\\:shadow-md:hover, .hover\\:shadow-lg:hover {
-            border-color: #dcd9d9 !important;
-            box-shadow: none !important;
-          }
-        ` }} />
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -690,6 +650,7 @@ export default function AcademicsPage() {
                         <tr className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase">
                           <th className="p-4">Exam Name</th>
                           <th className="p-4">Subject</th>
+                          <th className="p-4">Category</th>
                           <th className="p-4">Term</th>
                           <th className="p-4">Max Score</th>
                           <th className="p-4">Exam Date</th>
@@ -701,6 +662,7 @@ export default function AcademicsPage() {
                           <tr key={exam.id} className="hover:bg-gray-50/50">
                             <td className="p-4 font-semibold text-gray-700">{exam.name}</td>
                             <td className="p-4 text-gray-600">{exam.subject?.name}</td>
+                            <td className="p-4 text-xs font-semibold text-gray-500">{exam.category || 'EU'}</td>
                             <td className="p-4 text-gray-500">{exam.term?.name}</td>
                             <td className="p-4 font-medium text-indigo-600">{exam.max_score} pts</td>
                             <td className="p-4 text-gray-500">{new Date(exam.exam_date).toLocaleDateString()}</td>
@@ -726,26 +688,57 @@ export default function AcademicsPage() {
                           <h3 className="font-bold text-indigo-700">{activeExam.name}</h3>
                           <p className="text-xs text-gray-500">Max Marks: {activeExam.max_score} pts · Subject: {activeExam.subject?.name}</p>
                         </div>
-                        <button onClick={() => setActiveExam(null)} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+                        <button onClick={() => { setActiveExam(null); setSelectedSection(null); }} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+                      </div>
+
+                      {/* Class Section Dropdown */}
+                      <div>
+                        <label className="text-xs text-gray-500 mb-1 block">Class Section to Grade</label>
+                        <select className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"
+                          value={selectedSection?.id || ""}
+                          onChange={async (e) => {
+                            const sectId = e.target.value;
+                            if (sectId) {
+                              const details = await academics.sectionDetails(sectId);
+                              setSelectedSection(details.data);
+                            } else {
+                              setSelectedSection(null);
+                            }
+                          }}
+                        >
+                          <option value="">Select class section</option>
+                          {sections.map((s) => (
+                            <option key={s.id} value={s.id}>{s.name} ({s.program?.name})</option>
+                          ))}
+                        </select>
                       </div>
 
                       <div className="space-y-3 overflow-y-auto max-h-[380px] pr-1">
                         <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Enter Student Scores</h4>
-                        {allStudents.map((st) => (
-                          <div key={st.id} className="flex items-center justify-between gap-3 p-2 bg-gray-50 rounded-xl">
-                            <div className="flex-1">
-                              <p className="text-sm font-semibold text-gray-700 leading-tight">{st.user.first_name} {st.user.last_name}</p>
-                              <p className="text-[10px] text-gray-400">{st.student_code}</p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <input type="number" min={0} max={activeExam.max_score} placeholder="Score"
-                                value={recordScores[st.id] || ""}
-                                onChange={(e) => setRecordScores({ ...recordScores, [st.id]: e.target.value })}
-                                className="w-16 border border-gray-200 rounded-xl px-2 py-1 text-sm text-center outline-none focus:border-indigo-500" />
-                              <span className="text-xs text-gray-400 font-semibold">/ {activeExam.max_score}</span>
-                            </div>
-                          </div>
-                        ))}
+                        {!selectedSection ? (
+                          <p className="text-sm text-gray-400 italic">Please select a class section to grade.</p>
+                        ) : selectedSection.enrollments?.length === 0 ? (
+                          <p className="text-sm text-gray-400 italic">No students enrolled in this section.</p>
+                        ) : (
+                          selectedSection.enrollments?.map((e: any) => {
+                            const st = e.student;
+                            return (
+                              <div key={st.id} className="flex items-center justify-between gap-3 p-2 bg-gray-50 rounded-xl">
+                                <div className="flex-1">
+                                  <p className="text-sm font-semibold text-gray-700 leading-tight">{st.user.first_name} {st.user.last_name}</p>
+                                  <p className="text-[10px] text-gray-400">{st.student_code}</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <input type="number" min={0} max={activeExam.max_score} placeholder="Score"
+                                    value={recordScores[st.id] || ""}
+                                    onChange={(e) => setRecordScores({ ...recordScores, [st.id]: e.target.value })}
+                                    className="w-16 border border-gray-200 rounded-xl px-2 py-1 text-sm text-center outline-none focus:border-indigo-500" />
+                                  <span className="text-xs text-gray-400 font-semibold">/ {activeExam.max_score}</span>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
                       </div>
 
                       <button onClick={saveGrades} disabled={savingResults}
@@ -761,7 +754,7 @@ export default function AcademicsPage() {
                           <div className="space-y-1.5 text-xs max-h-[200px] overflow-y-auto pr-1">
                             {examResults.map((res) => (
                               <div key={res.id} className="flex justify-between items-center p-2 bg-indigo-50/50 rounded-xl">
-                                <span className="font-semibold text-gray-700">{res.student?.user.first_name} · <strong className="text-indigo-600">{res.score}/{activeExam.max_score} ({res.grade_letter})</strong></span>
+                                <span className="font-semibold text-gray-700">{res.student?.user?.first_name} · <strong className="text-indigo-600">{res.score}/{activeExam.max_score} ({res.grade_letter})</strong></span>
                                 {res.approved_by ? (
                                   <span className="text-green-600 font-semibold flex items-center gap-1"><CheckCircle size={12} /> Approved</span>
                                 ) : isAdmin ? (
@@ -788,7 +781,25 @@ export default function AcademicsPage() {
             {/* TABS 5: GRADING SCALE */}
             {activeTab === "grading" && (
               <div className="bg-white rounded-3xl p-6 shadow-sm max-w-2xl mx-auto space-y-4">
-                <h3 className="font-bold text-gray-800">Grading System Setup</h3>
+                <div className="flex justify-between items-center">
+                  <h3 className="font-bold text-gray-800">Grading System Setup</h3>
+                  {isAdmin && (
+                    <button
+                      onClick={() => {
+                        if (gradingScale) {
+                          setGradingForm({
+                            name: gradingScale.name,
+                            bands: gradingScale.bands.map(b => ({ ...b }))
+                          });
+                        }
+                        setShowGradingModal(true);
+                      }}
+                      className="flex items-center gap-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-3 py-1.5 rounded-xl text-xs font-bold transition"
+                    >
+                      <Settings size={14} /> Customize Scale
+                    </button>
+                  )}
+                </div>
                 {gradingScale ? (
                   <div className="space-y-4">
                     <p className="text-sm text-gray-500">Scale name: <strong>{gradingScale.name}</strong></p>
@@ -1003,10 +1014,18 @@ export default function AcademicsPage() {
                     className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none" />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 mb-1 block">Max Score (pts)</label>
-                  <input required type="number" min={1} value={examForm.max_score} onChange={(e) => setExamForm({ ...examForm, max_score: e.target.value })}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none" />
+                  <label className="text-xs text-gray-500 mb-1 block">Category</label>
+                  <select required value={examForm.category} onChange={(e) => setExamForm({ ...examForm, category: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+                    <option value="EU">End of Unit (EU) / CAT</option>
+                    <option value="PR">Project (PR)</option>
+                    <option value="ET">End of Term (ET) / Exam</option>
+                  </select>
                 </div>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Max Score (pts)</label>
+                <input required type="number" min={1} value={examForm.max_score} onChange={(e) => setExamForm({ ...examForm, max_score: e.target.value })}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none" />
               </div>
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowExamModal(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600">Cancel</button>
@@ -1051,6 +1070,72 @@ export default function AcademicsPage() {
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowEnrollModal(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600">Cancel</button>
                 <button type="submit" className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-sm text-white font-medium hover:bg-indigo-700 transition">Confirm Enrollment</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Customize Grading Scale Modal */}
+      {showGradingModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-xl w-full max-w-lg p-6 space-y-4">
+            <h3 className="font-bold text-gray-800">Customize Grading Scale</h3>
+            <form onSubmit={handleSaveGradingScale} className="space-y-4">
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Scale Name</label>
+                <input required type="text" value={gradingForm.name} onChange={(e) => setGradingForm({ ...gradingForm, name: e.target.value })}
+                  placeholder="e.g. Default Rwandan Grading Scale" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-indigo-500" />
+              </div>
+              
+              <div className="space-y-2">
+                <div className="flex justify-between items-center text-xs font-semibold text-gray-400 uppercase">
+                  <span>Grade Bands</span>
+                  <button type="button" onClick={() => setGradingForm({
+                    ...gradingForm,
+                    bands: [...gradingForm.bands, { min: 0, max: 0, letter: "New", gpa: 0.0 }]
+                  })} className="text-indigo-600 hover:text-indigo-800 font-bold lowercase">+ Add Band</button>
+                </div>
+                
+                <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+                  {gradingForm.bands.map((band, idx) => (
+                    <div key={idx} className="flex gap-2 items-center">
+                      <input required type="number" min={0} max={100} value={band.min} placeholder="Min" onChange={(e) => {
+                        const newBands = [...gradingForm.bands];
+                        newBands[idx].min = Number(e.target.value);
+                        setGradingForm({ ...gradingForm, bands: newBands });
+                      }} className="w-16 border border-gray-200 rounded-xl px-2 py-1.5 text-xs text-center outline-none" />
+                      <span className="text-gray-400 text-xs">to</span>
+                      <input required type="number" min={0} max={100} value={band.max} placeholder="Max" onChange={(e) => {
+                        const newBands = [...gradingForm.bands];
+                        newBands[idx].max = Number(e.target.value);
+                        setGradingForm({ ...gradingForm, bands: newBands });
+                      }} className="w-16 border border-gray-200 rounded-xl px-2 py-1.5 text-xs text-center outline-none" />
+                      <input required type="text" value={band.letter} placeholder="Grade" onChange={(e) => {
+                        const newBands = [...gradingForm.bands];
+                        newBands[idx].letter = e.target.value;
+                        setGradingForm({ ...gradingForm, bands: newBands });
+                      }} className="flex-1 border border-gray-200 rounded-xl px-2 py-1.5 text-xs outline-none" />
+                      <input required type="number" step="0.1" min={0} max={5} value={band.gpa} placeholder="GPA" onChange={(e) => {
+                        const newBands = [...gradingForm.bands];
+                        newBands[idx].gpa = Number(e.target.value);
+                        setGradingForm({ ...gradingForm, bands: newBands });
+                      }} className="w-16 border border-gray-200 rounded-xl px-2 py-1.5 text-xs text-center outline-none" />
+                      
+                      <button type="button" onClick={() => setGradingForm({
+                        ...gradingForm,
+                        bands: gradingForm.bands.filter((_, i) => i !== idx)
+                      })} className="text-red-500 hover:bg-red-50 p-1.5 rounded-lg">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setShowGradingModal(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600">Cancel</button>
+                <button type="submit" className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-sm text-white font-medium hover:bg-indigo-700 transition">Save Scale</button>
               </div>
             </form>
           </div>

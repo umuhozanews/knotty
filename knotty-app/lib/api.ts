@@ -2620,6 +2620,16 @@ export const attendance = {
   },
   scanSecure: (token: string, options?: Record<string, unknown>) =>
     request<{ success: boolean; data: AttendanceRecord }>("/attendance/scan-secure", { method: "POST", body: JSON.stringify({ token, ...options }) }),
+  downloadPDF: async (classId: string, date?: string): Promise<string> => {
+    const token = getToken();
+    const qs = date ? `?date=${date}` : "";
+    const res = await fetch(`${BASE}/attendance/pdf/${classId}${qs}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(`PDF failed: ${res.status}`);
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  },
 };
 
 // ─── Cards ────────────────────────────────────────────────
@@ -2823,6 +2833,15 @@ export interface CanteenTransaction {
   student?: { user: { first_name: string; last_name: string } };
 }
 
+export interface CanteenProduct {
+  id: string;
+  name: string;
+  price: number;
+  category: string;
+  emoji: string;
+  photo_url: string | null;
+}
+
 export const canteen = {
   purchase: (card_number: string, items: CanteenItem[]) =>
     request<{ success: boolean; transaction: CanteenTransaction; new_balance: number }>("/canteen/purchase", {
@@ -2835,6 +2854,27 @@ export const canteen = {
     request<{ success: boolean; data: CanteenTransaction[]; pagination: unknown }>(`/canteen/my-transactions?page=${page}&limit=${limit}`),
   dailyReport: (date?: string) =>
     request<{ success: boolean; transactions: CanteenTransaction[]; total_revenue: number; transaction_count: number }>(`/canteen/report${date ? `?date=${date}` : ""}`),
+  listProducts: () =>
+    request<{ success: boolean; data: CanteenProduct[] }>("/canteen/products"),
+  createProduct: async (data: { name: string; price: number; category?: string; emoji?: string; photo?: File | null }): Promise<{ success: boolean; data: CanteenProduct }> => {
+    const token = getToken();
+    const form = new FormData();
+    form.append("name", data.name);
+    form.append("price", String(data.price));
+    if (data.category) form.append("category", data.category);
+    if (data.emoji) form.append("emoji", data.emoji);
+    if (data.photo) form.append("photo", data.photo);
+    const res = await fetch(`${BASE}/canteen/products`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    const json = await safeJson(res) as { success: boolean; data: CanteenProduct };
+    if (!res.ok) throw new Error((json as any).message || "Failed to create product");
+    return json;
+  },
+  deleteProduct: (id: string) =>
+    request<{ success: boolean }>(`/canteen/products/${id}`, { method: "DELETE" }),
 };
 
 // ─── Discipline ───────────────────────────────────────────

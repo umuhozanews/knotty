@@ -35,9 +35,6 @@ export default function StudentDashboard() {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto p-4 sm:p-6 bg-[#fcf9f8] text-[#121212] min-h-screen" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-      <style dangerouslySetInnerHTML={{ __html: `
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-      `}} />
 
       {/* Hero Welcome banner */}
       <div className="bg-[#121212] rounded-lg p-6 text-[#fcf9f8] border border-[#dcd9d9]/20 relative overflow-hidden">

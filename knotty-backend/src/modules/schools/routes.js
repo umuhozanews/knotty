@@ -3,7 +3,7 @@ const ctrl = require('./controller');
 const { authenticate } = require('../../middleware/auth');
 const { authorize } = require('../../middleware/rbac');
 
-router.post('/', ctrl.create);
+router.post('/', authenticate, authorize('ADMIN'), ctrl.create);
 router.get('/:id', authenticate, ctrl.getOne);
 router.put('/:id', authenticate, authorize('ADMIN'), ctrl.update);
 router.get('/:id/dashboard-stats', authenticate, ctrl.dashboardStats);

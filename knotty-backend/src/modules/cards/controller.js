@@ -63,7 +63,7 @@ async function linkNFC(req, res, next) {
 
 async function scanNFC(req, res, next) {
   try {
-    const data = await service.scanByNFC(req.params.nfcUid);
+    const data = await service.scanByNFC(req.params.nfcUid, req.user.school_id);
     res.json({ success: true, data });
   } catch (err) { next(err); }
 }

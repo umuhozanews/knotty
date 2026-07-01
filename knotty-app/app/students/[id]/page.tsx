@@ -1,11 +1,11 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, Loader2, CreditCard, Calendar, Wallet, AlertTriangle,
   Heart, FileText, Plus, Download, CheckCircle, XCircle, Clock,
   User, BookOpen, ShoppingBag, Snowflake, ThermometerSnowflake,
-  X, Activity, Trash2
+  X, Activity, Trash2, Nfc
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import VirtualCardTap from "@/components/VirtualCardTap";
@@ -450,7 +450,7 @@ function CreateReportModal({ studentId, classId, schoolId, onClose, onSuccess }:
 
         <form onSubmit={submit}>
           {/* Meta row */}
-          <div className="grid grid-cols-5 gap-3 px-6 py-4 border-b border-gray-50 dark:border-gray-800">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 px-6 py-4 border-b border-gray-50 dark:border-gray-800">
             <div>
               <label className="text-xs text-gray-400 mb-1 block">Term</label>
               <select value={term} onChange={(e) => setTerm(e.target.value)} className={inp}>
@@ -881,6 +881,11 @@ export default function StudentProfilePage() {
   const [scanResult, setScanResult] = useState<{ status: string; name: string } | null>(null);
   const [scanning, setScanning] = useState(false);
 
+  // NFC card assignment state
+  const [nfcScanning, setNfcScanning] = useState(false);
+  const [nfcError, setNfcError] = useState<string | null>(null);
+  const nfcAbortRef = useRef<AbortController | null>(null);
+
   const studentId = params.id;
 
   const reloadProfile = useCallback(() =>
@@ -952,7 +957,7 @@ export default function StudentProfilePage() {
     setScanResult(null);
     try {
       const res = await attendance.scan(cardNumber);
-      const name = `${profile?.user.first_name ?? ""} ${profile?.user.last_name ?? ""}`.trim();
+      const name = `${profile?.user?.first_name ?? ""} ${profile?.user?.last_name ?? ""}`.trim();
       setScanResult({ status: (res.data as { status: string }).status, name });
       show(`Attendance marked: ${(res.data as { status: string }).status}`, "success");
       await reloadProfile();
@@ -977,6 +982,56 @@ export default function StudentProfilePage() {
       show("KNOTTY Card issued successfully", "success");
       await reloadProfile();
     } catch (err) { show(err instanceof Error ? err.message : "Error", "error"); }
+  }
+
+  async function assignNFC() {
+    // Cancel if already scanning
+    if (nfcScanning && nfcAbortRef.current) {
+      nfcAbortRef.current.abort();
+      nfcAbortRef.current = null;
+      setNfcScanning(false);
+      return;
+    }
+    setNfcError(null);
+    if (!("NDEFReader" in window)) {
+      setNfcError("Web NFC requires Chrome on Android. Not supported on this device.");
+      return;
+    }
+    setNfcScanning(true);
+    const abort = new AbortController();
+    nfcAbortRef.current = abort;
+    try {
+      const ndef = new (window as unknown as { NDEFReader: new () => { scan: (o: { signal: AbortSignal }) => Promise<void>; addEventListener: (e: string, h: (ev: { serialNumber: string }) => void) => void } }).NDEFReader();
+      await ndef.scan({ signal: abort.signal });
+      ndef.addEventListener("reading", async ({ serialNumber }) => {
+        abort.abort();
+        nfcAbortRef.current = null;
+        setNfcScanning(false);
+        const nfcUid = serialNumber.toUpperCase().replace(/:/g, "");
+        try {
+          let cardId = profile?.card?.id;
+          if (!cardId) {
+            const res = await cards.issue(studentId);
+            cardId = (res.data as { id: string }).id;
+          }
+          await cards.linkNFC(cardId, nfcUid);
+          show(`NFC card ${profile?.card?.nfc_uid ? "updated" : "assigned"} — UID: ${nfcUid}`, "success");
+          await reloadProfile();
+        } catch (err) {
+          setNfcError(err instanceof Error ? err.message : "Failed to assign NFC card");
+        }
+      });
+    } catch (err) {
+      nfcAbortRef.current = null;
+      setNfcScanning(false);
+      if (err instanceof Error && err.name !== "AbortError") {
+        setNfcError(
+          err.name === "NotAllowedError"
+            ? "NFC permission denied. Allow NFC access in Chrome settings."
+            : err.message
+        );
+      }
+    }
   }
 
   async function publishReport(id: string) {
@@ -1119,7 +1174,7 @@ export default function StudentProfilePage() {
           </div>
 
           {/* Stats row */}
-          <div className="grid grid-cols-4 border-t border-gray-100 dark:border-gray-800">
+          <div className="grid grid-cols-2 md:grid-cols-4 border-t border-gray-100 dark:border-gray-800">
             {[
               { label: "Attendance", value: `${attRate}%`, color: attRate >= 75 ? "text-green-600" : "text-red-500", icon: Activity },
               { label: "Days Present", value: attSummary.PRESENT, color: "text-green-600", icon: CheckCircle },
@@ -1216,6 +1271,18 @@ export default function StudentProfilePage() {
                           }
                         </div>
                       )}
+                      {user?.role === "ADMIN" && (
+                        <div className="pt-2">
+                          <button
+                            onClick={assignNFC}
+                            className={`w-full py-2 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 transition ${nfcScanning ? "bg-[#121212] text-white animate-pulse" : profile.card.nfc_uid ? "border border-[#dcd9d9] text-gray-600 hover:bg-gray-50" : "bg-[#121212] text-white hover:bg-black"}`}
+                          >
+                            <Nfc size={11} />
+                            {nfcScanning ? "Tap NFC card now… (tap to cancel)" : profile.card.nfc_uid ? "Update NFC Card" : "Assign NFC Card"}
+                          </button>
+                          {nfcError && <p className="text-xs text-red-500 mt-1.5 bg-red-50 px-2 py-1.5 rounded-lg">{nfcError}</p>}
+                        </div>
+                      )}
                       {profile.card.qr_code && (
                         <div className="mt-3 flex justify-center">
                           <img src={profile.card.qr_code} alt="QR" className="w-28 h-28 object-contain rounded-xl border border-gray-100 dark:border-gray-800 p-2" />
@@ -1226,7 +1293,20 @@ export default function StudentProfilePage() {
                     <div className="text-center py-4">
                       <CreditCard size={28} className="text-gray-200 mx-auto mb-2" />
                       <p className="text-sm text-gray-400 mb-3">No card issued yet</p>
-                      {user?.role !== "TEACHER" && (
+                      {user?.role === "ADMIN" && (
+                        <div className="flex flex-col gap-2 items-center">
+                          <button
+                            onClick={assignNFC}
+                            className={`flex items-center gap-1.5 text-xs font-medium px-4 py-2 rounded-xl transition ${nfcScanning ? "bg-[#121212] text-white animate-pulse" : "bg-[#121212] text-white hover:bg-black"}`}
+                          >
+                            <Nfc size={12} />
+                            {nfcScanning ? "Tap NFC card now… (tap to cancel)" : "Issue & Assign NFC Card"}
+                          </button>
+                          <button onClick={issueCard} className="text-xs text-gray-500 underline hover:text-gray-700 transition">Issue card without NFC</button>
+                          {nfcError && <p className="text-xs text-red-500 bg-red-50 px-3 py-1.5 rounded-lg">{nfcError}</p>}
+                        </div>
+                      )}
+                      {user?.role !== "TEACHER" && user?.role !== "ADMIN" && (
                         <button onClick={issueCard} className="bg-blue-600 text-white text-xs px-4 py-2 rounded-xl hover:bg-blue-700 transition">Issue Card</button>
                       )}
                     </div>

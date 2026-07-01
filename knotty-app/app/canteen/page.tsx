@@ -2,52 +2,146 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import {
   Plus, Minus, ShoppingCart, CreditCard, Trash2,
-  Wifi, WifiOff, CheckCircle, Loader2, X, Search, ReceiptText,
+  Wifi, WifiOff, CheckCircle, Loader2, X, Search, ReceiptText, Upload,
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import VirtualCardTap from "@/components/VirtualCardTap";
-import { canteen, cards, CardScanResult, CanteenItem, CanteenTransaction } from "@/lib/api";
+import { canteen, cards, CardScanResult, CanteenItem, CanteenTransaction, CanteenProduct } from "@/lib/api";
 import { useNFC } from "@/hooks/useNFC";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
 
-/* ── Menu catalog ─────────────────────────────────────────────── */
-const CATEGORIES = ["All", "Snacks", "Drinks", "Meals", "Fruits", "Bread"];
+const CATEGORIES = ["All", "Snacks", "Drinks", "Meals", "Fruits", "Bread", "Other"];
 
-const MENU_ITEMS = [
-  { id: "amandazi",   name: "Amandazi",       price: 200,  emoji: "🍩", img: "/canteen/amandazi.png", cat: "Snacks" },
-  { id: "sambusa",    name: "Sambusa",         price: 300,  emoji: "🥟", img: "/canteen/sambusa.png",  cat: "Snacks" },
-  { id: "egg",        name: "Boiled Egg",      price: 200,  emoji: "🥚", img: "/canteen/egg.png",      cat: "Snacks" },
-  { id: "maria",      name: "Bolacha Maria",   price: 300,  emoji: "🍪", img: "/canteen/maria.png",    cat: "Snacks" },
-  { id: "inyange",    name: "Inyange Juice",   price: 500,  emoji: "🧃", img: "/canteen/inyange.png",  cat: "Drinks" },
-  { id: "fanta",      name: "Fanta",           price: 600,  emoji: "🥤", img: "/canteen/fanta.png",    cat: "Drinks" },
-  { id: "milk",       name: "Milk",            price: 400,  emoji: "🥛", img: "/canteen/milk.png",     cat: "Drinks" },
-  { id: "water",      name: "Water",           price: 200,  emoji: "💧", img: "/canteen/water.png",    cat: "Drinks" },
-  { id: "rice_beans", name: "Rice & Beans",    price: 1500, emoji: "🍛", img: null,                    cat: "Meals"  },
-  { id: "rice_meat",  name: "Rice & Meat",     price: 2000, emoji: "🍖", img: null,                    cat: "Meals"  },
-  { id: "porridge",   name: "Porridge",        price: 500,  emoji: "🥣", img: null,                    cat: "Meals"  },
-  { id: "embe",       name: "Embe (Mango)",    price: 300,  emoji: "🥭", img: null,                    cat: "Fruits" },
-  { id: "banana",     name: "Banana",          price: 150,  emoji: "🍌", img: "/canteen/banana.png",   cat: "Fruits" },
-  { id: "avocado",    name: "Avocado",         price: 300,  emoji: "🥑", img: "/canteen/avocado.png",  cat: "Fruits" },
-  { id: "chapati",    name: "Chapati",         price: 300,  emoji: "🫓", img: "/canteen/chapati.png",  cat: "Bread"  },
-  { id: "mandazi_big",name: "Mandazi (Big)",   price: 300,  emoji: "🍞", img: null,                    cat: "Bread"  },
-];
-
+type MenuItem = { id: string; name: string; price: number; emoji: string; img: string | null; cat: string; fromApi?: boolean };
 type CartMap = Record<string, number>;
 type PayResult = { student: CardScanResult["student"]; total: number; new_balance: number };
 
+/* ── Add Product Modal ─────────────────────────────────────────── */
+function AddProductModal({ onClose, onCreated }: { onClose: () => void; onCreated: (p: CanteenProduct) => void }) {
+  const { toast } = useToast();
+  const [name, setName] = useState("");
+  const [price, setPrice] = useState("");
+  const [category, setCategory] = useState("Other");
+  const [emoji, setEmoji] = useState("🍽️");
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0] ?? null;
+    setPhoto(f);
+    if (f) setPreview(URL.createObjectURL(f));
+    else setPreview(null);
+  }
+
+  async function submit() {
+    const p = parseFloat(price);
+    if (!name.trim() || !p || p <= 0) { toast("Name and valid price required", "error"); return; }
+    setSaving(true);
+    try {
+      const res = await canteen.createProduct({ name, price: p, category, emoji, photo });
+      onCreated(res.data);
+      toast(`${name} added to menu`, "success");
+      onClose();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed", "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl w-full max-w-sm p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-gray-800">Add Menu Item</h3>
+          <button onClick={onClose}><X size={18} className="text-gray-400" /></button>
+        </div>
+
+        {/* Photo upload */}
+        <label className="block">
+          <div className="w-full h-32 rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center cursor-pointer hover:border-orange-400 transition overflow-hidden"
+            style={{ background: preview ? "transparent" : "#F5F5F5" }}>
+            {preview
+              // eslint-disable-next-line @next/next/no-img-element
+              ? <img src={preview} alt="" className="w-full h-full object-cover rounded-2xl" />
+              : <><Upload size={24} className="text-gray-300 mb-1" /><span className="text-xs text-gray-400">Upload photo (optional)</span></>}
+          </div>
+          <input type="file" accept="image/*" className="hidden" onChange={handleFile} />
+        </label>
+
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Product name"
+          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-orange-400" />
+
+        <div className="flex gap-2">
+          <input value={price} onChange={(e) => setPrice(e.target.value)} type="number" placeholder="Price (RWF)"
+            className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-orange-400" />
+          <input value={emoji} onChange={(e) => setEmoji(e.target.value)} placeholder="🍽️" maxLength={2}
+            className="w-16 border border-gray-200 rounded-xl px-2 py-2.5 text-center text-lg outline-none focus:border-orange-400" />
+        </div>
+
+        <select value={category} onChange={(e) => setCategory(e.target.value)}
+          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-orange-400 bg-white">
+          {["Snacks", "Drinks", "Meals", "Fruits", "Bread", "Other"].map((c) => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+
+        <button onClick={submit} disabled={saving}
+          className="w-full py-3 rounded-2xl font-bold text-sm text-white flex items-center justify-center gap-2 disabled:opacity-60 transition"
+          style={{ background: "#FF7A22" }}>
+          {saving ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
+          {saving ? "Saving…" : "Add to Menu"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function CanteenPage() {
   const { toast } = useToast();
-  const { loading: authLoading } = useAuth();
+  const { loading: authLoading, user } = useAuth();
   const { startListen, stopListen, listening, isSupported } = useNFC();
+
+  /* ── Products from API ─────────────────────────────────────── */
+  const [apiProducts, setApiProducts] = useState<MenuItem[]>([]);
+  const [showAddProduct, setShowAddProduct] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const loadProducts = useCallback(() => {
+    canteen.listProducts().then((r) => {
+      setApiProducts(r.data.map((p) => ({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        emoji: p.emoji,
+        img: p.photo_url,
+        cat: p.category,
+        fromApi: true,
+      })));
+    }).catch(() => {});
+  }, []);
+
+  async function handleDeleteProduct(id: string) {
+    setDeletingId(id);
+    try {
+      await canteen.deleteProduct(id);
+      setApiProducts((prev) => prev.filter((p) => p.id !== id));
+      setCart((c) => { const next = { ...c }; delete next[id]; return next; });
+      toast("Product removed", "success");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Delete failed", "error");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   /* ── Category + search ─────────────────────────────────────── */
   const [activeCategory, setActiveCategory] = useState("All");
   const [search, setSearch] = useState("");
 
-  type MenuItem = typeof MENU_ITEMS[number] | { id: string; name: string; price: number; emoji: string; img: string | null; cat: string };
-  const [customItems, setCustomItems] = useState<MenuItem[]>([]);
-  const allMenu = [...MENU_ITEMS, ...customItems];
+  const allMenu: MenuItem[] = apiProducts;
 
   const visible = allMenu.filter((m) => {
     const matchCat = activeCategory === "All" || m.cat === activeCategory;
@@ -79,19 +173,6 @@ export default function CanteenPage() {
   /* ── Cart panel toggle (mobile) ────────────────────────────── */
   const [showCart, setShowCart] = useState(false);
 
-  /* ── Custom item ───────────────────────────────────────────── */
-  const [customName, setCustomName] = useState("");
-  const [customPrice, setCustomPrice] = useState("");
-  function addCustom() {
-    const p = parseFloat(customPrice);
-    if (!customName.trim() || !p || p <= 0) return;
-    const id = `custom_${Date.now()}`;
-    setCustomItems((c) => [...c, { id, name: customName.trim(), price: p, emoji: "➕", img: null, cat: "All" }]);
-    setCart((c) => ({ ...c, [id]: 1 }));
-    setCustomName(""); setCustomPrice("");
-    setShowCart(true);
-  }
-
   /* ── Payment ───────────────────────────────────────────────── */
   const [paying, setPaying]       = useState(false);
   const [cardInput, setCardInput] = useState("");
@@ -117,7 +198,7 @@ export default function CanteenPage() {
       stopListen();
       const res = await canteen.purchase(scanRes.data.card_number, items);
       setPayResult({ student: scanRes.data.student, total, new_balance: res.new_balance });
-      setCart({}); setCustomItems([]); setPaying(false);
+      setCart({}); setPaying(false);
       loadReport();
       toast(`Paid ${total.toLocaleString()} RWF · Balance: ${res.new_balance.toLocaleString()} RWF`, "success");
     } catch (err) {
@@ -163,11 +244,24 @@ export default function CanteenPage() {
       .finally(() => setReportLoading(false));
   }, []);
 
-  useEffect(() => { if (!authLoading) loadReport(); }, [authLoading, loadReport]);
+  useEffect(() => {
+    if (!authLoading) {
+      loadReport();
+      loadProducts();
+    }
+  }, [authLoading, loadReport, loadProducts]);
 
   /* ── UI ────────────────────────────────────────────────────── */
   return (
     <DashboardShell>
+      {showAddProduct && (
+        <AddProductModal
+          onClose={() => setShowAddProduct(false)}
+          onCreated={(p) => {
+            setApiProducts((prev) => [...prev, { id: p.id, name: p.name, price: p.price, emoji: p.emoji, img: p.photo_url, cat: p.category, fromApi: true }]);
+          }}
+        />
+      )}
       <div className="h-full flex flex-col overflow-hidden">
 
         {/* ── Top bar ─────────────────────────────────────────── */}
@@ -176,6 +270,15 @@ export default function CanteenPage() {
             <h1 className="text-lg font-bold" style={{ color: "#121212" }}>Canteen POS</h1>
             <p className="text-xs" style={{ color: "#666666" }}>Select items → student taps to pay</p>
           </div>
+          {(user?.role === "ADMIN" || user?.role === "CANTEEN") && (
+            <button
+              onClick={() => setShowAddProduct(true)}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white"
+              style={{ background: "#FF7A22" }}
+            >
+              <Plus size={13} /> Add Product
+            </button>
+          )}
           {/* Cart badge (mobile) */}
           <button
             onClick={() => setShowCart((v) => !v)}
@@ -227,9 +330,21 @@ export default function CanteenPage() {
 
             {/* Menu grid */}
             <div className="flex-1 overflow-y-auto">
+              {visible.length === 0 && !search && (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <span className="text-5xl mb-3">🍽️</span>
+                  <p className="font-semibold text-gray-400 text-sm">No menu items yet</p>
+                  {(user?.role === "ADMIN" || user?.role === "CANTEEN") && (
+                    <button onClick={() => setShowAddProduct(true)} className="mt-3 px-4 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: "#FF7A22" }}>
+                      + Add First Product
+                    </button>
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-4 gap-2.5">
                 {visible.map((item) => {
                   const qty = cart[item.id] ?? 0;
+                  const isAdmin = user?.role === "ADMIN" || user?.role === "CANTEEN";
                   return (
                     <div
                       key={item.id}
@@ -237,6 +352,16 @@ export default function CanteenPage() {
                       style={{ border: qty > 0 ? "2px solid #FF7A22" : "2px solid transparent" }}
                       onClick={() => inc(item.id)}
                     >
+                      {/* Delete button (API products only, admin/canteen) */}
+                      {item.fromApi && isAdmin && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteProduct(item.id); }}
+                          disabled={deletingId === item.id}
+                          className="absolute top-2 left-2 w-6 h-6 rounded-full bg-red-50 border border-red-100 flex items-center justify-center z-10 hover:bg-red-100 transition"
+                        >
+                          {deletingId === item.id ? <Loader2 size={10} className="animate-spin text-red-400" /> : <Trash2 size={9} className="text-red-400" />}
+                        </button>
+                      )}
                       {/* Qty badge */}
                       {qty > 0 && (
                         <span
@@ -251,7 +376,7 @@ export default function CanteenPage() {
                         className="w-full aspect-square rounded-xl flex items-center justify-center overflow-hidden"
                         style={{ background: qty > 0 ? "#FFF3EC" : "#F5F5F5" }}
                       >
-                        {"img" in item && item.img ? (
+                        {item.img ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
                             src={item.img}
@@ -301,40 +426,19 @@ export default function CanteenPage() {
                   );
                 })}
 
-                {/* Custom item card */}
-                <div className="bg-white rounded-2xl p-3 flex flex-col gap-2 border-2 border-dashed" style={{ borderColor: "#e5e5e5" }}>
-                  <div className="w-full aspect-square rounded-xl flex items-center justify-center text-3xl" style={{ background: "#F5F5F5" }}>
-                    ➕
-                  </div>
-                  <div className="space-y-1.5">
-                    <input
-                      value={customName}
-                      onChange={(e) => setCustomName(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && addCustom()}
-                      placeholder="Item name"
-                      className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none"
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                    <div className="flex gap-1">
-                      <input
-                        type="number"
-                        value={customPrice}
-                        onChange={(e) => setCustomPrice(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && addCustom()}
-                        placeholder="RWF"
-                        className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      <button
-                        onClick={(e) => { e.stopPropagation(); addCustom(); }}
-                        className="px-2 py-1.5 rounded-lg text-white text-xs font-bold"
-                        style={{ background: "#FF7A22" }}
-                      >
-                        Add
-                      </button>
+                {/* Add product card (admin/canteen only) */}
+                {(user?.role === "ADMIN" || user?.role === "CANTEEN") && (
+                  <button
+                    onClick={() => setShowAddProduct(true)}
+                    className="bg-white rounded-2xl p-3 flex flex-col items-center justify-center gap-2 border-2 border-dashed hover:border-orange-300 transition min-h-[120px]"
+                    style={{ borderColor: "#e5e5e5" }}
+                  >
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "#FFF3EC" }}>
+                      <Plus size={20} style={{ color: "#FF7A22" }} />
                     </div>
-                  </div>
-                </div>
+                    <span className="text-xs font-semibold text-gray-400">Add Product</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>

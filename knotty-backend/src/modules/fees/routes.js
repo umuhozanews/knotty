@@ -3,10 +3,10 @@ const ctrl = require('./controller');
 const { authenticate } = require('../../middleware/auth');
 const { authorize } = require('../../middleware/rbac');
 
-// Compatibility/Legacy webhooks don't need auth (verify momo webhook)
-router.get('/verify/:momoReference', ctrl.verify);
-
 router.use(authenticate);
+
+// Verify momo payment status (authenticated — client polls this)
+router.get('/verify/:momoReference', ctrl.verify);
 
 // Legacy
 router.post('/pay', authorize('ADMIN', 'BURSAR'), ctrl.pay);

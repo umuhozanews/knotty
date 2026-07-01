@@ -3,25 +3,33 @@ const Redis = require('ioredis');
 let redis;
 let isFallback = false;
 
+// Pure in-memory fallback — no disk I/O, never blocks the event loop
 const store = new Map();
+const expiryMap = new Map();
+
 const mockRedis = {
-  get: async (key) => store.get(key) || null,
+  get: async (key) => {
+    const exp = expiryMap.get(key);
+    if (exp && Date.now() > exp) { store.delete(key); expiryMap.delete(key); return null; }
+    return store.get(key) ?? null;
+  },
   set: async (key, val, mode, ttl) => {
     store.set(key, val);
     if (mode === 'EX' && typeof ttl === 'number') {
-      setTimeout(() => store.delete(key), ttl * 1000);
+      expiryMap.set(key, Date.now() + ttl * 1000);
     }
     return 'OK';
   },
   del: async (key) => {
     store.delete(key);
+    expiryMap.delete(key);
     return 1;
   },
-  on: () => {}
+  on: () => {},
 };
 
 if (process.env.NO_REDIS === 'true') {
-  console.log('Redis: Using in-memory mock (NO_REDIS=true)');
+  console.log('Redis: Using in-memory fallback (NO_REDIS=true)');
   redis = mockRedis;
 } else {
   redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
@@ -29,7 +37,7 @@ if (process.env.NO_REDIS === 'true') {
       if (times > 3) {
         if (!isFallback) {
           isFallback = true;
-          console.log('Redis: connection failed. Falling back to in-memory mock.');
+          console.log('Redis: connection failed — using in-memory fallback (no persistence)');
           Object.assign(redis, mockRedis);
         }
         return null;
@@ -41,11 +49,9 @@ if (process.env.NO_REDIS === 'true') {
     connectTimeout: 2000,
   });
 
-  redis.on('connect', () => console.log('Redis: connected'));
+  redis.on('connect', () => { isFallback = false; console.log('Redis: connected'); });
   redis.on('error', (err) => {
-    if (!isFallback) {
-      console.log('Redis error:', err.message);
-    }
+    if (!isFallback) console.log('Redis error:', err.message);
   });
 }
 

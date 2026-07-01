@@ -44,9 +44,6 @@ export default function MyReportsPage() {
   return (
     <DashboardShell>
       <div className="p-4 sm:p-6 space-y-6 max-w-4xl mx-auto bg-[#fcf9f8] min-h-screen text-[#121212]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-        <style dangerouslySetInnerHTML={{ __html: `
-          @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-        `}} />
         <h1 className="text-2xl font-extrabold tracking-tight text-[#121212]">My Academic Reports</h1>
 
         {loading ? (
@@ -106,20 +103,59 @@ export default function MyReportsPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {subjects.map(([name, data]) => (
-                          <tr key={name} className="border-t border-[#dcd9d9] hover:bg-[#fcf9f8]/50 transition-colors">
-                            <td className="px-3 py-2 font-bold text-[#121212]">{name}</td>
-                            <td className="text-center px-2 py-2 text-gray-600 font-semibold">{(data as { cat?: number }).cat ?? "—"}</td>
-                            <td className="text-center px-2 py-2 text-gray-600 font-semibold">{(data as { exam?: number }).exam ?? "—"}</td>
-                            <td className="text-center px-2 py-2 text-[#121212] font-bold">{data.total ?? "—"}</td>
-                            <td className="text-center px-2 py-2 text-[#121212] font-bold">{data.percentage !== undefined ? `${data.percentage.toFixed(1)}%` : "—"}</td>
-                            <td className="text-center px-2 py-2">
-                              {data.grade && (
-                                <span className="font-bold px-2 py-0.5 rounded border border-[#dcd9d9] bg-[#ffffff] text-[#121212]">{data.grade}</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
+                        {subjects.map(([name, subData]) => {
+                          const getSubjectDisplayData = (data: any) => {
+                            if (!data || typeof data !== "object") return { cat: "—", exam: "—", total: "—", percentage: "—", grade: "—" };
+
+                            if ("eu" in data || "pr" in data || "et" in data) {
+                              const euVal = parseFloat(data.eu) || 0;
+                              const prVal = parseFloat(data.pr) || 0;
+                              const etVal = parseFloat(data.et) || 0;
+                              
+                              const total = euVal + prVal + etVal;
+                              let grade = "F";
+                              if (total >= 80) grade = "A";
+                              else if (total >= 75) grade = "B";
+                              else if (total >= 70) grade = "C";
+                              else if (total >= 65) grade = "D";
+                              else if (total >= 50) grade = "E";
+                              else if (total >= 40) grade = "S";
+
+                              return {
+                                cat: `${(euVal + prVal).toFixed(1)} / 50`,
+                                exam: `${etVal.toFixed(1)} / 50`,
+                                total: total.toFixed(1),
+                                percentage: `${total.toFixed(0)}%`,
+                                grade
+                              };
+                            }
+
+                            return {
+                              cat: data.cat ?? "—",
+                              exam: data.exam ?? "—",
+                              total: data.total ?? "—",
+                              percentage: data.percentage !== undefined ? `${data.percentage.toFixed(1)}%` : "—",
+                              grade: data.grade ?? "—"
+                            };
+                          };
+
+                          const display = getSubjectDisplayData(subData);
+
+                          return (
+                            <tr key={name} className="border-t border-[#dcd9d9] hover:bg-[#fcf9f8]/50 transition-colors">
+                              <td className="px-3 py-2 font-bold text-[#121212]">{name}</td>
+                              <td className="text-center px-2 py-2 text-gray-600 font-semibold">{display.cat}</td>
+                              <td className="text-center px-2 py-2 text-gray-600 font-semibold">{display.exam}</td>
+                              <td className="text-center px-2 py-2 text-[#121212] font-bold">{display.total}</td>
+                              <td className="text-center px-2 py-2 text-[#121212] font-bold">{display.percentage}</td>
+                              <td className="text-center px-2 py-2">
+                                {display.grade && (
+                                  <span className="font-bold px-2 py-0.5 rounded border border-[#dcd9d9] bg-[#ffffff] text-[#121212]">{display.grade}</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

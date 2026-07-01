@@ -2,6 +2,7 @@ const prisma = require('../../config/database');
 const { paginate, paginatedResponse } = require('../../utils/helpers');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const attendanceSvc = require('../attendance/service');
 
 // ─── Campuses ───
 async function listCampuses(schoolId) {
@@ -161,7 +162,7 @@ async function deleteZoneAccessGrant(id, schoolId) {
 }
 
 // ─── Access Decisions (Core Loop) ───
-async function evaluateAccess(schoolId, data) {
+async function evaluateAccess(schoolId, data, operatorUserId) {
   const { deviceId, cardNumber, secureToken, nfcUid, direction = 'ENTRY' } = data;
 
   // Find gate device
@@ -326,6 +327,30 @@ async function evaluateAccess(schoolId, data) {
       occurred_at: occurredAt,
     },
   });
+
+  // Auto-mark attendance when a student enters or exits through a gate
+  if (operatorUserId && student) {
+    (async () => {
+      try {
+        const now = new Date();
+        const kigaliDateStr = now.toLocaleDateString('en-ZA', { timeZone: 'Africa/Kigali' });
+        const today = new Date(kigaliDateStr.replace(/\//g, '-'));
+        today.setUTCHours(0, 0, 0, 0);
+
+        const existingAtt = await prisma.attendance.findUnique({
+          where: { student_id_date: { student_id: student.id, date: today } },
+        });
+
+        if (direction === 'ENTRY' && !existingAtt) {
+          await attendanceSvc.scanAttendance(card.card_number, operatorUserId, { type: 'IN' });
+        } else if (direction === 'EXIT' && existingAtt?.check_in_time && !existingAtt.check_out_time) {
+          await attendanceSvc.scanAttendance(card.card_number, operatorUserId, { type: 'OUT' });
+        }
+      } catch (e) {
+        console.error('[gate-access] attendance sync error:', e.message);
+      }
+    })();
+  }
 
   return {
     decision: 'GRANTED',

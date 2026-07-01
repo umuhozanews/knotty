@@ -10,13 +10,16 @@ async function listAcademicTerms(schoolId) {
 }
 
 async function createAcademicTerm(schoolId, data) {
+  const start_date = new Date(data.start_date);
+  const end_date = new Date(data.end_date);
+  if (isNaN(start_date.getTime()) || isNaN(end_date.getTime())) {
+    throw Object.assign(new Error('Invalid start_date or end_date'), { status: 400 });
+  }
+  if (end_date <= start_date) {
+    throw Object.assign(new Error('end_date must be after start_date'), { status: 400 });
+  }
   return prisma.academicTerm.create({
-    data: {
-      school_id: schoolId,
-      name: data.name,
-      start_date: new Date(data.start_date),
-      end_date: new Date(data.end_date),
-    },
+    data: { school_id: schoolId, name: data.name, start_date, end_date },
   });
 }
 
@@ -352,6 +355,7 @@ async function createExam(schoolId, data) {
       academic_term_id: data.academic_term_id,
       exam_date: new Date(data.exam_date),
       max_score: Number(data.max_score || 100),
+      category: data.category || 'EU',
     },
   });
 }
@@ -464,14 +468,13 @@ async function recordExamResults(schoolId, actorUserId, examId, results) {
         throw Object.assign(new Error(`Student ${res.student_id} not found.`), { status: 404 });
       }
 
-      const isClassTeacher = student.class && student.class.class_teacher_id === actorUserId;
       const teachesSubjectInClass = assignments.some(a => {
         const isSameClass = a.class_id === student.class_id;
         const isSameSubject = a.subject && a.subject.toLowerCase() === examSubjectName;
         return isSameClass && isSameSubject;
       });
 
-      if (!isClassTeacher && !teachesSubjectInClass) {
+      if (!teachesSubjectInClass) {
         throw Object.assign(new Error(`Access denied: You do not teach ${subject ? subject.name : 'this subject'} in class ${student.class ? student.class.name : ''}.`), { status: 403 });
       }
     }
@@ -555,10 +558,20 @@ async function approveExamResult(schoolId, actorUserId, resultId) {
   if (actorUser && actorUser.role === 'TEACHER') {
     const student = await prisma.student.findFirst({
       where: { id: result.student_id, school_id: schoolId },
-      include: { class: true }
     });
-    if (!student || !student.class || student.class.class_teacher_id !== actorUserId) {
-      throw Object.assign(new Error('Access denied: Only the Class Teacher is authorized to approve student marks.'), { status: 403 });
+    if (!student) throw Object.assign(new Error('Student not found'), { status: 404 });
+
+    const teacher = await prisma.teacher.findFirst({
+      where: { user_id: actorUserId, school_id: schoolId },
+    });
+    if (!teacher || !Array.isArray(teacher.subjects_taught)) {
+      throw Object.assign(new Error('Access denied: No teaching assignments found.'), { status: 403 });
+    }
+    const teachesInClass = teacher.subjects_taught.some(
+      (a) => a.class_id === student.class_id
+    );
+    if (!teachesInClass) {
+      throw Object.assign(new Error('Access denied: You do not teach in this student\'s class.'), { status: 403 });
     }
   }
 
@@ -583,7 +596,16 @@ async function approveExamResult(schoolId, actorUserId, resultId) {
   return updated;
 }
 
+async function listSubjects(schoolId) {
+  return prisma.subject.findMany({
+    where: { school_id: schoolId },
+    orderBy: { name: 'asc' },
+  });
+}
+
 module.exports = {
+  // Subjects
+  listSubjects,
   // Terms
   listAcademicTerms,
   createAcademicTerm,

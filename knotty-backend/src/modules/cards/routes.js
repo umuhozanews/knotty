@@ -11,9 +11,16 @@ router.post('/issue/:studentId', authenticate, authorize('ADMIN', 'TEACHER'), ct
 router.put('/:id/freeze', authenticate, authorize('ADMIN'), ctrl.freeze);
 router.put('/:id/unfreeze', authenticate, authorize('ADMIN'), ctrl.unfreeze);
 router.put('/:id/nfc', authenticate, authorize('ADMIN'), ctrl.linkNFC);
-router.post('/:id/top-up', authenticate, authorize('ADMIN', 'PARENT'), ctrl.topUp);
+router.post('/:id/top-up', authenticate, authorize('ADMIN', 'BURSAR'), ctrl.topUp);
 router.post('/:id/top-up-cash', authenticate, authorize('ADMIN', 'BURSAR'), ctrl.cashTopUp);
 router.get('/:id/transactions', authenticate, authorize('ADMIN', 'BURSAR', 'PARENT'), ctrl.transactions);
-router.post('/webhook/momo/:referenceId', ctrl.momoWebhook);
+// Webhook — validated by shared secret header set in MTN MoMo developer portal callback config
+router.post('/webhook/momo/:referenceId', (req, res, next) => {
+  const secret = process.env.MOMO_WEBHOOK_SECRET;
+  if (!secret) return res.status(401).json({ success: false, message: 'Webhook not configured' });
+  const provided = req.headers['x-callback-secret'] || req.headers['x-mtn-signature'];
+  if (provided !== secret) return res.status(401).json({ success: false, message: 'Webhook secret mismatch' });
+  next();
+}, ctrl.momoWebhook);
 
 module.exports = router;

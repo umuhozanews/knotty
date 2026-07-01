@@ -14,9 +14,10 @@ async function redisSet(key, value, ttl) {
   try { await redis.set(key, value, 'EX', ttl); } catch { /* no-op */ }
 }
 
+const REDIS_ERROR = '__redis_error__';
 async function redisGet(key) {
-  if (!redis) return null;
-  try { return await redis.get(key); } catch { return null; }
+  if (!redis) return REDIS_ERROR;
+  try { return await redis.get(key); } catch { return REDIS_ERROR; }
 }
 
 async function redisDel(key) {
@@ -71,8 +72,10 @@ async function refreshTokens(token) {
     throw Object.assign(new Error('Invalid refresh token'), { status: 401 });
   }
 
-  // When Redis is available, validate stored token; otherwise trust JWT signature
   const stored = await redisGet(`refresh:${payload.userId}`);
+  if (stored === REDIS_ERROR) {
+    throw Object.assign(new Error('Service temporarily unavailable, please try again'), { status: 503 });
+  }
   if (stored !== null && stored !== token) {
     throw Object.assign(new Error('Refresh token revoked'), { status: 401 });
   }

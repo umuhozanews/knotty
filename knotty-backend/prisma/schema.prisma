@@ -139,21 +139,22 @@ model School {
   levels         Level[]
   classes        Class[]
   attendances    Attendance[]
-  fee_payments   FeePayment[]
-  canteen_txns   CanteenTransaction[]
-  wallet_txns    WalletTransaction[]
-  health_records HealthRecord[]
-  disciplines    DisciplineRecord[]
-  achievements   Achievement[]
-  subjects       Subject[]
-  reports        AcademicReport[]
-  notifications  Notification[]
-  teachers       Teacher[]
-  materials      Material[]
-  books          Book[]
-  book_copies    BookCopy[]
-  borrow_records BorrowRecord[]
-  reservations   Reservation[]
+  fee_payments     FeePayment[]
+  canteen_txns     CanteenTransaction[]
+  canteen_products CanteenProduct[]
+  wallet_txns      WalletTransaction[]
+  health_records   HealthRecord[]
+  disciplines      DisciplineRecord[]
+  achievements     Achievement[]
+  subjects         Subject[]
+  reports          AcademicReport[]
+  notifications    Notification[]
+  teachers         Teacher[]
+  materials        Material[]
+  books            Book[]
+  book_copies      BookCopy[]
+  borrow_records   BorrowRecord[]
+  reservations     Reservation[]
 
   // New models added for alignment
   campuses              Campus[]
@@ -411,6 +412,22 @@ model CanteenTransaction {
 
   @@index([student_id])
   @@index([school_id, transaction_time])
+}
+
+model CanteenProduct {
+  id         String   @id @default(uuid())
+  school_id  String
+  name       String
+  price      Int
+  category   String   @default("Other")
+  emoji      String   @default("🍽️")
+  photo_url  String?
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+
+  school School @relation(fields: [school_id], references: [id])
+
+  @@index([school_id])
 }
 
 model WalletTransaction {

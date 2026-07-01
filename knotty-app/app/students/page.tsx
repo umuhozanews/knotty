@@ -9,6 +9,7 @@ import DashboardShell from "@/components/DashboardShell";
 import { students, structure, cards, health, Level, Class, Student } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
+import { isDemoMode, DEMO_STUDENTS } from "@/lib/demo";
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 function Avatar({ name, photo, size = 9 }: { name: string; photo?: string | null; size?: number }) {
@@ -51,17 +52,20 @@ const BLANK: StudentForm = {
 };
 
 function StudentModal({
-  existing, levels, classes, onClose, onSuccess,
+  existing, levels, classes, onClose, onSuccess, defaultLevelId, defaultClassId,
 }: {
   existing?: Student | null;
   levels: Level[];
   classes: Class[];
   onClose: () => void;
   onSuccess: () => void;
+  defaultLevelId?: string;
+  defaultClassId?: string;
 }) {
   const { user } = useAuth();
   const { show } = useToast();
   const isEdit = !!existing;
+  const [createdCredentials, setCreatedCredentials] = useState<{ name: string; email: string; password: string } | null>(null);
 
   const [form, setForm] = useState<StudentForm>(() => {
     if (existing) {
@@ -79,7 +83,7 @@ function StudentModal({
         profile_photo: existing.user.profile_photo ?? "",
       };
     }
-    return { ...BLANK };
+    return { ...BLANK, level_id: defaultLevelId ?? "", class_id: defaultClassId ?? "" };
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -181,7 +185,13 @@ function StudentModal({
           });
         }
 
-        show(`${form.first_name} ${form.last_name} enrolled & card issued`, "success");
+        setCreatedCredentials({
+          name: `${form.first_name} ${form.last_name}`,
+          email: form.email,
+          password: form.password || "Knotty@2024",
+        });
+        onSuccess();
+        return; // stay open to show credentials
       }
       onSuccess();
       onClose();
@@ -190,6 +200,35 @@ function StudentModal({
     } finally {
       setLoading(false);
     }
+  }
+
+  if (createdCredentials) {
+    return (
+      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6 text-center">
+          <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+            <User size={24} className="text-green-600" />
+          </div>
+          <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-1">Student Enrolled!</h3>
+          <p className="text-sm text-gray-400 mb-5">{createdCredentials.name} has been enrolled and their card was issued.</p>
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 text-left space-y-3 mb-5">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Login Credentials</p>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-gray-500">Email</span>
+              <span className="text-sm font-mono font-medium text-gray-800 dark:text-gray-100">{createdCredentials.email}</span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-gray-500">Password</span>
+              <span className="text-sm font-mono font-bold text-blue-600">{createdCredentials.password}</span>
+            </div>
+          </div>
+          <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mb-5">Share these credentials with the student. They can change their password after first login.</p>
+          <button onClick={onClose} className="w-full py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition">
+            Done
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -504,7 +543,24 @@ export default function StudentsPage() {
         const firstClass = clss.data.find((c) => c.level.id === sorted[0].id);
         if (firstClass) setSelectedClass(firstClass.id);
       }
-    }).catch(console.error);
+    }).catch((err) => {
+      console.error(err);
+      if (isDemoMode()) {
+        const demoLevels = [
+          { id: "l1", name: "Senior 5", description: "Senior 5 level" },
+          { id: "l2", name: "Senior 6", description: "Senior 6 level" },
+        ];
+        const demoClasses = [
+          { id: "c1", name: "A", level: { id: "l1", name: "Senior 5" }, class_teacher_id: "demo-teacher" },
+          { id: "c2", name: "B", level: { id: "l1", name: "Senior 5" }, class_teacher_id: "demo-teacher" },
+          { id: "c3", name: "Science", level: { id: "l2", name: "Senior 6" }, class_teacher_id: "demo-teacher" },
+        ];
+        setLevels(demoLevels);
+        setClasses(demoClasses);
+        setSelectedLevel("l1");
+        setSelectedClass("c1");
+      }
+    });
   }, [user?.id, authLoading]);
 
   // Load students for selected class
@@ -514,7 +570,16 @@ export default function StudentsPage() {
     try {
       const res = await students.list({ classId, limit: 100, search: search || undefined });
       setStudentsByClass((prev) => ({ ...prev, [classId]: res.data }));
-    } catch { /* ignore */ }
+    } catch (err) {
+      if (isDemoMode()) {
+        const filtered = DEMO_STUDENTS.filter((s) => {
+          const matchClass = s.class?.id === classId;
+          const matchSearch = !search || `${s.user.first_name} ${s.user.last_name}`.toLowerCase().includes(search.toLowerCase());
+          return matchClass && matchSearch;
+        });
+        setStudentsByClass((prev) => ({ ...prev, [classId]: filtered }));
+      }
+    }
     finally { setLoading(false); }
   }, [search]);
 
@@ -526,7 +591,9 @@ export default function StudentsPage() {
   const currentClassStudents = selectedClass ? (studentsByClass[selectedClass] ?? []) : [];
   const currentLevelClasses = selectedLevel ? classes.filter((c) => c.level.id === selectedLevel) : [];
   const selectedClassObj = classes.find((c) => c.id === selectedClass);
-  const isClassTeacher = !selectedClassObj || user?.role !== 'TEACHER' || selectedClassObj.class_teacher_id === user?.id;
+  // Admins can always manage; teachers can manage when a class is selected (backend enforces fine-grained permission)
+  const canManageStudents = !!selectedClassObj && (user?.role === 'ADMIN' || user?.role === 'TEACHER');
+  const isClassTeacher = canManageStudents; // kept for prop compatibility
   const totalSelected = classes.reduce((acc, c) => {
     const n = studentsByClass[c.id]?.length ?? (c._count?.students ?? 0);
     return acc + n;
@@ -562,9 +629,22 @@ export default function StudentsPage() {
 
   return (
     <DashboardShell>
-      <div className="flex h-[calc(100vh-4rem)]">
-        {/* ── Left Sidebar ─────────────────────────────────────────── */}
-        <div className="w-56 flex-shrink-0 border-r border-gray-100 dark:border-gray-800 overflow-y-auto">
+      <div className="flex flex-col md:flex-row h-[calc(100dvh-4rem)]">
+        {/* ── Mobile class picker ───────────────────────────────────── */}
+        <div className="md:hidden flex overflow-x-auto gap-2 p-3 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
+          {classes.map((cls) => (
+            <button
+              key={cls.id}
+              onClick={() => { setSelectedClass(cls.id); setSelectedLevel(cls.level.id); }}
+              className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition ${selectedClass === cls.id ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600"}`}
+            >
+              {cls.level.name} {cls.name}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Left Sidebar (desktop only) ──────────────────────────── */}
+        <div className="hidden md:block w-56 flex-shrink-0 border-r border-gray-100 dark:border-gray-800 overflow-y-auto">
           <div className="p-4">
             <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Classes</h2>
             {levels.map((level) => {
@@ -605,34 +685,34 @@ export default function StudentsPage() {
         </div>
 
         {/* ── Main Content ──────────────────────────────────────────── */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
           {/* Toolbar */}
-          <div className="flex items-center gap-3 p-4 border-b border-gray-100 dark:border-gray-800">
-            <div className="flex-1">
+          <div className="flex items-center gap-2 p-3 md:p-4 border-b border-gray-100 dark:border-gray-800">
+            <div className="flex-1 min-w-0">
               {selectedClass && (
                 <div>
-                  <h1 className="text-base font-bold text-gray-800 dark:text-gray-100">
+                  <h1 className="text-sm md:text-base font-bold text-gray-800 dark:text-gray-100 truncate">
                     {levels.find((l) => l.id === selectedLevel)?.name} — Class {classes.find((c) => c.id === selectedClass)?.name}
                   </h1>
                   <p className="text-xs text-gray-400">{currentClassStudents.length} students</p>
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800 rounded-xl px-3 py-2 min-w-48">
-              <Search size={13} className="text-gray-400" />
+            <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-gray-800 rounded-xl px-2.5 py-1.5 w-28 sm:min-w-40">
+              <Search size={13} className="text-gray-400 shrink-0" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search students…"
-                className="bg-transparent text-sm outline-none flex-1 text-gray-700 dark:text-gray-200"
+                placeholder="Search…"
+                className="bg-transparent text-xs md:text-sm outline-none flex-1 text-gray-700 dark:text-gray-200 min-w-0"
               />
             </div>
             {isClassTeacher && (
               <button
                 onClick={() => { setEditStudent(null); setShowModal(true); }}
-                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition"
+                className="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-1.5 rounded-xl text-xs md:text-sm font-medium hover:bg-blue-700 transition flex-shrink-0"
               >
-                <Plus size={15} /> Add Student
+                <Plus size={14} /> <span className="hidden sm:inline">Add Student</span><span className="sm:hidden">Add</span>
               </button>
             )}
           </div>
@@ -698,6 +778,8 @@ export default function StudentsPage() {
           classes={classes}
           onClose={() => { setShowModal(false); setEditStudent(null); }}
           onSuccess={() => loadStudents(selectedClass)}
+          defaultLevelId={!editStudent ? selectedLevel ?? undefined : undefined}
+          defaultClassId={!editStudent ? selectedClass ?? undefined : undefined}
         />
       )}
       {deleteTarget && (

@@ -1,177 +1,232 @@
 "use client";
-import { useEffect, useState } from "react";
-import { useAuth } from "@/context/AuthContext";
-import { library, students, LibraryBook, LibraryBookCopy, LibraryBorrowRecord, Student } from "@/lib/api";
-import DashboardShell from "@/components/DashboardShell";
+import { useEffect, useState, useCallback } from "react";
 import {
-  Loader2, Book, Plus, X, Search, AlertCircle, CheckCircle, Calendar, Bookmark, BookmarkCheck,
-  TrendingUp, TrendingDown, BookOpen, AlertTriangle, HelpCircle, Bell, User, Users, UserPlus, DollarSign, Filter
+  Book, BookOpen, Plus, X, Search, AlertTriangle, CheckCircle,
+  Loader2, CreditCard, RotateCcw, BookMarked, MapPin, Tag, Clock,
+  Wifi, WifiOff, Users,
 } from "lucide-react";
+import DashboardShell from "@/components/DashboardShell";
+import { library, LibraryBorrowRecord } from "@/lib/api";
+import { useNFC } from "@/hooks/useNFC";
 import { useToast } from "@/context/ToastContext";
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
-} from "recharts";
+import { useAuth } from "@/context/AuthContext";
 
-const RECOMMENDATIONS_TOP = [
-  { title: "Magnolia Palace", author: "Fiona Davis", category: "Historical Fiction" },
-  { title: "The Midnight Library", author: "Matt Haig", category: "Fantasy" },
-  { title: "The Great Gatsby", author: "F. Scott Fitzgerald", category: "Classics" },
-  { title: "Atomic Habits", author: "James Clear", category: "Self-Help" },
+const CATEGORIES = [
+  "Mathematics", "Science", "Literature", "History", "Geography",
+  "Religion", "French", "English", "Kinyarwanda", "Biology",
+  "Chemistry", "Physics", "Computer Science", "Art", "Other",
 ];
 
-const RECOMMENDATIONS_NEW = [
-  { title: "Iron Flame", author: "Rebecca Yarros", category: "Fantasy" },
-  { title: "The Covenant of Water", author: "Abraham Verghese", category: "Fiction" },
-  { title: "Happy Place", author: "Emily Henry", category: "Romance" },
-  { title: "A Court of Thorns and Roses", author: "Sarah J. Maas", category: "Fantasy" },
-];
-
-const CHECKOUT_CHART_DATA = [
-  { day: "Mon", Borrowed: 45, Returned: 30 },
-  { day: "Tue", Borrowed: 60, Returned: 45 },
-  { day: "Wed", Borrowed: 85, Returned: 55 },
-  { day: "Thu", Borrowed: 50, Returned: 65 },
-  { day: "Fri", Borrowed: 70, Returned: 40 },
-  { day: "Sat", Borrowed: 35, Returned: 20 },
-  { day: "Sun", Borrowed: 15, Returned: 10 },
-];
+type Tab = "home" | "add-book" | "lend-return";
+type StudentInfo = { id: string; name: string; studentClass: string; card_number: string };
+type BookOption = { id: string; title: string; author?: string; isbn?: string; location?: string; available_copies?: number };
 
 export default function LibraryPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { loading: authLoading } = useAuth();
   const { toast } = useToast();
+  const { startListen, stopListen, listening, isSupported } = useNFC();
 
-  const [activeTab, setActiveTab] = useState<"dashboard" | "catalog" | "borrows">("dashboard");
-  const [books, setBooks] = useState<LibraryBook[]>([]);
-  const [borrows, setBorrows] = useState<LibraryBorrowRecord[]>([]);
-  const [stats, setStats] = useState({
-    borrowedBooks: 2405,
-    returnedBooks: 783,
-    overdueBooks: 45,
-    missingBooks: 12,
-    totalBooks: 32345,
-    visitors: 1504,
-    newMembers: 34,
-    pendingFees: 765,
-    borrowedTrend: "+23%",
-    returnedTrend: "-14%",
-    overdueTrend: "+11%",
-    missingTrend: "+11%",
-    totalTrend: "+11%",
-    visitorsTrend: "+3%",
-    newMembersTrend: "-10%",
-    pendingFeesTrend: "+56%"
-  });
+  const [tab, setTab] = useState<Tab>("home");
 
+  /* ── Stats & overview ──────────────────────────────────────── */
+  const [stats, setStats] = useState({ totalBooks: 0, activeMembers: 0, overdueBooks: 0, pendingFees: 0 });
+  const [recentBorrows, setRecentBorrows] = useState<LibraryBorrowRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [globalSearch, setGlobalSearch] = useState("");
-  const [borrowFilter, setBorrowFilter] = useState<"active" | "returned" | "overdue">("active");
-  const [recSubTab, setRecSubTab] = useState<"top" | "new">("top");
-  const [dateFilter, setDateFilter] = useState("Last 6 months");
 
-  // Add Book Modal
-  const [showAddBookModal, setShowAddBookModal] = useState(false);
+  /* ── Add Book ──────────────────────────────────────────────── */
+  const [bookForm, setBookForm] = useState({
+    book_number: "", title: "", author: "", category: "", location: "", total_copies: 1,
+  });
   const [savingBook, setSavingBook] = useState(false);
-  const [bookForm, setBookForm] = useState({ title: "", author: "", isbn: "", category: "", total_copies: 1, copy_tags: "" });
+  const [bookSaved, setBookSaved] = useState(false);
 
-  // Borrow Modal
-  const [showBorrowModal, setShowBorrowModal] = useState(false);
-  const [savingBorrow, setSavingBorrow] = useState(false);
-  const [studentSearch, setStudentSearch] = useState("");
-  const [searchResults, setSearchResults] = useState<Student[]>([]);
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
-  const [searchingStudent, setSearchingStudent] = useState(false);
-  const [borrowForm, setBorrowForm] = useState({ copy_tag: "", due_days: 14 });
+  /* ── Return flow (look up student by card) ─────────────────── */
+  const [cardInput, setCardInput] = useState("");
+  const [loadingStudent, setLoadingStudent] = useState(false);
+  const [student, setStudent] = useState<StudentInfo | null>(null);
+  const [studentBorrows, setStudentBorrows] = useState<LibraryBorrowRecord[]>([]);
+  const [returning, setReturning] = useState<string | null>(null);
 
-  // Return Modal
-  const [showReturnModal, setShowReturnModal] = useState(false);
-  const [savingReturn, setSavingReturn] = useState(false);
-  const [returnForm, setReturnForm] = useState({ copy_tag: "", fine_rate_per_day: 200 });
-  const [returnResult, setReturnResult] = useState<{ fine_amount: number; fine_charged_to_wallet: boolean } | null>(null);
+  /* ── Lend modal (standalone, no prior lookup needed) ───────── */
+  const [showLendModal, setShowLendModal] = useState(false);
+  const [modalCardInput, setModalCardInput] = useState("");
+  const [modalStudent, setModalStudent] = useState<StudentInfo | null>(null);
+  const [lookingUpModalStudent, setLookingUpModalStudent] = useState(false);
 
-  // Pagination
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  /* ── Shared book search (used by both lend-in-panel & modal) ─ */
+  const [showLendForm, setShowLendForm] = useState(false);
+  const [bookSearch, setBookSearch] = useState("");
+  const [bookResults, setBookResults] = useState<BookOption[]>([]);
+  const [selectedBook, setSelectedBook] = useState<BookOption | null>(null);
+  const [searchingBook, setSearchingBook] = useState(false);
+  const [dueDays, setDueDays] = useState(7);
+  const [lending, setLending] = useState(false);
 
-  useEffect(() => {
-    if (authLoading) return;
-    loadData();
-  }, [authLoading, activeTab, borrowFilter, page]);
-
-  async function loadData() {
+  /* ── Data load ─────────────────────────────────────────────── */
+  const loadHome = useCallback(async () => {
     setLoading(true);
     try {
-      // Load stats & borrows history for dashboard/activity components
-      const statsRes = await library.stats().catch(() => null);
-      if (statsRes && statsRes.success) {
-        setStats(statsRes.data);
-      }
-
-      // Always load borrows to show in recent activities/logs
-      const borrowsRes = await library.schoolBorrows(
-        activeTab === "borrows" ? borrowFilter : undefined,
-        activeTab === "borrows" ? page : 1,
-        activeTab === "borrows" ? 15 : 6
-      );
-      setBorrows(borrowsRes.data);
-
-      if (activeTab === "catalog") {
-        const res = await library.books({ search: searchQuery, page, limit: 15 });
-        setBooks(res.data);
-        if (res.pagination) {
-          setTotalPages(res.pagination.pages);
-        }
-      }
+      const [statsRes, borrowsRes] = await Promise.all([
+        library.stats().catch(() => null),
+        library.schoolBorrows({ status: "active", limit: 50 }).catch(() => ({ data: [] })),
+      ]);
+      if (statsRes?.data) setStats(s => ({ ...s, ...statsRes.data }));
+      setRecentBorrows(borrowsRes.data);
     } catch (err) {
       console.error(err);
-      toast(err instanceof Error ? err.message : "Failed to load library data", "error");
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  async function handleSearch(e: React.FormEvent) {
-    e.preventDefault();
-    setPage(1);
-    loadData();
-  }
+  useEffect(() => { if (!authLoading) loadHome(); }, [authLoading, loadHome]);
 
-  async function searchStudents(q: string) {
-    if (!q.trim()) { setSearchResults([]); return; }
-    setSearchingStudent(true);
+  /* ── Return-tab card lookup ────────────────────────────────── */
+  async function lookupCard(query: string) {
+    if (!query.trim()) return;
+    setLoadingStudent(true);
+    setStudent(null);
+    setStudentBorrows([]);
+    setShowLendForm(false);
     try {
-      const res = await students.list({ search: q, limit: 6 });
-      setSearchResults(res.data);
+      const res = await library.lookupStudent(query.trim());
+      const s = res.data;
+      setStudent({ id: s.id, name: s.name, studentClass: s.class, card_number: s.card_number ?? query.trim() });
+      const borrows = await library.studentHistory(s.id, 1, 30).catch(() => ({ data: [] }));
+      setStudentBorrows(borrows.data.filter((b: LibraryBorrowRecord) => !b.returned_at));
     } catch (err) {
-      console.error(err);
+      toast(err instanceof Error ? err.message : "Student not found", "error");
     } finally {
-      setSearchingStudent(false);
+      setLoadingStudent(false);
     }
   }
 
+  function startNFC() {
+    if (!isSupported) return;
+    startListen((result) => { stopListen(); setCardInput(result.value); lookupCard(result.value); });
+  }
+
+  /* ── Modal student lookup ──────────────────────────────────── */
+  async function lookupModalStudent(query: string) {
+    if (!query.trim()) return;
+    setLookingUpModalStudent(true);
+    setModalStudent(null);
+    setSelectedBook(null);
+    setBookSearch("");
+    setBookResults([]);
+    try {
+      const res = await library.lookupStudent(query.trim());
+      const s = res.data;
+      setModalStudent({ id: s.id, name: s.name, studentClass: s.class, card_number: s.card_number ?? query.trim() });
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Student not found", "error");
+    } finally {
+      setLookingUpModalStudent(false);
+    }
+  }
+
+  function openLendModal() {
+    setShowLendModal(true);
+    setModalCardInput("");
+    setModalStudent(null);
+    setSelectedBook(null);
+    setBookSearch("");
+    setBookResults([]);
+    setDueDays(7);
+  }
+
+  /* ── Return ────────────────────────────────────────────────── */
+  async function handleReturn(borrowId: string) {
+    setReturning(borrowId);
+    try {
+      const res = await library.returnBook({ borrow_id: borrowId });
+      const fine = res.data.fine_amount;
+      toast(fine > 0
+        ? `Returned — fine ${fine.toLocaleString()} RWF ${res.data.fine_charged_to_wallet ? "deducted from card" : "(settle manually)"}`
+        : "Book returned successfully!", "success");
+      if (student?.id) {
+        const borrows = await library.studentHistory(student.id, 1, 30).catch(() => ({ data: [] }));
+        setStudentBorrows(borrows.data.filter((b: LibraryBorrowRecord) => !b.returned_at));
+      }
+      setStats(s => ({ ...s, activeMembers: Math.max(0, s.activeMembers - 1) }));
+      setRecentBorrows(prev => prev.filter(b => b.id !== borrowId));
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Return failed", "error");
+    } finally {
+      setReturning(null);
+    }
+  }
+
+  /* ── Book search ───────────────────────────────────────────── */
+  async function searchBooks(q: string) {
+    if (!q.trim()) { setBookResults([]); return; }
+    setSearchingBook(true);
+    try {
+      const res = await library.books({ search: q, limit: 8 });
+      setBookResults(res.data as unknown as BookOption[]);
+    } finally {
+      setSearchingBook(false);
+    }
+  }
+
+  /* ── Lend (panel, used from return-tab) ────────────────────── */
+  async function handleLend() {
+    if (!student || !selectedBook) return;
+    setLending(true);
+    try {
+      await library.borrowBook({ book_id: selectedBook.id, student_id: student.id, due_days: dueDays });
+      toast(`"${selectedBook.title}" lent to ${student.name}. Due in ${dueDays} days.`, "success");
+      setShowLendForm(false);
+      setSelectedBook(null);
+      setBookSearch("");
+      setBookResults([]);
+      const borrows = await library.studentHistory(student.id, 1, 30).catch(() => ({ data: [] }));
+      setStudentBorrows(borrows.data.filter((b: LibraryBorrowRecord) => !b.returned_at));
+      setStats(s => ({ ...s, activeMembers: s.activeMembers + 1 }));
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Lending failed", "error");
+    } finally {
+      setLending(false);
+    }
+  }
+
+  /* ── Lend (modal) ──────────────────────────────────────────── */
+  async function handleModalLend() {
+    if (!modalStudent || !selectedBook) return;
+    setLending(true);
+    try {
+      await library.borrowBook({ book_id: selectedBook.id, student_id: modalStudent.id, due_days: dueDays });
+      toast(`"${selectedBook.title}" lent to ${modalStudent.name}. Due in ${dueDays} days.`, "success");
+      setShowLendModal(false);
+      setStats(s => ({ ...s, activeMembers: s.activeMembers + 1 }));
+      // Refresh overview list
+      library.schoolBorrows({ status: "active", limit: 50 }).then(r => setRecentBorrows(r.data)).catch(() => {});
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Lending failed", "error");
+    } finally {
+      setLending(false);
+    }
+  }
+
+  /* ── Save book ─────────────────────────────────────────────── */
   async function handleSaveBook(e: React.FormEvent) {
     e.preventDefault();
-    if (!bookForm.title || !bookForm.author) return;
+    if (!bookForm.title || !bookForm.book_number) return;
     setSavingBook(true);
     try {
-      const copyTagsList = bookForm.copy_tags
-        .split(",")
-        .map(t => t.trim())
-        .filter(t => t.length > 0);
-
       await library.createBook({
         title: bookForm.title,
-        author: bookForm.author,
-        isbn: bookForm.isbn || undefined,
+        author: bookForm.author || "Unknown",
+        isbn: bookForm.book_number,
         category: bookForm.category || undefined,
-        total_copies: Number(bookForm.total_copies),
-        copy_tags: copyTagsList.length > 0 ? copyTagsList : undefined,
+        total_copies: bookForm.total_copies,
+        location: bookForm.location || undefined,
       });
-
-      toast("Book registered in catalog", "success");
-      setShowAddBookModal(false);
-      setBookForm({ title: "", author: "", isbn: "", category: "", total_copies: 1, copy_tags: "" });
-      loadData();
+      setBookSaved(true);
+      const addedCopies = bookForm.total_copies;
+      setBookForm({ book_number: "", title: "", author: "", category: "", location: "", total_copies: 1 });
+      setStats(s => ({ ...s, totalBooks: s.totalBooks + addedCopies }));
+      setTimeout(() => setBookSaved(false), 4000);
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to save book", "error");
     } finally {
@@ -179,897 +234,588 @@ export default function LibraryPage() {
     }
   }
 
-  async function handleSaveBorrow(e: React.FormEvent) {
-    e.preventDefault();
-    if (!selectedStudent || !borrowForm.copy_tag) return;
-    setSavingBorrow(true);
-    try {
-      await library.borrowBook({
-        copy_tag: borrowForm.copy_tag,
-        student_code: selectedStudent.student_code,
-        due_days: Number(borrowForm.due_days),
-      });
+  const now = new Date();
+  const overdueItems = recentBorrows.filter(b => new Date(b.due_at) < now);
 
-      toast("Book checked out successfully", "success");
-      setShowBorrowModal(false);
-      setSelectedStudent(null);
-      setStudentSearch("");
-      setBorrowForm({ copy_tag: "", due_days: 14 });
-      loadData();
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to check out book", "error");
-    } finally {
-      setSavingBorrow(false);
-    }
+  /* ── Shared book search UI (used in both lend contexts) ─────── */
+  function BookSearchUI({ onConfirm }: { onConfirm: () => void }) {
+    return !selectedBook ? (
+      <div>
+        <div className="relative">
+          <Search size={13} className="absolute left-3.5 top-[11px]" style={{ color: "#999" }} />
+          <input
+            value={bookSearch}
+            onChange={e => { setBookSearch(e.target.value); searchBooks(e.target.value); }}
+            placeholder="Search book by title, number, or category…"
+            autoFocus
+            className="w-full border border-gray-200 rounded-2xl pl-9 pr-3 py-2.5 text-sm outline-none"
+          />
+          {searchingBook && <Loader2 size={13} className="animate-spin absolute right-3.5 top-[11px] text-gray-400" />}
+        </div>
+        {bookResults.length > 0 && (
+          <div className="mt-1.5 border border-gray-100 rounded-2xl overflow-hidden bg-white shadow-sm">
+            {bookResults.map(bk => {
+              const avail = bk.available_copies ?? 0;
+              return (
+                <button key={bk.id} disabled={avail === 0}
+                  onClick={() => { setSelectedBook(bk); setBookResults([]); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 text-left border-b border-gray-50 last:border-0 transition disabled:opacity-40 hover:bg-gray-50"
+                >
+                  <div className="w-7 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "#FFF3EC" }}>
+                    <Book size={13} style={{ color: "#FF7A22" }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold truncate" style={{ color: "#121212" }}>{bk.title}</p>
+                    <p className="text-[10px] text-gray-400">{bk.isbn ?? ""}{bk.location ? ` · ${bk.location}` : ""}</p>
+                  </div>
+                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${avail > 0 ? "bg-green-50 text-green-600" : "bg-red-50 text-red-400"}`}>
+                    {avail} avail
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    ) : (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2.5 p-3 rounded-2xl" style={{ background: "#FFF3EC" }}>
+          <div className="w-8 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "#FF7A22" }}>
+            <Book size={14} className="text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold" style={{ color: "#121212" }}>{selectedBook.title}</p>
+            {selectedBook.location && (
+              <p className="text-[10px] flex items-center gap-0.5" style={{ color: "#666" }}>
+                <MapPin size={9} /> {selectedBook.location}
+              </p>
+            )}
+          </div>
+          <button onClick={() => setSelectedBook(null)}><X size={13} style={{ color: "#999" }} /></button>
+        </div>
+
+        <div>
+          <label className="text-[10px] font-bold uppercase tracking-wider block mb-2" style={{ color: "#666" }}>Return deadline</label>
+          <div className="flex gap-2">
+            {[7, 14, 21].map(d => (
+              <button key={d} type="button" onClick={() => setDueDays(d)}
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold transition"
+                style={dueDays === d ? { background: "#FF7A22", color: "#fff" } : { background: "#F5F5F5", color: "#666" }}>
+                {d} days
+              </button>
+            ))}
+            <input type="number" min={1} max={60} value={dueDays}
+              onChange={e => setDueDays(Math.max(1, Number(e.target.value)))}
+              className="w-16 text-center border border-gray-200 rounded-xl text-xs outline-none py-1" title="Custom days" />
+          </div>
+          <p className="text-[10px] mt-1.5" style={{ color: "#999" }}>
+            Due: <strong>{new Date(Date.now() + dueDays * 86400000).toLocaleDateString("en-RW", { day: "numeric", month: "long", year: "numeric" })}</strong>
+          </p>
+        </div>
+
+        <button onClick={onConfirm} disabled={lending}
+          className="w-full py-3.5 rounded-2xl font-bold text-sm text-white flex items-center justify-center gap-2 disabled:opacity-40 transition"
+          style={{ background: "#FF7A22" }}>
+          {lending ? <Loader2 size={16} className="animate-spin" /> : <BookMarked size={16} />}
+          Confirm Lend
+        </button>
+      </div>
+    );
   }
-
-  async function handleReturnBook(e: React.FormEvent) {
-    e.preventDefault();
-    if (!returnForm.copy_tag) return;
-    setSavingReturn(true);
-    setReturnResult(null);
-    try {
-      const res = await library.returnBook({
-        copy_tag: returnForm.copy_tag,
-        fine_rate_per_day: Number(returnForm.fine_rate_per_day),
-      });
-
-      setReturnResult({
-        fine_amount: res.data.fine_amount,
-        fine_charged_to_wallet: res.data.fine_charged_to_wallet,
-      });
-      toast("Book returned successfully", "success");
-      loadData();
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to return book", "error");
-    } finally {
-      setSavingReturn(false);
-    }
-  }
-
-  // Helper to resolve overdue entries dynamically based on database state
-  const dbOverdues = borrows.filter(b => !b.returned_at && new Date(b.due_at) < new Date());
-  const displayOverdues = dbOverdues.map(b => {
-    const diffTime = Math.abs(Date.now() - new Date(b.due_at).getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return {
-      memberId: b.student 
-        ? `#${b.student.user.first_name[0] || ""}${b.student.user.last_name[0] || ""}-${b.id.substring(0, 3)}`.toUpperCase()
-        : "#MEMBER",
-      title: b.copy?.book?.title || "Unknown Book",
-      isbn: b.copy?.book?.isbn || "—",
-      dueDate: `${diffDays}d Overdue`,
-      fine: `${b.fine_amount || diffDays * 200} RWF`
-    };
-  });
-
-  // Helper to resolve recent checkouts
-  const displayCheckouts = borrows.slice(0, 5).map(b => ({
-    id: `#${b.id.substring(0, 4)}`,
-    isbn: b.copy?.book?.isbn || "9780140449",
-    title: b.copy?.book?.title || "Book Title",
-    author: b.copy?.book?.author || "Author",
-    member: b.student ? `${b.student.user.first_name} ${b.student.user.last_name}` : "Member",
-    issuedDate: new Date(b.borrowed_at).toLocaleDateString("en-RW"),
-    returnDate: b.returned_at ? new Date(b.returned_at).toLocaleDateString("en-RW") : new Date(b.due_at).toLocaleDateString("en-RW")
-  }));
-
-  const activeRecs = recSubTab === "top" ? RECOMMENDATIONS_TOP : RECOMMENDATIONS_NEW;
 
   return (
     <DashboardShell>
-      <div className="flex flex-col h-full overflow-y-auto bg-[#F8F9FA] p-6 space-y-6">
-        
-        {/* Top Header Section */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white rounded-3xl p-5 shadow-sm">
-          {/* Left: Branding & Module Name */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#5EAD70]/10 rounded-xl flex items-center justify-center text-[#5EAD70]">
-              <BookOpen size={22} />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-gray-800">Library App Dashboard</h1>
-              <p className="text-xs text-gray-400">Forest Green administrative interface for institutional inventory</p>
-            </div>
+      <div className="h-full flex flex-col overflow-hidden">
+
+        {/* ── Header ──────────────────────────────────────────── */}
+        <div className="flex items-center gap-3 px-3 md:px-4 pt-1 pb-3 flex-shrink-0">
+          <div className="flex-1">
+            <h1 className="text-lg font-bold" style={{ color: "#121212" }}>Library</h1>
+            <p className="text-xs" style={{ color: "#666666" }}>Register books · Lend · Return</p>
           </div>
-
-          {/* Center: Global Search Bar */}
-          <div className="relative w-full md:w-80">
-            <input
-              type="text"
-              value={globalSearch}
-              onChange={(e) => setGlobalSearch(e.target.value)}
-              placeholder="Search Ex. ISBN, Title, Author, Member, etc"
-              className="w-full bg-gray-50 border border-gray-100 rounded-2xl pl-10 pr-4 py-2.5 text-xs outline-none focus:border-[#5EAD70] focus:ring-2 focus:ring-[#5EAD70]/10 transition"
-            />
-            <Search size={14} className="absolute left-3.5 top-3.5 text-gray-400" />
-          </div>
-
-          {/* Right: Date Filter, Profile & Notifications */}
-          <div className="flex items-center gap-3 self-end md:self-auto">
-            <div className="relative">
-              <select
-                value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value)}
-                className="appearance-none bg-gray-50 border border-gray-100 text-xs font-semibold text-gray-500 rounded-2xl pl-4 pr-8 py-2.5 outline-none hover:bg-gray-100 transition cursor-pointer"
-              >
-                <option value="Last 6 months">Last 6 months</option>
-                <option value="Last 30 days">Last 30 days</option>
-                <option value="This Year">This Year</option>
-              </select>
-              <Filter size={12} className="absolute right-3.5 top-3.5 text-gray-400 pointer-events-none" />
+          {!loading && (
+            <div className="flex gap-2 flex-wrap justify-end">
+              <span className="text-xs font-semibold px-3 py-1 rounded-full" style={{ background: "#FFF3EC", color: "#FF7A22" }}>
+                {stats.totalBooks} Books
+              </span>
+              <span className="text-xs font-semibold px-3 py-1 rounded-full" style={{ background: "#F5F5F5", color: "#666" }}>
+                {stats.activeMembers} Active
+              </span>
+              {stats.overdueBooks > 0 && (
+                <span className="text-xs font-semibold px-3 py-1 rounded-full bg-red-100 text-red-600">
+                  ⚠ {stats.overdueBooks} Overdue
+                </span>
+              )}
             </div>
-
-            <button className="w-10 h-10 rounded-2xl bg-gray-50 hover:bg-gray-100 transition flex items-center justify-center text-gray-500 relative">
-              <Bell size={16} />
-              <span className="w-1.5 h-1.5 rounded-full bg-[#E57373] absolute top-3 right-3" />
-            </button>
-
-            <div className="flex items-center gap-2 border-l border-gray-100 pl-3">
-              <div className="w-8 h-8 rounded-full bg-[#5EAD70] text-white flex items-center justify-center font-bold text-xs">
-                A
-              </div>
-              <div className="hidden sm:block text-left">
-                <p className="text-xs font-bold text-gray-800">Allison</p>
-                <p className="text-[10px] text-gray-400">Head Librarian</p>
-              </div>
-            </div>
-          </div>
+          )}
         </div>
 
-        {/* Persistent Module Tab Navigation & Quick Action Triggers */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-3 rounded-2xl shadow-sm">
-          <div className="flex gap-1.5">
-            <button
-              onClick={() => setActiveTab("dashboard")}
-              className={`px-5 py-2.5 rounded-xl text-xs font-bold transition ${
-                activeTab === "dashboard" ? "bg-[#5EAD70]/10 text-[#5EAD70]" : "text-gray-500 hover:bg-gray-50"
-              }`}
-            >
-              Dashboard
-            </button>
-            <button
-              onClick={() => setActiveTab("catalog")}
-              className={`px-5 py-2.5 rounded-xl text-xs font-bold transition ${
-                activeTab === "catalog" ? "bg-[#5EAD70]/10 text-[#5EAD70]" : "text-gray-500 hover:bg-gray-50"
-              }`}
-            >
-              Catalog
-            </button>
-            <button
-              onClick={() => setActiveTab("borrows")}
-              className={`px-5 py-2.5 rounded-xl text-xs font-bold transition ${
-                activeTab === "borrows" ? "bg-[#5EAD70]/10 text-[#5EAD70]" : "text-gray-500 hover:bg-gray-50"
-              }`}
-            >
-              Borrow Logs
-            </button>
+        {/* ── Overdue banner ───────────────────────────────────── */}
+        {!loading && overdueItems.length > 0 && (
+          <div className="mx-3 md:mx-4 mb-3 rounded-2xl p-3 flex gap-2 items-start flex-shrink-0"
+            style={{ background: "#FFF1F1", border: "1px solid #FECACA" }}>
+            <AlertTriangle size={15} className="text-red-500 mt-0.5 flex-shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-red-700">
+                {overdueItems.length} overdue {overdueItems.length === 1 ? "book" : "books"} — return deadline passed
+              </p>
+              <p className="text-[10px] text-red-400 mt-0.5 truncate">
+                {overdueItems.slice(0, 3).map(b => {
+                  const daysLate = Math.ceil((now.getTime() - new Date(b.due_at).getTime()) / 86400000);
+                  return `${b.student?.user?.first_name ?? "?"} · "${b.copy?.book?.title ?? "?"}" (${daysLate}d late)`;
+                }).join("  ·  ")}
+              </p>
+            </div>
           </div>
+        )}
 
-          <div className="flex gap-2">
-            <button
-              onClick={() => setShowReturnModal(true)}
-              className="px-4 py-2.5 bg-red-50 text-[#E57373] hover:bg-red-100 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
-            >
-              <BookmarkCheck size={14} /> Return Book
-            </button>
-            <button
-              onClick={() => setShowBorrowModal(true)}
-              className="px-4 py-2.5 bg-[#5EAD70]/10 text-[#5EAD70] hover:bg-[#5EAD70]/20  rounded-xl text-xs font-bold transition flex items-center gap-1.5"
-            >
-              <Bookmark size={14} /> Check Out
-            </button>
-            <button
-              onClick={() => setShowAddBookModal(true)}
-              className="px-4 py-2.5 bg-[#5EAD70] text-white hover:bg-[#5EAD70]/90 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm shadow-[#5EAD70]/25"
-            >
-              <Plus size={14} /> Add Book
-            </button>
-          </div>
+        {/* ── Tabs ────────────────────────────────────────────── */}
+        <div className="flex gap-2 px-3 md:px-4 mb-3 flex-shrink-0">
+          {(["home", "add-book", "lend-return"] as Tab[]).map(t => {
+            const labels: Record<Tab, string> = { home: "Overview", "add-book": "Add Book", "lend-return": "Lend & Return" };
+            return (
+              <button key={t} onClick={() => setTab(t)}
+                className="px-4 py-2 rounded-xl text-xs font-bold transition"
+                style={tab === t ? { background: "#FF7A22", color: "#fff" } : { background: "#fff", color: "#666666" }}>
+                {labels[t]}
+              </button>
+            );
+          })}
         </div>
 
-        {/* CONDITIONAL BODY RENDERING */}
+        {/* ── Tab body ────────────────────────────────────────── */}
+        <div className="flex-1 overflow-y-auto px-3 md:px-4 pb-4">
 
-        {activeTab === "dashboard" && (
-          <div className="space-y-6">
-            {/* 1. KPI Metric Cards (Stats Grid) */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              
-              {/* Card 1: Borrowed Books */}
-              <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100/50 flex flex-col justify-between">
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Borrowed Books</span>
-                  <div className="w-8 h-8 rounded-lg bg-emerald-50 text-[#5EAD70] flex items-center justify-center"><BookOpen size={16} /></div>
+          {/* ═══════════════ OVERVIEW ═══════════════ */}
+          {tab === "home" && (
+            <div className="space-y-3">
+              {loading ? (
+                <div className="flex justify-center py-16">
+                  <Loader2 size={28} className="animate-spin" style={{ color: "#FF7A22" }} />
                 </div>
-                <div className="flex items-baseline justify-between mt-1">
-                  <span className="text-2xl font-bold text-gray-800">{stats.borrowedBooks.toLocaleString()}</span>
-                  <span className="text-[10px] font-bold text-[#5EAD70] bg-[#5EAD70]/10 px-2 py-0.5 rounded-full flex items-center gap-0.5">
-                    <TrendingUp size={10} /> {stats.borrowedTrend}
-                  </span>
-                </div>
-              </div>
-
-              {/* Card 2: Returned Books */}
-              <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100/50 flex flex-col justify-between">
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Returned Books</span>
-                  <div className="w-8 h-8 rounded-lg bg-red-50 text-[#E57373] flex items-center justify-center"><BookmarkCheck size={16} /></div>
-                </div>
-                <div className="flex items-baseline justify-between mt-1">
-                  <span className="text-2xl font-bold text-gray-800">{stats.returnedBooks.toLocaleString()}</span>
-                  <span className="text-[10px] font-bold text-[#E57373] bg-[#E57373]/10 px-2 py-0.5 rounded-full flex items-center gap-0.5">
-                    <TrendingDown size={10} /> {stats.returnedTrend}
-                  </span>
-                </div>
-              </div>
-
-              {/* Card 3: Overdue Books */}
-              <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100/50 flex flex-col justify-between">
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Overdue Books</span>
-                  <div className="w-8 h-8 rounded-lg bg-red-50 text-[#E57373] flex items-center justify-center"><AlertTriangle size={16} /></div>
-                </div>
-                <div className="flex items-baseline justify-between mt-1">
-                  <span className="text-2xl font-bold text-gray-800">{stats.overdueBooks.toLocaleString()}</span>
-                  <span className="text-[10px] font-bold text-[#E57373] bg-[#E57373]/10 px-2 py-0.5 rounded-full flex items-center gap-0.5">
-                    <TrendingUp size={10} /> {stats.overdueTrend}
-                  </span>
-                </div>
-              </div>
-
-              {/* Card 4: Missing Books */}
-              <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100/50 flex flex-col justify-between">
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Missing Books</span>
-                  <div className="w-8 h-8 rounded-lg bg-red-50 text-[#E57373] flex items-center justify-center"><AlertCircle size={16} /></div>
-                </div>
-                <div className="flex items-baseline justify-between mt-1">
-                  <span className="text-2xl font-bold text-gray-800">{stats.missingBooks.toLocaleString()}</span>
-                  <span className="text-[10px] font-bold text-[#E57373] bg-[#E57373]/10 px-2 py-0.5 rounded-full flex items-center gap-0.5">
-                    <TrendingUp size={10} /> {stats.missingTrend}
-                  </span>
-                </div>
-              </div>
-
-              {/* Card 5: Total Books */}
-              <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100/50 flex flex-col justify-between">
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Total Books</span>
-                  <div className="w-8 h-8 rounded-lg bg-emerald-50 text-[#5EAD70] flex items-center justify-center"><Book size={16} /></div>
-                </div>
-                <div className="flex items-baseline justify-between mt-1">
-                  <span className="text-2xl font-bold text-gray-800">{stats.totalBooks.toLocaleString()}</span>
-                  <span className="text-[10px] font-bold text-[#5EAD70] bg-[#5EAD70]/10 px-2 py-0.5 rounded-full flex items-center gap-0.5">
-                    <TrendingUp size={10} /> {stats.totalTrend}
-                  </span>
-                </div>
-              </div>
-
-              {/* Card 6: Visitors */}
-              <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100/50 flex flex-col justify-between">
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Visitors</span>
-                  <div className="w-8 h-8 rounded-lg bg-emerald-50 text-[#5EAD70] flex items-center justify-center"><Users size={16} /></div>
-                </div>
-                <div className="flex items-baseline justify-between mt-1">
-                  <span className="text-2xl font-bold text-gray-800">{stats.visitors.toLocaleString()}</span>
-                  <span className="text-[10px] font-bold text-[#5EAD70] bg-[#5EAD70]/10 px-2 py-0.5 rounded-full flex items-center gap-0.5">
-                    <TrendingUp size={10} /> {stats.visitorsTrend}
-                  </span>
-                </div>
-              </div>
-
-              {/* Card 7: New Members */}
-              <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100/50 flex flex-col justify-between">
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">New Members</span>
-                  <div className="w-8 h-8 rounded-lg bg-red-50 text-[#E57373] flex items-center justify-center"><UserPlus size={16} /></div>
-                </div>
-                <div className="flex items-baseline justify-between mt-1">
-                  <span className="text-2xl font-bold text-gray-800">{stats.newMembers.toLocaleString()}</span>
-                  <span className="text-[10px] font-bold text-[#E57373] bg-[#E57373]/10 px-2 py-0.5 rounded-full flex items-center gap-0.5">
-                    <TrendingDown size={10} /> {stats.newMembersTrend}
-                  </span>
-                </div>
-              </div>
-
-              {/* Card 8: Pending Fees */}
-              <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100/50 flex flex-col justify-between">
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Pending Fees</span>
-                  <div className="w-8 h-8 rounded-lg bg-red-50 text-[#E57373] flex items-center justify-center"><DollarSign size={16} /></div>
-                </div>
-                <div className="flex items-baseline justify-between mt-1">
-                  <span className="text-2xl font-bold text-gray-800">${stats.pendingFees.toLocaleString()}</span>
-                  <span className="text-[10px] font-bold text-[#E57373] bg-[#E57373]/10 px-2 py-0.5 rounded-full flex items-center gap-0.5">
-                    <TrendingUp size={10} /> {stats.pendingFeesTrend}
-                  </span>
-                </div>
-              </div>
-
-            </div>
-
-            {/* 2. Visualizations and Operational Lists Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              
-              {/* Left & Center: Charts & Log Tables (col-span-2) */}
-              <div className="lg:col-span-2 space-y-6">
-                
-                {/* 2.1 Check-out Statistics Line Chart */}
-                <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100/50">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h3 className="font-bold text-gray-800 text-sm">Check-out Statistics</h3>
-                      <p className="text-[11px] text-gray-400">Comparing books borrowed and returned this week</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-1 text-[10px] font-bold text-gray-500">
-                        <span className="w-2 h-2 rounded-full bg-[#5EAD70] inline-block" /> Borrowed
-                      </div>
-                      <div className="flex items-center gap-1 text-[10px] font-bold text-gray-500">
-                        <span className="w-2 h-2 rounded-full bg-[#E57373] inline-block" /> Returned
-                      </div>
-                    </div>
-                  </div>
-
-                  <ResponsiveContainer width="100%" height={220}>
-                    <LineChart data={CHECKOUT_CHART_DATA} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                      <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
-                      <Tooltip contentStyle={{ fontSize: 11, borderRadius: 12, border: "1px solid #f3f4f6" }} />
-                      <Line type="monotone" dataKey="Borrowed" stroke="#5EAD70" strokeWidth={3} dot={{ r: 4, fill: "#5EAD70", strokeWidth: 0 }} activeDot={{ r: 6 }} />
-                      <Line type="monotone" dataKey="Returned" stroke="#E57373" strokeWidth={3} dot={{ r: 4, fill: "#E57373", strokeWidth: 0 }} activeDot={{ r: 6 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-
-                {/* 2.2 Overdue's History Table */}
-                <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100/50">
-                  <div className="flex items-center justify-between mb-3.5">
-                    <div>
-                      <h3 className="font-bold text-gray-800 text-sm">Overdue's History</h3>
-                      <p className="text-[11px] text-gray-400">Outstanding overdue logs and fines</p>
-                    </div>
-                    <HelpCircle size={16} className="text-gray-300 cursor-pointer hover:text-gray-400" />
-                  </div>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse text-xs">
-                      <thead>
-                        <tr className="border-b border-gray-100 text-[10px] font-bold text-gray-400 uppercase">
-                          <th className="pb-3 pr-2">Member ID</th>
-                          <th className="pb-3 pr-2">Book Title</th>
-                          <th className="pb-3 pr-2">ISBN</th>
-                          <th className="pb-3 pr-2">Due Date</th>
-                          <th className="pb-3 text-right">Fine</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50 text-gray-700">
-                        {displayOverdues.length > 0 ? (
-                          displayOverdues.map((item, idx) => (
-                            <tr key={idx} className="hover:bg-gray-50/50">
-                              <td className="py-2.5 font-bold text-[#5EAD70]">{item.memberId}</td>
-                              <td className="py-2.5 font-medium text-gray-800">{item.title}</td>
-                              <td className="py-2.5 font-mono text-[10px] text-gray-400">{item.isbn}</td>
-                              <td className="py-2.5 text-[#E57373] font-semibold">{item.dueDate}</td>
-                              <td className="py-2.5 text-right font-bold text-red-500">{item.fine}</td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={5} className="py-4 text-center text-gray-400">
-                              No overdue books currently logged
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* 2.3 Recent Check-out's Table */}
-                <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100/50">
-                  <div className="mb-3.5">
-                    <h3 className="font-bold text-gray-800 text-sm">Recent Check-out's</h3>
-                    <p className="text-[11px] text-gray-400">Newly updated book borrowing activities</p>
-                  </div>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse text-xs">
-                      <thead>
-                        <tr className="border-b border-gray-100 text-[10px] font-bold text-gray-400 uppercase">
-                          <th className="pb-3 pr-2">ID</th>
-                          <th className="pb-3 pr-2">ISBN</th>
-                          <th className="pb-3 pr-2">Title</th>
-                          <th className="pb-3 pr-2">Author</th>
-                          <th className="pb-3 pr-2">Member</th>
-                          <th className="pb-3 pr-2">Issued Date</th>
-                          <th className="pb-3 text-right">Return Date</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50 text-gray-600">
-                        {displayCheckouts.length === 0 ? (
-                          <tr>
-                            <td colSpan={7} className="py-6 text-center text-gray-400">No recent transactions.</td>
-                          </tr>
-                        ) : (
-                          displayCheckouts.map((c, idx) => (
-                            <tr key={idx} className="hover:bg-gray-50/50">
-                              <td className="py-2.5 font-bold text-gray-400">{c.id}</td>
-                              <td className="py-2.5 font-mono text-[10px] text-gray-400">{c.isbn}</td>
-                              <td className="py-2.5 font-medium text-gray-800">{c.title}</td>
-                              <td className="py-2.5">{c.author}</td>
-                              <td className="py-2.5 font-medium text-gray-700">{c.member}</td>
-                              <td className="py-2.5">{c.issuedDate}</td>
-                              <td className="py-2.5 text-right font-medium text-[#5EAD70]">{c.returnDate}</td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Right Column: Recommendations & Discovery Card (col-span-1) */}
-              <div className="lg:col-span-1 space-y-6">
-                
-                <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100/50">
-                  <div className="mb-4">
-                    <h3 className="font-bold text-gray-800 text-sm">Book Recommendations</h3>
-                    <p className="text-[11px] text-gray-400">Discover top catalog entries and new books</p>
-                  </div>
-
-                  {/* Discovery Sub-tabs */}
-                  <div className="flex border-b border-gray-100 mb-4 text-xs font-semibold">
-                    <button
-                      onClick={() => setRecSubTab("top")}
-                      className={`flex-1 pb-2 border-b-2 text-center transition-all ${
-                        recSubTab === "top" ? "border-[#5EAD70] text-[#5EAD70]" : "border-transparent text-gray-400"
-                      }`}
-                    >
-                      Top Books
-                    </button>
-                    <button
-                      onClick={() => setRecSubTab("new")}
-                      className={`flex-1 pb-2 border-b-2 text-center transition-all ${
-                        recSubTab === "new" ? "border-[#5EAD70] text-[#5EAD70]" : "border-transparent text-gray-400"
-                      }`}
-                    >
-                      New Arrivals
-                    </button>
-                  </div>
-
-                  {/* Recommendations Vertical List */}
-                  <div className="space-y-3">
-                    {activeRecs.map((book, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-3 rounded-2xl bg-gray-50/50 border border-gray-50 hover:bg-gray-50 transition">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-7 h-9 rounded bg-[#5EAD70]/10 flex items-center justify-center text-[#5EAD70] flex-shrink-0">
-                            <Book size={14} />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-xs font-bold text-gray-800 truncate">{book.title}</p>
-                            <p className="text-[10px] text-gray-400 truncate">{book.author} · {book.category}</p>
-                          </div>
-                        </div>
-                        <span className="text-[9px] font-bold text-[#5EAD70] bg-[#5EAD70]/10 px-2 py-0.5 rounded-full">
-                          Available
-                        </span>
+              ) : (
+                <>
+                  {/* Stats */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {[
+                      { label: "Total Books", value: stats.totalBooks, color: "#FF7A22", bg: "#FFF3EC" },
+                      { label: "Active Borrows", value: stats.activeMembers, color: "#121212", bg: "#F5F5F5" },
+                      { label: "Overdue", value: stats.overdueBooks, color: "#EF4444", bg: "#FEF2F2" },
+                      { label: "Pending Fines", value: `${stats.pendingFees.toLocaleString()} RWF`, color: "#666", bg: "#F5F5F5" },
+                    ].map(s => (
+                      <div key={s.label} className="bg-white rounded-2xl p-4 flex flex-col gap-1">
+                        <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "#999" }}>{s.label}</p>
+                        <p className="text-xl font-bold" style={{ color: s.color }}>{s.value}</p>
                       </div>
                     ))}
                   </div>
 
-                  {/* Add action shortcut */}
-                  <button
-                    onClick={() => setShowBorrowModal(true)}
-                    className="w-full mt-5 py-3 rounded-xl border border-dashed border-gray-200 text-[#5EAD70] hover:border-[#5EAD70] hover:bg-[#5EAD70]/5 transition text-xs font-bold flex items-center justify-center gap-1.5"
-                  >
-                    <Plus size={14} /> Quick Checkout Book
+                  {/* Quick lend button on overview */}
+                  <button onClick={openLendModal}
+                    className="w-full py-3 rounded-2xl font-bold text-sm text-white flex items-center justify-center gap-2 transition active:scale-[.98]"
+                    style={{ background: "#FF7A22" }}>
+                    <BookMarked size={16} /> Lend a Book to Student
                   </button>
-                </div>
 
-              </div>
-
-            </div>
-          </div>
-        )}
-
-        {/* 3. Book Catalog Tab */}
-        {activeTab === "catalog" && (
-          <div className="space-y-4">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-4 rounded-2xl shadow-sm">
-              <div className="flex-1">
-                <h3 className="font-bold text-gray-800 text-sm">Book Catalog</h3>
-                <p className="text-xs text-gray-400">Search and filter active book records</p>
-              </div>
-              <form onSubmit={handleSearch} className="relative w-full md:w-80">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search title, author, isbn..."
-                  className="w-full border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-xs outline-none focus:border-[#5EAD70]"
-                />
-                <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
-              </form>
-            </div>
-
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-50 overflow-hidden flex flex-col min-h-[400px]">
-              {loading ? (
-                <div className="flex-1 flex items-center justify-center"><Loader2 className="animate-spin text-[#5EAD70]" size={28} /></div>
-              ) : books.length === 0 ? (
-                <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-                  <Book size={48} className="text-gray-200 mb-2" />
-                  <p className="text-sm text-gray-400 font-medium">No books found in the catalog.</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto flex-1">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="border-b border-gray-100 bg-gray-50/50 text-[10px] font-bold text-gray-400 uppercase">
-                        <th className="px-5 py-3.5">Title</th>
-                        <th className="px-5 py-3.5">Author</th>
-                        <th className="px-5 py-3.5">ISBN</th>
-                        <th className="px-5 py-3.5">Category</th>
-                        <th className="px-5 py-3.5 text-right">Total Copies</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50 text-gray-600">
-                      {books.map((b) => (
-                        <tr key={b.id} className="hover:bg-gray-50/50">
-                          <td className="px-5 py-3.5 font-bold text-gray-800">{b.title}</td>
-                          <td className="px-5 py-3.5 font-medium">{b.author}</td>
-                          <td className="px-5 py-3.5 font-mono text-xs text-gray-400">{b.isbn || "—"}</td>
-                          <td className="px-5 py-3.5">
-                            {b.category ? (
-                              <span className="bg-[#5EAD70]/10 text-[#5EAD70] px-2.5 py-0.5 rounded-full font-bold">{b.category}</span>
-                            ) : "—"}
-                          </td>
-                          <td className="px-5 py-3.5 text-right font-bold text-gray-800">{b.total_copies}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* Pagination Controls */}
-              {totalPages > 1 && (
-                <div className="p-4 border-t border-gray-50 flex items-center justify-between text-xs font-semibold text-gray-500">
-                  <button
-                    disabled={page === 1}
-                    onClick={() => setPage(p => Math.max(1, p - 1))}
-                    className="px-3 py-1.5 rounded-lg border border-gray-100 hover:bg-gray-50 disabled:opacity-50 transition"
-                  >
-                    Previous
-                  </button>
-                  <span>Page {page} of {totalPages}</span>
-                  <button
-                    disabled={page === totalPages}
-                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                    className="px-3 py-1.5 rounded-lg border border-gray-100 hover:bg-gray-50 disabled:opacity-50 transition"
-                  >
-                    Next
-                  </button>
-                </div>
+                  {/* Students holding books list */}
+                  <div className="bg-white rounded-3xl overflow-hidden">
+                    <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+                      <Users size={14} style={{ color: "#FF7A22" }} />
+                      <span className="text-sm font-bold" style={{ color: "#121212" }}>Students Holding Books</span>
+                      {recentBorrows.length > 0 && (
+                        <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: "#FFF3EC", color: "#FF7A22" }}>
+                          {recentBorrows.length}
+                        </span>
+                      )}
+                    </div>
+                    {recentBorrows.length === 0 ? (
+                      <p className="text-center text-sm text-gray-400 py-10">No active borrows</p>
+                    ) : (
+                      <div className="divide-y divide-gray-50">
+                        {recentBorrows.map(b => {
+                          const overdue = new Date(b.due_at) < now;
+                          const daysLeft = Math.ceil((new Date(b.due_at).getTime() - now.getTime()) / 86400000);
+                          const borrowedDate = new Date(b.borrowed_at).toLocaleDateString("en-RW", { day: "numeric", month: "short" });
+                          const dueDate = new Date(b.due_at).toLocaleDateString("en-RW", { day: "numeric", month: "short", year: "numeric" });
+                          return (
+                            <div key={b.id} className="px-4 py-3 flex items-start gap-3">
+                              <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 font-bold text-sm"
+                                style={{ background: overdue ? "#FEF2F2" : "#FFF3EC", color: overdue ? "#EF4444" : "#FF7A22" }}>
+                                {(b.student?.user?.first_name?.[0] ?? "?").toUpperCase()}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-bold" style={{ color: "#121212" }}>
+                                  {b.student?.user?.first_name} {b.student?.user?.last_name}
+                                </p>
+                                <p className="text-[11px] font-semibold truncate" style={{ color: "#444" }}>
+                                  {b.copy?.book?.title ?? "Unknown book"}
+                                  {(b.copy?.book as { location?: string })?.location
+                                    ? <span className="text-gray-400 font-normal"> · {(b.copy?.book as { location?: string }).location}</span>
+                                    : null}
+                                </p>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <span className="text-[9px] text-gray-400">Borrowed {borrowedDate}</span>
+                                  <span className="text-gray-300 text-[9px]">·</span>
+                                  <span className={`text-[9px] font-semibold ${overdue ? "text-red-500" : "text-gray-500"}`}>
+                                    Return by {dueDate}
+                                  </span>
+                                </div>
+                              </div>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 mt-1 ${
+                                overdue ? "bg-red-100 text-red-600" : "bg-green-50 text-green-600"
+                              }`}>
+                                {overdue ? `${Math.abs(daysLeft)}d late` : `${daysLeft}d left`}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* 4. Borrow Logs Tab */}
-        {activeTab === "borrows" && (
-          <div className="space-y-4">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-4 rounded-2xl shadow-sm">
-              <div className="flex-1">
-                <h3 className="font-bold text-gray-800 text-sm">Borrowing Transactions</h3>
-                <p className="text-xs text-gray-400">Track current loans, returns, and overdue fees</p>
-              </div>
-              <select
-                value={borrowFilter}
-                onChange={(e) => setBorrowFilter(e.target.value as "active" | "returned" | "overdue")}
-                className="border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-[#5EAD70] bg-white cursor-pointer"
-              >
-                <option value="active">Active Borrows</option>
-                <option value="overdue">Overdue Items</option>
-                <option value="returned">Returned Logs</option>
-              </select>
-            </div>
-
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-50 overflow-hidden flex flex-col min-h-[400px]">
-              {loading ? (
-                <div className="flex-1 flex items-center justify-center"><Loader2 className="animate-spin text-[#5EAD70]" size={28} /></div>
-              ) : borrows.length === 0 ? (
-                <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-                  <Calendar size={48} className="text-gray-200 mb-2" />
-                  <p className="text-sm text-gray-400 font-medium">No borrowing records found.</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto flex-1">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="border-b border-gray-100 bg-gray-50/50 text-[10px] font-bold text-gray-400 uppercase">
-                        <th className="px-5 py-3.5">Student</th>
-                        <th className="px-5 py-3.5">Book Title</th>
-                        <th className="px-5 py-3.5">Copy Tag</th>
-                        <th className="px-5 py-3.5">Borrowed At</th>
-                        <th className="px-5 py-3.5">Due At</th>
-                        <th className="px-5 py-3.5">Returned At</th>
-                        <th className="px-5 py-3.5 text-right">Fine</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50 text-gray-600">
-                      {borrows.map((b) => {
-                        const isOverdue = !b.returned_at && new Date(b.due_at) < new Date();
-                        return (
-                          <tr key={b.id} className={`hover:bg-gray-50/50 ${isOverdue ? "bg-red-50/10" : ""}`}>
-                            <td className="px-5 py-3.5 font-bold text-gray-800">
-                              {b.student?.user.first_name} {b.student?.user.last_name}
-                            </td>
-                            <td className="px-5 py-3.5 font-medium text-gray-700">{b.copy?.book?.title}</td>
-                            <td className="px-5 py-3.5 font-mono text-xs text-gray-400">{b.copy?.copy_tag}</td>
-                            <td className="px-5 py-3.5">{new Date(b.borrowed_at).toLocaleDateString("en-RW")}</td>
-                            <td className="px-5 py-3.5">{new Date(b.due_at).toLocaleDateString("en-RW")}</td>
-                            <td className="px-5 py-3.5 font-semibold">
-                              {b.returned_at ? (
-                                <span className="text-[#5EAD70]">{new Date(b.returned_at).toLocaleDateString("en-RW")}</span>
-                              ) : isOverdue ? (
-                                <span className="text-[#E57373] flex items-center gap-1 font-bold"><AlertCircle size={12} /> Overdue</span>
-                              ) : (
-                                <span className="text-blue-500">Checked Out</span>
-                              )}
-                            </td>
-                            <td className="px-5 py-3.5 text-right font-bold">
-                              {b.fine_amount > 0 ? (
-                                <span className="text-red-500">{b.fine_amount.toLocaleString()} RWF</span>
-                              ) : "—"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* MODAL WINDOWS */}
-
-        {/* Add Book Modal */}
-        {showAddBookModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-3xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-4">
-                <p className="text-sm font-bold text-gray-800">Add New Book to Catalog</p>
-                <button onClick={() => setShowAddBookModal(false)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
-              </div>
-              <form onSubmit={handleSaveBook} className="space-y-4">
-                <div>
-                  <label className="text-xs font-bold text-gray-400 mb-1.5 block uppercase">Book Title *</label>
-                  <input
-                    value={bookForm.title}
-                    onChange={(e) => setBookForm((f) => ({ ...f, title: e.target.value }))}
-                    placeholder="e.g. Introduction to Organic Chemistry" required
-                    className="w-full border border-gray-100 bg-gray-50 rounded-2xl px-4 py-2.5 text-xs outline-none focus:border-[#5EAD70] transition"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-gray-400 mb-1.5 block uppercase">Author *</label>
-                  <input
-                    value={bookForm.author}
-                    onChange={(e) => setBookForm((f) => ({ ...f, author: e.target.value }))}
-                    placeholder="e.g. Richard Feynman" required
-                    className="w-full border border-gray-100 bg-gray-50 rounded-2xl px-4 py-2.5 text-xs outline-none focus:border-[#5EAD70] transition"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3.5">
-                  <div>
-                    <label className="text-xs font-bold text-gray-400 mb-1.5 block uppercase">ISBN</label>
-                    <input
-                      value={bookForm.isbn}
-                      onChange={(e) => setBookForm((f) => ({ ...f, isbn: e.target.value }))}
-                      placeholder="e.g. 9780134015"
-                      className="w-full border border-gray-100 bg-gray-50 rounded-2xl px-4 py-2.5 text-xs outline-none focus:border-[#5EAD70] transition"
-                    />
+          {/* ═══════════════ ADD BOOK ═══════════════ */}
+          {tab === "add-book" && (
+            <div className="max-w-md mx-auto">
+              <div className="bg-white rounded-3xl p-5">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-10 h-10 rounded-2xl flex items-center justify-center" style={{ background: "#FFF3EC" }}>
+                    <Plus size={20} style={{ color: "#FF7A22" }} />
                   </div>
                   <div>
-                    <label className="text-xs font-bold text-gray-400 mb-1.5 block uppercase">Category</label>
-                    <input
-                      value={bookForm.category}
-                      onChange={(e) => setBookForm((f) => ({ ...f, category: e.target.value }))}
-                      placeholder="e.g. Science"
-                      className="w-full border border-gray-100 bg-gray-50 rounded-2xl px-4 py-2.5 text-xs outline-none focus:border-[#5EAD70] transition"
-                    />
+                    <h2 className="text-sm font-bold" style={{ color: "#121212" }}>Register New Book</h2>
+                    <p className="text-[11px]" style={{ color: "#666" }}>Add a book to the library catalog</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-3.5">
-                  <div className="col-span-1">
-                    <label className="text-xs font-bold text-gray-400 mb-1.5 block uppercase">Total Copies</label>
-                    <input
-                      type="number" min={1}
-                      value={bookForm.total_copies}
-                      onChange={(e) => setBookForm((f) => ({ ...f, total_copies: Number(e.target.value) }))}
-                      className="w-full border border-gray-100 bg-gray-50 rounded-2xl px-4 py-2.5 text-xs outline-none focus:border-[#5EAD70] transition"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="text-xs font-bold text-gray-400 mb-1.5 block uppercase">Barcode Tags (optional)</label>
-                    <input
-                      value={bookForm.copy_tags}
-                      onChange={(e) => setBookForm((f) => ({ ...f, copy_tags: e.target.value }))}
-                      placeholder="TAG1, TAG2"
-                      className="w-full border border-gray-100 bg-gray-50 rounded-2xl px-4 py-2.5 text-xs outline-none focus:border-[#5EAD70] transition"
-                    />
-                  </div>
-                </div>
-                <button
-                  type="submit"
-                  disabled={savingBook || !bookForm.title || !bookForm.author}
-                  className="w-full py-3 rounded-2xl bg-[#5EAD70] text-white font-bold text-xs hover:bg-[#5EAD70]/90 transition disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-sm shadow-[#5EAD70]/20"
-                >
-                  {savingBook && <Loader2 size={13} className="animate-spin" />}
-                  Register Book
-                </button>
-              </form>
-            </div>
-          </div>
-        )}
 
-        {/* Borrow Modal */}
-        {showBorrowModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-3xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-4">
-                <p className="text-sm font-bold text-gray-800">Check Out Book Copy</p>
-                <button onClick={() => setShowBorrowModal(false)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
+                {bookSaved && (
+                  <div className="mb-4 p-3 rounded-2xl flex items-center gap-2 bg-green-50 border border-green-100">
+                    <CheckCircle size={16} className="text-green-500 flex-shrink-0" />
+                    <span className="text-xs font-semibold text-green-700">Book registered and added to catalog!</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleSaveBook} className="space-y-4">
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: "#666" }}>Book Number / Identifier *</label>
+                    <div className="relative">
+                      <Tag size={13} className="absolute left-3.5 top-[11px]" style={{ color: "#999" }} />
+                      <input value={bookForm.book_number} onChange={e => setBookForm(f => ({ ...f, book_number: e.target.value }))}
+                        placeholder="e.g. BK-001 or 9780194338" required
+                        className="w-full border rounded-2xl pl-9 pr-3 py-2.5 text-sm outline-none transition"
+                        style={{ borderColor: bookForm.book_number ? "#FF7A22" : "#e5e7eb", color: "#121212" }} />
+                    </div>
+                    <p className="text-[10px] mt-1" style={{ color: "#999" }}>Barcode, ISBN, or your own numbering (BK-001, BK-002…)</p>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: "#666" }}>Book Title *</label>
+                    <div className="relative">
+                      <BookOpen size={13} className="absolute left-3.5 top-[11px]" style={{ color: "#999" }} />
+                      <input value={bookForm.title} onChange={e => setBookForm(f => ({ ...f, title: e.target.value }))}
+                        placeholder="e.g. Mathematics for Senior 3" required
+                        className="w-full border border-gray-200 rounded-2xl pl-9 pr-3 py-2.5 text-sm outline-none"
+                        style={{ color: "#121212" }} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: "#666" }}>Author</label>
+                    <input value={bookForm.author} onChange={e => setBookForm(f => ({ ...f, author: e.target.value }))}
+                      placeholder="e.g. REB Rwanda"
+                      className="w-full border border-gray-200 rounded-2xl px-4 py-2.5 text-sm outline-none"
+                      style={{ color: "#121212" }} />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: "#666" }}>Category</label>
+                      <select value={bookForm.category} onChange={e => setBookForm(f => ({ ...f, category: e.target.value }))}
+                        className="w-full border border-gray-200 rounded-2xl px-3 py-2.5 text-sm outline-none bg-white"
+                        style={{ color: bookForm.category ? "#121212" : "#999" }}>
+                        <option value="">Select…</option>
+                        {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: "#666" }}>Shelf Location</label>
+                      <div className="relative">
+                        <MapPin size={13} className="absolute left-3.5 top-[11px]" style={{ color: "#999" }} />
+                        <input value={bookForm.location} onChange={e => setBookForm(f => ({ ...f, location: e.target.value }))}
+                          placeholder="A1, B3, C5…"
+                          className="w-full border border-gray-200 rounded-2xl pl-9 pr-3 py-2.5 text-sm outline-none"
+                          style={{ color: "#121212" }} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: "#666" }}>Number of Copies</label>
+                    <input type="number" min={1} max={99} value={bookForm.total_copies}
+                      onChange={e => setBookForm(f => ({ ...f, total_copies: Number(e.target.value) }))}
+                      className="w-full border border-gray-200 rounded-2xl px-4 py-2.5 text-sm outline-none"
+                      style={{ color: "#121212" }} />
+                  </div>
+
+                  <button type="submit" disabled={savingBook || !bookForm.title.trim() || !bookForm.book_number.trim()}
+                    className="w-full py-3.5 rounded-2xl font-bold text-sm text-white flex items-center justify-center gap-2 disabled:opacity-40 transition"
+                    style={{ background: "#FF7A22" }}>
+                    {savingBook ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                    Register Book
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* ═══════════════ LEND & RETURN ═══════════════ */}
+          {tab === "lend-return" && (
+            <div className="max-w-lg mx-auto space-y-3">
+
+              {/* Big lend button */}
+              <button onClick={openLendModal}
+                className="w-full py-4 rounded-2xl font-bold text-base text-white flex items-center justify-center gap-2 transition active:scale-[.98] shadow-sm"
+                style={{ background: "#FF7A22" }}>
+                <BookMarked size={18} /> Lend a Book to Student
+              </button>
+
+              {/* Divider */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-gray-100" />
+                <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider">or return a book</span>
+                <div className="flex-1 h-px bg-gray-100" />
               </div>
 
-              {!selectedStudent ? (
-                <div className="mb-4">
-                  <label className="text-xs font-bold text-gray-400 mb-1.5 block uppercase">Find Student *</label>
-                  <div className="relative">
-                    <input
-                      value={studentSearch}
-                      onChange={(e) => { setStudentSearch(e.target.value); searchStudents(e.target.value); }}
-                      placeholder="Type student name or student code..."
-                      className="w-full border border-gray-100 bg-gray-50 rounded-2xl px-4 py-2.5 text-xs outline-none focus:border-[#5EAD70] pr-10 transition"
-                    />
-                    {searchingStudent && <Loader2 size={14} className="animate-spin absolute right-3.5 top-3 text-gray-400" />}
+              {/* Card lookup for returning */}
+              <div className="bg-white rounded-3xl p-4">
+                <p className="text-[10px] font-bold uppercase tracking-wider mb-3" style={{ color: "#666" }}>
+                  Scan student card to see their books
+                </p>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <CreditCard size={13} className="absolute left-3.5 top-[11px]" style={{ color: "#999" }} />
+                    <input value={cardInput} onChange={e => setCardInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") lookupCard(cardInput); }}
+                      placeholder="Card number or student code (e.g. KMS001)…"
+                      className="w-full border border-gray-200 rounded-2xl pl-9 pr-3 py-2.5 text-sm outline-none"
+                      style={{ color: "#121212" }} />
                   </div>
-                  {searchResults.length > 0 && (
-                    <div className="mt-2 border border-gray-100 rounded-2xl overflow-hidden max-h-48 overflow-y-auto bg-white shadow-sm">
-                      {searchResults.map((s) => (
-                        <button
-                          key={s.id} type="button"
-                          onClick={() => { setSelectedStudent(s); setSearchResults([]); }}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[#5EAD70]/5 text-left border-b border-gray-50 last:border-0 transition"
-                        >
-                          <div className="w-8 h-8 rounded-full bg-[#5EAD70]/10 flex items-center justify-center text-xs font-bold text-[#5EAD70]">{s.user.first_name[0]}</div>
-                          <div>
-                            <p className="text-xs font-bold text-gray-800">{s.user.first_name} {s.user.last_name}</p>
-                            <p className="text-[10px] text-gray-400">{s.student_code} · {s.level?.name} {s.class?.name}</p>
-                          </div>
-                        </button>
-                      ))}
+                  {isSupported ? (
+                    <button onClick={listening ? () => stopListen() : startNFC}
+                      className="w-11 h-11 rounded-2xl flex items-center justify-center transition flex-shrink-0"
+                      style={{ background: listening ? "#FF7A22" : "#F5F5F5" }}>
+                      <Wifi size={16} style={{ color: listening ? "#fff" : "#666" }} />
+                    </button>
+                  ) : (
+                    <div className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ background: "#F5F5F5" }}>
+                      <WifiOff size={14} style={{ color: "#ccc" }} />
+                    </div>
+                  )}
+                  <button onClick={() => lookupCard(cardInput)} disabled={loadingStudent || !cardInput.trim()}
+                    className="px-4 py-2.5 rounded-2xl text-white text-xs font-bold disabled:opacity-40 flex-shrink-0"
+                    style={{ background: "#121212" }}>
+                    {loadingStudent ? <Loader2 size={14} className="animate-spin" /> : "Look Up"}
+                  </button>
+                </div>
+                {listening && (
+                  <p className="text-[11px] mt-2.5 text-center font-semibold animate-pulse" style={{ color: "#FF7A22" }}>
+                    Waiting for NFC card tap…
+                  </p>
+                )}
+              </div>
+
+              {/* Student panel */}
+              {student && (
+                <div className="bg-white rounded-3xl overflow-hidden">
+                  <div className="px-4 py-3.5 flex items-center gap-3" style={{ background: "#FFF3EC" }}>
+                    <div className="w-11 h-11 rounded-2xl flex items-center justify-center font-bold text-white text-base flex-shrink-0"
+                      style={{ background: "#FF7A22" }}>
+                      {student.name[0]?.toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold" style={{ color: "#121212" }}>{student.name}</p>
+                      <p className="text-[11px]" style={{ color: "#666" }}>{student.studentClass}</p>
+                    </div>
+                    <button onClick={() => { setStudent(null); setStudentBorrows([]); setCardInput(""); setShowLendForm(false); setSelectedBook(null); setBookSearch(""); setBookResults([]); }}
+                      className="p-1.5 rounded-xl hover:bg-white/60 transition">
+                      <X size={15} style={{ color: "#666" }} />
+                    </button>
+                  </div>
+
+                  <div className="px-4 pt-3 pb-1">
+                    <p className="text-xs font-bold mb-3" style={{ color: "#121212" }}>
+                      Books Taken
+                      {studentBorrows.length > 0 && (
+                        <span className="ml-1.5 px-2 py-0.5 rounded-full text-[10px]"
+                          style={{ background: "#FFF3EC", color: "#FF7A22" }}>
+                          {studentBorrows.length}
+                        </span>
+                      )}
+                    </p>
+
+                    {studentBorrows.length === 0 ? (
+                      <div className="py-6 text-center">
+                        <BookOpen size={28} className="mx-auto mb-2 text-gray-200" />
+                        <p className="text-sm font-semibold text-gray-400">No book taken</p>
+                        <p className="text-[11px] text-gray-300 mt-0.5">This student has no active borrows</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 mb-3">
+                        {studentBorrows.map(b => {
+                          const overdue = new Date(b.due_at) < now;
+                          const daysLeft = Math.ceil((new Date(b.due_at).getTime() - now.getTime()) / 86400000);
+                          const bookLoc = (b.copy?.book as { location?: string })?.location;
+                          const borrowedDate = new Date(b.borrowed_at).toLocaleDateString("en-RW", { day: "numeric", month: "short", year: "numeric" });
+                          const dueDate = new Date(b.due_at).toLocaleDateString("en-RW", { day: "numeric", month: "short", year: "numeric" });
+                          return (
+                            <div key={b.id} className="p-3 rounded-2xl space-y-2"
+                              style={{ background: overdue ? "#FEF2F2" : "#F5F5F5", border: overdue ? "1px solid #FECACA" : "1px solid transparent" }}>
+                              <div className="flex items-start gap-2">
+                                <Book size={14} style={{ color: overdue ? "#EF4444" : "#FF7A22", flexShrink: 0, marginTop: 1 }} />
+                                <p className="text-xs font-bold flex-1 min-w-0" style={{ color: "#121212" }}>
+                                  {b.copy?.book?.title ?? "Unknown Book"}
+                                </p>
+                                {bookLoc && (
+                                  <span className="text-[10px] text-gray-400 flex items-center gap-0.5 flex-shrink-0">
+                                    <MapPin size={9} /> {bookLoc}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3 pl-5">
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400">Borrowed</span>
+                                  <span className="text-[10px] font-semibold" style={{ color: "#121212" }}>{borrowedDate}</span>
+                                </div>
+                                <span className="text-gray-300 text-[10px]">→</span>
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400">Return by</span>
+                                  <span className={`text-[10px] font-bold ${overdue ? "text-red-600" : "text-gray-700"}`}>{dueDate}</span>
+                                </div>
+                                <span className={`ml-auto text-[10px] font-bold flex-shrink-0 ${overdue ? "text-red-600" : "text-green-600"}`}>
+                                  {overdue ? `${Math.abs(daysLeft)}d late` : `${daysLeft}d left`}
+                                </span>
+                              </div>
+                              <div className="flex justify-end pl-5">
+                                <button onClick={() => handleReturn(b.id)} disabled={returning === b.id}
+                                  className="px-3 py-1.5 rounded-xl text-xs font-bold text-white flex items-center gap-1.5 disabled:opacity-50"
+                                  style={{ background: overdue ? "#EF4444" : "#121212" }}>
+                                  {returning === b.id ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />}
+                                  Return Book
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Inline lend button */}
+                  {!showLendForm && (
+                    <div className="px-4 pb-4">
+                      <button onClick={() => setShowLendForm(true)}
+                        className="w-full py-3 rounded-2xl font-bold text-sm text-white flex items-center justify-center gap-2 transition active:scale-95"
+                        style={{ background: "#FF7A22" }}>
+                        <BookMarked size={16} /> Lend a Book to {student.name.split(" ")[0]}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Inline lend form */}
+                  {showLendForm && (
+                    <div className="px-4 pb-4 pt-3 border-t border-gray-100">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-xs font-bold" style={{ color: "#121212" }}>Lend a Book</p>
+                        <button onClick={() => { setShowLendForm(false); setSelectedBook(null); setBookSearch(""); setBookResults([]); }}
+                          className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
+                      </div>
+                      <BookSearchUI onConfirm={handleLend} />
                     </div>
                   )}
                 </div>
-              ) : (
-                <div className="mb-4 flex items-center justify-between p-3.5 rounded-2xl bg-[#5EAD70]/5 border border-[#5EAD70]/10">
-                  <div>
-                    <p className="text-xs font-bold text-[#5EAD70]">{selectedStudent.user.first_name} {selectedStudent.user.last_name}</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">Code: {selectedStudent.student_code}</p>
-                  </div>
-                  <button onClick={() => setSelectedStudent(null)} className="text-[#E57373] hover:text-red-700 transition"><X size={14} /></button>
-                </div>
               )}
-
-              <form onSubmit={handleSaveBorrow} className="space-y-4">
-                <div>
-                  <label className="text-xs font-bold text-gray-400 mb-1.5 block uppercase">Book Copy Tag / RFID Barcode *</label>
-                  <input
-                    value={borrowForm.copy_tag}
-                    onChange={(e) => setBorrowForm((f) => ({ ...f, copy_tag: e.target.value }))}
-                    placeholder="Scan barcode tag or type manually" required
-                    className="w-full border border-gray-100 bg-gray-50 rounded-2xl px-4 py-2.5 text-xs outline-none focus:border-[#5EAD70] transition"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-gray-400 mb-1.5 block uppercase">Borrowing Duration (Days)</label>
-                  <input
-                    type="number" min={1}
-                    value={borrowForm.due_days}
-                    onChange={(e) => setBorrowForm((f) => ({ ...f, due_days: Number(e.target.value) }))}
-                    className="w-full border border-gray-100 bg-gray-50 rounded-2xl px-4 py-2.5 text-xs outline-none focus:border-[#5EAD70] transition"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={savingBorrow || !selectedStudent || !borrowForm.copy_tag}
-                  className="w-full py-3 rounded-2xl bg-[#5EAD70] text-white font-bold text-xs hover:bg-[#5EAD70]/90 transition disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-sm shadow-[#5EAD70]/20"
-                >
-                  {savingBorrow && <Loader2 size={13} className="animate-spin" />}
-                  Confirm Checkout
-                </button>
-              </form>
             </div>
-          </div>
-        )}
+          )}
+        </div>
+      </div>
 
-        {/* Return Book Modal */}
-        {showReturnModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-3xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-4">
-                <p className="text-sm font-bold text-gray-800">Return Book Copy</p>
-                <button onClick={() => { setShowReturnModal(false); setReturnResult(null); setReturnForm({ copy_tag: "", fine_rate_per_day: 200 }); }} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
+      {/* ═══════════════ LEND MODAL ═══════════════ */}
+      {showLendModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          style={{ background: "rgba(0,0,0,0.45)" }}
+          onClick={e => { if (e.target === e.currentTarget) setShowLendModal(false); }}>
+          <div className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl overflow-hidden flex flex-col max-h-[90vh]">
+
+            {/* Modal header */}
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100 flex-shrink-0">
+              <div className="w-9 h-9 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ background: "#FFF3EC" }}>
+                <BookMarked size={18} style={{ color: "#FF7A22" }} />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-bold" style={{ color: "#121212" }}>Lend a Book</p>
+                <p className="text-[11px]" style={{ color: "#666" }}>Enter student info then pick a book</p>
+              </div>
+              <button onClick={() => setShowLendModal(false)} className="p-1.5 rounded-xl hover:bg-gray-100 transition">
+                <X size={16} style={{ color: "#666" }} />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto px-5 py-4 space-y-4">
+
+              {/* Step 1 — Student */}
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-wider block mb-2" style={{ color: "#666" }}>
+                  Step 1 — Student (card number or student code)
+                </label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <CreditCard size={13} className="absolute left-3.5 top-[11px]" style={{ color: "#999" }} />
+                    <input value={modalCardInput}
+                      onChange={e => setModalCardInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") lookupModalStudent(modalCardInput); }}
+                      placeholder="e.g. KMS001 or KNT-KMS-2026-00001"
+                      className="w-full border border-gray-200 rounded-2xl pl-9 pr-3 py-2.5 text-sm outline-none"
+                      style={{ color: "#121212" }} />
+                  </div>
+                  <button onClick={() => lookupModalStudent(modalCardInput)}
+                    disabled={lookingUpModalStudent || !modalCardInput.trim()}
+                    className="px-4 py-2.5 rounded-2xl text-white text-xs font-bold disabled:opacity-40 flex-shrink-0"
+                    style={{ background: "#121212" }}>
+                    {lookingUpModalStudent ? <Loader2 size={14} className="animate-spin" /> : "Find"}
+                  </button>
+                </div>
+
+                {modalStudent && (
+                  <div className="mt-2 flex items-center gap-3 p-3 rounded-2xl" style={{ background: "#FFF3EC" }}>
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white flex-shrink-0"
+                      style={{ background: "#FF7A22" }}>
+                      {modalStudent.name[0]?.toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold" style={{ color: "#121212" }}>{modalStudent.name}</p>
+                      <p className="text-[11px]" style={{ color: "#666" }}>{modalStudent.studentClass}</p>
+                    </div>
+                    <CheckCircle size={16} className="text-green-500 flex-shrink-0" />
+                  </div>
+                )}
               </div>
 
-              {returnResult ? (
-                <div className="space-y-4 text-center py-4">
-                  <CheckCircle size={44} className="text-[#5EAD70] mx-auto" />
-                  <div>
-                    <p className="text-sm font-bold text-gray-800">Book Returned Successfully!</p>
-                    {returnResult.fine_amount > 0 ? (
-                      <div className="mt-3 p-3.5 bg-red-50 border border-red-100 text-red-800 rounded-2xl text-xs inline-block text-left w-full">
-                        <p className="font-bold flex items-center gap-1"><AlertTriangle size={14} className="text-red-500" /> Overdue Fine: {returnResult.fine_amount.toLocaleString()} RWF</p>
-                        <p className="text-[10px] text-gray-500 mt-1">
-                          {returnResult.fine_charged_to_wallet 
-                            ? "Fine balance was automatically deducted from the student's digital card wallet." 
-                            : "Could not perform automatic card wallet deduction. Fine must be settled manually at the Bursary."}
-                        </p>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-gray-400 mt-1">Returned on time. No overdue fines.</p>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => { setReturnResult(null); setReturnForm({ copy_tag: "", fine_rate_per_day: 200 }); }}
-                    className="w-full py-3 bg-[#5EAD70] hover:bg-[#5EAD70]/90 text-white rounded-xl text-xs font-bold transition shadow-sm"
-                  >
-                    Return Another Book
-                  </button>
+              {/* Step 2 — Book (only after student is found) */}
+              {modalStudent && (
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider block mb-2" style={{ color: "#666" }}>
+                    Step 2 — Choose Book
+                  </label>
+                  <BookSearchUI onConfirm={handleModalLend} />
                 </div>
-              ) : (
-                <form onSubmit={handleReturnBook} className="space-y-4">
-                  <div>
-                    <label className="text-xs font-bold text-gray-400 mb-1.5 block uppercase">Scan / Enter Copy Barcode *</label>
-                    <input
-                      value={returnForm.copy_tag}
-                      onChange={(e) => setReturnForm((f) => ({ ...f, copy_tag: e.target.value }))}
-                      placeholder="Scan copy barcode" required autoFocus
-                      className="w-full border border-gray-100 bg-gray-50 rounded-2xl px-4 py-2.5 text-xs outline-none focus:border-[#5EAD70] transition"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-gray-400 mb-1.5 block uppercase">Overdue Fine Rate per Day (RWF)</label>
-                    <input
-                      type="number" min={0}
-                      value={returnForm.fine_rate_per_day}
-                      onChange={(e) => setReturnForm((f) => ({ ...f, fine_rate_per_day: Number(e.target.value) }))}
-                      className="w-full border border-gray-100 bg-gray-50 rounded-2xl px-4 py-2.5 text-xs outline-none focus:border-[#5EAD70] transition"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={savingReturn || !returnForm.copy_tag}
-                    className="w-full py-3 rounded-2xl bg-[#5EAD70] hover:bg-[#5EAD70]/90 text-white font-bold text-xs transition disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-sm shadow-[#5EAD70]/20"
-                  >
-                    {savingReturn && <Loader2 size={13} className="animate-spin" />}
-                    Confirm Return
-                  </button>
-                </form>
               )}
             </div>
           </div>
-        )}
-
-      </div>
+        </div>
+      )}
     </DashboardShell>
   );
 }

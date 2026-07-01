@@ -34,11 +34,15 @@ async function fixTeachers() {
         }
       }
       
+      const classes = await prisma.class.findMany({ where: { school_id: user.school_id } });
+      const subjects_taught = classes.map(c => ({ class_id: c.id, subject: 'General Subject' }));
+      
       await prisma.teacher.create({
         data: {
           user_id: user.id,
           school_id: user.school_id,
           employee_code,
+          subjects_taught,
           is_active: true,
         },
       });

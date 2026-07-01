@@ -87,7 +87,7 @@ async function deleteZoneAccessGrant(req, res, next) {
 
 async function evaluateAccess(req, res, next) {
   try {
-    const result = await service.evaluateAccess(req.user.school_id, req.body);
+    const result = await service.evaluateAccess(req.user.school_id, req.body, req.user.id);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }

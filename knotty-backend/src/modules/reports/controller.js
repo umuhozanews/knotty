@@ -45,16 +45,21 @@ async function forStudent(req, res, next) {
 
 async function getOne(req, res, next) {
   try {
+    const prisma = require('../../config/database');
+    const report = await prisma.academicReport.findFirst({ where: { id: req.params.id, school_id: req.user.school_id } });
+    if (!report) return res.status(404).json({ success: false, message: 'Report not found' });
+
     if (req.user.role === 'TEACHER') {
-      const prisma = require('../../config/database');
-      const report = await prisma.academicReport.findFirst({ where: { id: req.params.id } });
-      if (!report) return res.status(404).json({ success: false, message: 'Report not found' });
       const hasAccess = await verifyTeacherStudentAccess(req.user.id, report.student_id, req.user.school_id);
-      if (!hasAccess) {
-        return res.status(403).json({ success: false, message: 'Access denied: You are not assigned to this student\'s class.' });
-      }
+      if (!hasAccess) return res.status(403).json({ success: false, message: 'Access denied: You are not assigned to this student\'s class.' });
+    } else if (req.user.role === 'STUDENT') {
+      const student = await prisma.student.findFirst({ where: { id: report.student_id, user_id: req.user.id } });
+      if (!student) return res.status(403).json({ success: false, message: 'Access denied' });
+    } else if (req.user.role === 'PARENT') {
+      const student = await prisma.student.findFirst({ where: { id: report.student_id, school_id: req.user.school_id, parent_id: req.user.id } });
+      if (!student) return res.status(403).json({ success: false, message: 'Access denied: not your child' });
     }
-    const report = await service.getOne(req.params.id);
+
     res.json({ success: true, data: report });
   } catch (err) { next(err); }
 }

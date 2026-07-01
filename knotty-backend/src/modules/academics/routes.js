@@ -5,6 +5,9 @@ const { authorize } = require('../../middleware/rbac');
 
 router.use(authenticate);
 
+// Subjects
+router.get('/subjects', authorize('ADMIN', 'TEACHER', 'STUDENT', 'PARENT'), ctrl.listSubjects);
+
 // Terms
 router.get('/terms', authorize('ADMIN', 'TEACHER', 'STUDENT', 'PARENT'), ctrl.listTerms);
 router.post('/terms', authorize('ADMIN'), ctrl.createTerm);

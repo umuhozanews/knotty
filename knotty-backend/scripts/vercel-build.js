@@ -38,4 +38,12 @@ try {
   process.exit(1);
 }
 
+console.log('Seeding demo data...');
+try {
+  execSync('node prisma/seed.js', { stdio: 'inherit' });
+  console.log('Seed completed successfully.');
+} catch (error) {
+  console.warn('Seed script failed (non-fatal):', error.message);
+}
+
 console.log('Build script completed successfully.');

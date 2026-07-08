@@ -99,4 +99,11 @@ async function pdfByClass(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { scan, bulk, student, byClass, report, scanNFC, todaySummary, myAttendance, scanSecure, pdfByClass };
+async function queue(req, res, next) {
+  try {
+    const result = await service.processQueue(req.body.taps, req.user.id, req.user.school_id);
+    res.json({ success: true, ...result });
+  } catch (err) { next(err); }
+}
+
+module.exports = { scan, bulk, student, byClass, report, scanNFC, todaySummary, myAttendance, scanSecure, pdfByClass, queue };

@@ -6,12 +6,14 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const errorHandler = require('./middleware/errorHandler');
+const { globalLimiter } = require('./middleware/rateLimiter');
 
 const path = require('path');
 const app = express();
 
 // ─── Security & Parsing ───
 app.use(helmet());
+app.use(globalLimiter);
 const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000')
   .split(',').map(o => o.trim());
 app.use(cors({
@@ -51,7 +53,27 @@ app.use(`${API}/academics`, require('./modules/academics/routes'));
 app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
 
 // ─── Health check ───
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'KNOTTY Backend', timestamp: new Date() }));
+app.get('/health', async (req, res) => {
+  const checks = { db: false, redis: false };
+  try {
+    const prisma = require('./config/database');
+    await prisma.$queryRaw`SELECT 1`;
+    checks.db = true;
+  } catch (_) {}
+  try {
+    const redis = require('./config/redis');
+    await redis.set('health:ping', '1', 'EX', 5);
+    checks.redis = true;
+  } catch (_) {}
+
+  const allOk = checks.db && checks.redis;
+  res.status(allOk ? 200 : 503).json({
+    status: allOk ? 'ok' : 'degraded',
+    service: 'KNOTTY Backend',
+    checks,
+    timestamp: new Date(),
+  });
+});
 
 // ─── 404 ───
 app.use((req, res) => res.status(404).json({ success: false, message: `Route ${req.path} not found` }));

@@ -117,6 +117,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         )}
       </div>
 
+
       {/* Bottom actions */}
       <div className="border-t border-gray-100 px-3 py-3 space-y-0.5">
         {role === "ADMIN" && (

@@ -1,12 +1,22 @@
 const prisma = require('../../config/database');
+const { logAction } = require('../../utils/audit');
 const { paginate, paginatedResponse } = require('../../utils/helpers');
 const { sendSMS } = require('../../integrations/africas-talking');
 
 // ─── Existing Health Incident Records (Legacy/Direct Incident Logs) ───
 async function create(data, recordedBy, schoolId) {
-  return prisma.healthRecord.create({
+  const record = await prisma.healthRecord.create({
     data: { ...data, recorded_by: recordedBy, school_id: schoolId },
   });
+  logAction({
+    school_id: schoolId,
+    actor_user_id: recordedBy,
+    action: 'HEALTH_RECORD_CREATED',
+    entity_type: 'HealthRecord',
+    entity_id: record.id,
+    after_state: { type: record.type, student_id: record.student_id, title: record.title },
+  }).catch(() => {});
+  return record;
 }
 
 async function list(studentId, { page, limit }) {
@@ -42,12 +52,41 @@ async function listSchool(schoolId, { page, limit } = {}) {
   return paginatedResponse(data, total, page || 1, limit || 30);
 }
 
-async function update(id, schoolId, data) {
-  return prisma.healthRecord.updateMany({ where: { id, school_id: schoolId }, data });
+async function update(id, schoolId, data, actorId) {
+  const before = await prisma.healthRecord.findFirst({
+    where: { id, school_id: schoolId },
+    select: { type: true, title: true },
+  });
+  const result = await prisma.healthRecord.updateMany({ where: { id, school_id: schoolId }, data });
+  logAction({
+    school_id: schoolId,
+    actor_user_id: actorId,
+    action: 'HEALTH_RECORD_UPDATED',
+    entity_type: 'HealthRecord',
+    entity_id: id,
+    before_state: before,
+    after_state: data,
+  }).catch(() => {});
+  return result;
 }
 
-async function remove(id, schoolId) {
-  return prisma.healthRecord.deleteMany({ where: { id, school_id: schoolId } });
+async function remove(id, schoolId, actorId) {
+  const before = await prisma.healthRecord.findFirst({
+    where: { id, school_id: schoolId },
+    select: { type: true, title: true, student_id: true },
+  });
+  const result = await prisma.healthRecord.deleteMany({ where: { id, school_id: schoolId } });
+  if (before) {
+    logAction({
+      school_id: schoolId,
+      actor_user_id: actorId,
+      action: 'HEALTH_RECORD_DELETED',
+      entity_type: 'HealthRecord',
+      entity_id: id,
+      before_state: before,
+    }).catch(() => {});
+  }
+  return result;
 }
 
 // ─── New Advanced Medical Profiles ───
@@ -70,35 +109,36 @@ async function getMedicalProfile(studentId, schoolId) {
   return profile;
 }
 
-async function upsertMedicalProfile(studentId, schoolId, data) {
+async function upsertMedicalProfile(studentId, schoolId, data, actorId) {
   const { blood_type, allergies, chronic_conditions, emergency_contact_phone } = data;
 
   const existing = await prisma.medicalProfile.findFirst({
     where: { student_id: studentId, school_id: schoolId },
   });
 
+  let result;
   if (existing) {
-    return prisma.medicalProfile.update({
+    result = await prisma.medicalProfile.update({
       where: { id: existing.id },
-      data: {
-        blood_type,
-        allergies,
-        chronic_conditions,
-        emergency_contact_phone,
-      },
+      data: { blood_type, allergies, chronic_conditions, emergency_contact_phone },
     });
   } else {
-    return prisma.medicalProfile.create({
-      data: {
-        school_id: schoolId,
-        student_id: studentId,
-        blood_type,
-        allergies,
-        chronic_conditions,
-        emergency_contact_phone,
-      },
+    result = await prisma.medicalProfile.create({
+      data: { school_id: schoolId, student_id: studentId, blood_type, allergies, chronic_conditions, emergency_contact_phone },
     });
   }
+
+  logAction({
+    school_id: schoolId,
+    actor_user_id: actorId,
+    action: 'MEDICAL_PROFILE_UPDATED',
+    entity_type: 'MedicalProfile',
+    entity_id: result.id,
+    before_state: existing ? { blood_type: existing.blood_type, allergies: existing.allergies } : null,
+    after_state: { blood_type, allergies, chronic_conditions },
+  }).catch(() => {});
+
+  return result;
 }
 
 // ─── New Immunization Records ───
@@ -135,7 +175,7 @@ async function removeImmunizationRecord(id, schoolId) {
 async function createClinicVisit(studentId, schoolId, data, recorderId) {
   const { presenting_complaint, treatment_notes, follow_up_required = false, medications = [] } = data;
 
-  return prisma.$transaction(async (tx) => {
+  const visit = await prisma.$transaction(async (tx) => {
     const student = await tx.student.findUnique({
       where: { id: studentId },
       include: {
@@ -203,6 +243,22 @@ async function createClinicVisit(studentId, schoolId, data, recorderId) {
       include: { medications: true },
     });
   });
+
+  logAction({
+    school_id: schoolId,
+    actor_user_id: recorderId,
+    action: 'CLINIC_VISIT_CREATED',
+    entity_type: 'ClinicVisit',
+    entity_id: visit.id,
+    after_state: {
+      student_id: studentId,
+      presenting_complaint,
+      medications_count: medications.length,
+      follow_up_required,
+    },
+  }).catch(() => {});
+
+  return visit;
 }
 
 async function listClinicVisits(studentId, schoolId, { page = 1, limit = 20 } = {}) {

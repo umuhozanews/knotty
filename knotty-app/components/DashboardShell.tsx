@@ -49,6 +49,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <Header onMenuClick={() => setSidebarOpen(true)} />
         <main className="flex-1 overflow-auto mt-2 md:mt-3">{children}</main>
+        <footer className="text-center py-1.5 text-[10px] text-gray-400">
+          Built by <span className="font-bold" style={{ color: "#FF7A22" }}>GACONDO LABS</span>
+        </footer>
       </div>
     </div>
   );

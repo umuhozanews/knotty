@@ -1,5 +1,6 @@
 const prisma = require('../../config/database');
 const redis = require('../../config/redis');
+const { logAction } = require('../../utils/audit');
 const { sendAttendanceAlert } = require('../../integrations/africas-talking');
 const { paginate, paginatedResponse } = require('../../utils/helpers');
 
@@ -14,6 +15,7 @@ async function scanAttendance(cardNumber, recordedBy, options = {}) {
     tapOutStart,
     tapOutEnd,
     classId,
+    occurred_at, // offline queue: original tap timestamp from the device
   } = options;
 
   const card = await prisma.knottyCard.findUnique({
@@ -42,8 +44,9 @@ async function scanAttendance(cardNumber, recordedBy, options = {}) {
       { status: 400 }
     );
   }
-  const now = new Date();
-  
+  // For offline queue: use the device's original tap time if provided
+  const now = occurred_at ? new Date(occurred_at) : new Date();
+
   let targetDate;
   if (date) {
     targetDate = new Date(date);
@@ -106,6 +109,14 @@ async function scanAttendance(cardNumber, recordedBy, options = {}) {
         data: { check_in_time: now, check_out_time: null, status },
         include: studentInclude,
       });
+      logAction({
+        school_id: student.school_id,
+        actor_user_id: recordedBy,
+        action: 'ATTENDANCE_TAP_IN',
+        entity_type: 'Attendance',
+        entity_id: updated.id,
+        after_state: { status, card_number: card.card_number, student_id: student.id },
+      }).catch(() => {});
       return { ...updated, action: 'TAP_IN', card_number: card.card_number };
     }
 
@@ -121,6 +132,15 @@ async function scanAttendance(cardNumber, recordedBy, options = {}) {
       },
       include: studentInclude,
     });
+
+    logAction({
+      school_id: student.school_id,
+      actor_user_id: recordedBy,
+      action: 'ATTENDANCE_TAP_IN',
+      entity_type: 'Attendance',
+      entity_id: created.id,
+      after_state: { status, card_number: card.card_number, student_id: student.id },
+    }).catch(() => {});
 
     if (status === 'LATE' && student.parent?.phone) {
       sendAttendanceAlert(
@@ -163,6 +183,15 @@ async function scanAttendance(cardNumber, recordedBy, options = {}) {
       data: { check_out_time: now },
       include: studentInclude,
     });
+
+    logAction({
+      school_id: student.school_id,
+      actor_user_id: recordedBy,
+      action: 'ATTENDANCE_TAP_OUT',
+      entity_type: 'Attendance',
+      entity_id: updated.id,
+      after_state: { card_number: card.card_number, student_id: student.id, check_out_time: now },
+    }).catch(() => {});
 
     invalidateSummaryCache(student.school_id);
     return { ...updated, action: 'TAP_OUT', card_number: card.card_number };
@@ -417,4 +446,60 @@ async function scanAttendanceSecure(token, recordedBy, options = {}) {
   }
 }
 
-module.exports = { scanAttendance, bulkMarkAttendance, getStudentAttendance, getClassAttendance, getAttendanceReport, scanAttendanceByNFC, getTodaySummary, scanAttendanceSecure, invalidateSummaryCache, classPDF };
+// ── Offline Tap Queue ─────────────────────────────────────────────────────────
+// NFC readers submit taps they buffered while connectivity was lost.
+// Each tap is processed in order using its original occurred_at timestamp.
+const MAX_QUEUE_AGE_MS = 24 * 60 * 60 * 1000; // reject taps older than 24h
+
+async function processQueue(taps, recordedBy, schoolId) {
+  if (!Array.isArray(taps) || taps.length === 0) {
+    throw Object.assign(new Error('taps must be a non-empty array'), { status: 400 });
+  }
+  if (taps.length > 200) {
+    throw Object.assign(new Error('Maximum 200 taps per queue submission'), { status: 400 });
+  }
+
+  const results = [];
+  let processed = 0;
+  let failed = 0;
+
+  for (const tap of taps) {
+    const { card_number, type, occurred_at, class_id } = tap;
+
+    if (!card_number) {
+      results.push({ card_number: null, success: false, error: 'Missing card_number' });
+      failed++;
+      continue;
+    }
+
+    if (!occurred_at || isNaN(new Date(occurred_at).getTime())) {
+      results.push({ card_number, success: false, error: 'Invalid occurred_at timestamp' });
+      failed++;
+      continue;
+    }
+
+    const tapAge = Date.now() - new Date(occurred_at).getTime();
+    if (tapAge > MAX_QUEUE_AGE_MS) {
+      results.push({ card_number, success: false, error: 'Tap too old (>24h), rejected' });
+      failed++;
+      continue;
+    }
+
+    try {
+      const result = await scanAttendance(card_number, recordedBy, {
+        type,
+        occurred_at,
+        classId: class_id,
+      });
+      results.push({ card_number, success: true, action: result.action });
+      processed++;
+    } catch (err) {
+      results.push({ card_number, success: false, error: err.message });
+      failed++;
+    }
+  }
+
+  return { processed, failed, total: taps.length, results };
+}
+
+module.exports = { scanAttendance, bulkMarkAttendance, getStudentAttendance, getClassAttendance, getAttendanceReport, scanAttendanceByNFC, getTodaySummary, scanAttendanceSecure, invalidateSummaryCache, classPDF, processQueue };

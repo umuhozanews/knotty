@@ -2,15 +2,17 @@ const router = require('express').Router();
 const ctrl = require('./controller');
 const { authenticate } = require('../../middleware/auth');
 const { authorize } = require('../../middleware/rbac');
+const { transactionLimiter } = require('../../middleware/rateLimiter');
 
 const { checkClassAccess } = require('../../middleware/classAccess');
 
 router.use(authenticate);
 
-router.post('/scan', authorize('ADMIN', 'TEACHER', 'DISCIPLINE'), ctrl.scan);
-router.post('/scan-nfc', authorize('ADMIN', 'TEACHER', 'DISCIPLINE'), ctrl.scanNFC);
-router.post('/scan-secure', authorize('ADMIN', 'TEACHER', 'DISCIPLINE'), ctrl.scanSecure);
-router.post('/bulk', authorize('ADMIN', 'TEACHER'), checkClassAccess, ctrl.bulk);
+router.post('/scan', authorize('ADMIN', 'TEACHER', 'DISCIPLINE'), transactionLimiter, ctrl.scan);
+router.post('/scan-nfc', authorize('ADMIN', 'TEACHER', 'DISCIPLINE'), transactionLimiter, ctrl.scanNFC);
+router.post('/scan-secure', authorize('ADMIN', 'TEACHER', 'DISCIPLINE'), transactionLimiter, ctrl.scanSecure);
+router.post('/bulk', authorize('ADMIN', 'TEACHER'), checkClassAccess, transactionLimiter, ctrl.bulk);
+router.post('/queue', authorize('ADMIN', 'TEACHER', 'DISCIPLINE'), transactionLimiter, ctrl.queue);
 router.get('/today-summary', authorize('ADMIN', 'TEACHER', 'DISCIPLINE'), checkClassAccess, ctrl.todaySummary);
 router.get('/me', authorize('STUDENT'), ctrl.myAttendance);
 router.get('/student/:studentId', authorize('ADMIN', 'TEACHER', 'DISCIPLINE', 'PARENT', 'STUDENT'), ctrl.student);

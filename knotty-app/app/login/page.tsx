@@ -121,6 +121,7 @@ export default function LoginPage() {
             Demo: <span className="font-mono">admin@knottyschool.rw</span> / <span className="font-mono">Admin@2024</span>
           </p>
         </div>
+
       </div>
     </div>
   );

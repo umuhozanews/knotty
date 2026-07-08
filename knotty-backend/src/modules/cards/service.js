@@ -1,5 +1,6 @@
 const prisma = require('../../config/database');
 const redis = require('../../config/redis');
+const { logAction } = require('../../utils/audit');
 const { generateCardNumber } = require('../../utils/cardNumberGenerator');
 const { generateQRCode } = require('../../utils/qrGenerator');
 const momoService = require('../../integrations/mtn-momo');
@@ -7,7 +8,7 @@ const { paginate, paginatedResponse } = require('../../utils/helpers');
 
 const CARD_CACHE_TTL = 2; // seconds — short so wallet balance stays fresh
 
-async function issueCard(studentId, schoolId) {
+async function issueCard(studentId, schoolId, actorId) {
   const student = await prisma.student.findFirst({
     where: { id: studentId, school_id: schoolId },
     include: { card: true, school: true },
@@ -22,7 +23,7 @@ async function issueCard(studentId, schoolId) {
   const expires_at = new Date();
   expires_at.setFullYear(expires_at.getFullYear() + 2);
 
-  return prisma.knottyCard.create({
+  const card = await prisma.knottyCard.create({
     data: {
       student_id: studentId,
       school_id: schoolId,
@@ -36,6 +37,17 @@ async function issueCard(studentId, schoolId) {
       },
     },
   });
+
+  logAction({
+    school_id: schoolId,
+    actor_user_id: actorId,
+    action: 'CARD_ISSUED',
+    entity_type: 'KnottyCard',
+    entity_id: card.id,
+    after_state: { card_number, student_id: studentId, expires_at },
+  }).catch(() => {});
+
+  return card;
 }
 
 async function invalidateCardCache(cardNumber) {
@@ -100,17 +112,37 @@ async function scanCard(cardNumber) {
   return result;
 }
 
-async function freezeCard(id, schoolId) {
+async function freezeCard(id, schoolId, actorId) {
   const result = await prisma.knottyCard.updateMany({ where: { id, school_id: schoolId }, data: { is_frozen: true } });
   const card = await prisma.knottyCard.findFirst({ where: { id, school_id: schoolId }, select: { card_number: true } });
-  if (card) invalidateCardCache(card.card_number);
+  if (card) {
+    invalidateCardCache(card.card_number);
+    logAction({
+      school_id: schoolId,
+      actor_user_id: actorId,
+      action: 'CARD_FROZEN',
+      entity_type: 'KnottyCard',
+      entity_id: id,
+      after_state: { card_number: card.card_number, is_frozen: true },
+    }).catch(() => {});
+  }
   return result;
 }
 
-async function unfreezeCard(id, schoolId) {
+async function unfreezeCard(id, schoolId, actorId) {
   const result = await prisma.knottyCard.updateMany({ where: { id, school_id: schoolId }, data: { is_frozen: false } });
   const card = await prisma.knottyCard.findFirst({ where: { id, school_id: schoolId }, select: { card_number: true } });
-  if (card) invalidateCardCache(card.card_number);
+  if (card) {
+    invalidateCardCache(card.card_number);
+    logAction({
+      school_id: schoolId,
+      actor_user_id: actorId,
+      action: 'CARD_UNFROZEN',
+      entity_type: 'KnottyCard',
+      entity_id: id,
+      after_state: { card_number: card.card_number, is_frozen: false },
+    }).catch(() => {});
+  }
   return result;
 }
 
@@ -193,12 +225,23 @@ async function getTransactions(cardId, schoolId, { page, limit }) {
   return paginatedResponse(data, total, page, limit);
 }
 
-async function linkNFC(cardId, schoolId, nfcUid) {
+async function linkNFC(cardId, schoolId, nfcUid, actorId) {
   const card = await prisma.knottyCard.findFirst({ where: { id: cardId, school_id: schoolId } });
   if (!card) throw Object.assign(new Error('Card not found'), { status: 404 });
   const conflict = await prisma.knottyCard.findFirst({ where: { nfc_uid: nfcUid, NOT: { id: cardId } } });
   if (conflict) throw Object.assign(new Error('NFC tag already linked to another card'), { status: 409 });
-  return prisma.knottyCard.update({ where: { id: cardId }, data: { nfc_uid: nfcUid } });
+  const updated = await prisma.knottyCard.update({ where: { id: cardId }, data: { nfc_uid: nfcUid } });
+
+  logAction({
+    school_id: schoolId,
+    actor_user_id: actorId,
+    action: 'CARD_NFC_LINKED',
+    entity_type: 'KnottyCard',
+    entity_id: cardId,
+    after_state: { card_number: card.card_number, nfc_uid: nfcUid },
+  }).catch(() => {});
+
+  return updated;
 }
 
 async function scanByNFC(nfcUid, schoolId) {
@@ -214,8 +257,8 @@ async function cashTopUp(cardId, schoolId, amount, recordedBy) {
   if (!card.is_active) throw Object.assign(new Error('Card is inactive'), { status: 403 });
   if (amount < 100) throw Object.assign(new Error('Minimum top-up is 100 RWF'), { status: 400 });
 
-  return prisma.$transaction(async (tx) => {
-    const updated = await tx.knottyCard.update({
+  const updated = await prisma.$transaction(async (tx) => {
+    const upd = await tx.knottyCard.update({
       where: { id: cardId },
       data: { wallet_balance: { increment: amount } },
     });
@@ -227,13 +270,27 @@ async function cashTopUp(cardId, schoolId, amount, recordedBy) {
         type: 'TOP_UP',
         amount,
         balance_before: card.wallet_balance,
-        balance_after: updated.wallet_balance,
+        balance_after: upd.wallet_balance,
         source: 'CASH',
         description: 'Cash top-up by admin',
       },
     });
-    return updated;
+    return upd;
   });
+
+  invalidateCardCache(card.card_number);
+
+  logAction({
+    school_id: schoolId,
+    actor_user_id: recordedBy,
+    action: 'CARD_CASH_TOPUP',
+    entity_type: 'KnottyCard',
+    entity_id: cardId,
+    before_state: { wallet_balance: card.wallet_balance },
+    after_state: { wallet_balance: updated.wallet_balance, amount_added: amount },
+  }).catch(() => {});
+
+  return updated;
 }
 
 async function listCards(schoolId, { page, limit, search }) {

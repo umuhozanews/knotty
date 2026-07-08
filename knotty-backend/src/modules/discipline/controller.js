@@ -28,7 +28,7 @@ async function list(req, res, next) {
 
 async function update(req, res, next) {
   try {
-    await service.update(req.params.id, req.user.school_id, req.body);
+    await service.update(req.params.id, req.user.school_id, req.body, req.user.id);
     res.json({ success: true, message: 'Updated' });
   } catch (err) { next(err); }
 }

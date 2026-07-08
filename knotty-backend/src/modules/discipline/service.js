@@ -1,4 +1,5 @@
 const prisma = require('../../config/database');
+const { logAction } = require('../../utils/audit');
 const { sendSMS } = require('../../integrations/africas-talking');
 const { paginate, paginatedResponse } = require('../../utils/helpers');
 
@@ -14,6 +15,19 @@ async function create(data, recordedBy, schoolId) {
       },
     },
   });
+
+  logAction({
+    school_id: schoolId,
+    actor_user_id: recordedBy,
+    action: 'DISCIPLINE_RECORD_CREATED',
+    entity_type: 'DisciplineRecord',
+    entity_id: record.id,
+    after_state: {
+      type: record.type,
+      student_id: record.student_id,
+      title: record.title,
+    },
+  }).catch(() => {});
 
   if (record.student.parent?.phone) {
     const name = `${record.student.user.first_name} ${record.student.user.last_name}`;
@@ -41,8 +55,22 @@ async function list(studentId, { page, limit }) {
   return paginatedResponse(data, total, page, limit);
 }
 
-async function update(id, schoolId, data) {
-  return prisma.disciplineRecord.updateMany({ where: { id, school_id: schoolId }, data });
+async function update(id, schoolId, data, actorId) {
+  const before = await prisma.disciplineRecord.findFirst({
+    where: { id, school_id: schoolId },
+    select: { type: true, status: true, title: true },
+  });
+  const result = await prisma.disciplineRecord.updateMany({ where: { id, school_id: schoolId }, data });
+  logAction({
+    school_id: schoolId,
+    actor_user_id: actorId,
+    action: 'DISCIPLINE_RECORD_UPDATED',
+    entity_type: 'DisciplineRecord',
+    entity_id: id,
+    before_state: before,
+    after_state: data,
+  }).catch(() => {});
+  return result;
 }
 
 async function listForSchool(schoolId, { page, limit, search }) {

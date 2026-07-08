@@ -2,7 +2,7 @@ const service = require('./service');
 
 async function issue(req, res, next) {
   try {
-    const card = await service.issueCard(req.params.studentId, req.user.school_id);
+    const card = await service.issueCard(req.params.studentId, req.user.school_id, req.user.id);
     res.status(201).json({ success: true, data: card });
   } catch (err) { next(err); }
 }
@@ -16,14 +16,14 @@ async function scan(req, res, next) {
 
 async function freeze(req, res, next) {
   try {
-    await service.freezeCard(req.params.id, req.user.school_id);
+    await service.freezeCard(req.params.id, req.user.school_id, req.user.id);
     res.json({ success: true, message: 'Card frozen' });
   } catch (err) { next(err); }
 }
 
 async function unfreeze(req, res, next) {
   try {
-    await service.unfreezeCard(req.params.id, req.user.school_id);
+    await service.unfreezeCard(req.params.id, req.user.school_id, req.user.id);
     res.json({ success: true, message: 'Card unfrozen' });
   } catch (err) { next(err); }
 }
@@ -56,7 +56,7 @@ async function transactions(req, res, next) {
 
 async function linkNFC(req, res, next) {
   try {
-    const card = await service.linkNFC(req.params.id, req.user.school_id, req.body.nfc_uid);
+    const card = await service.linkNFC(req.params.id, req.user.school_id, req.body.nfc_uid, req.user.id);
     res.json({ success: true, data: card });
   } catch (err) { next(err); }
 }

@@ -37,14 +37,14 @@ async function listSchool(req, res, next) {
 
 async function update(req, res, next) {
   try {
-    await service.update(req.params.id, req.user.school_id, req.body);
+    await service.update(req.params.id, req.user.school_id, req.body, req.user.id);
     res.json({ success: true, message: 'Updated' });
   } catch (err) { next(err); }
 }
 
 async function remove(req, res, next) {
   try {
-    await service.remove(req.params.id, req.user.school_id);
+    await service.remove(req.params.id, req.user.school_id, req.user.id);
     res.json({ success: true, message: 'Deleted' });
   } catch (err) { next(err); }
 }
@@ -70,7 +70,7 @@ async function getMedicalProfile(req, res, next) {
 
 async function upsertMedicalProfile(req, res, next) {
   try {
-    const result = await service.upsertMedicalProfile(req.params.studentId, req.user.school_id, req.body);
+    const result = await service.upsertMedicalProfile(req.params.studentId, req.user.school_id, req.body, req.user.id);
     res.json({ success: true, data: result, message: 'Medical profile saved successfully' });
   } catch (err) { next(err); }
 }

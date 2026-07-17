@@ -1,8 +1,16 @@
+// Hard-required: server cannot function without these
 const REQUIRED = [
   'DATABASE_URL',
   'REDIS_URL',
   'JWT_SECRET',
   'JWT_REFRESH_SECRET',
+  'ENCRYPTION_KEY',
+  'BACKUP_CRON_SECRET',
+  'MOMO_CALLBACK_SECRET',
+];
+
+// Soft-required: integrations degrade gracefully but should be set in production
+const RECOMMENDED = [
   'CLOUDINARY_CLOUD_NAME',
   'CLOUDINARY_API_KEY',
   'CLOUDINARY_API_SECRET',
@@ -10,11 +18,8 @@ const REQUIRED = [
   'MTN_MOMO_API_USER',
   'MTN_MOMO_API_KEY',
   'MTN_MOMO_CALLBACK_URL',
-  'MOMO_CALLBACK_SECRET',
   'AFRICAS_TALKING_API_KEY',
   'AFRICAS_TALKING_USERNAME',
-  'ENCRYPTION_KEY',
-  'CRON_SECRET',
 ];
 
 function validateEnv() {
@@ -22,6 +27,11 @@ function validateEnv() {
   if (missing.length > 0) {
     console.error('[STARTUP] Missing required environment variables:', missing.join(', '));
     process.exit(1);
+  }
+
+  const missingRecommended = RECOMMENDED.filter((k) => !process.env[k]);
+  if (missingRecommended.length > 0) {
+    console.warn('[STARTUP] Missing recommended environment variables (some features will be disabled):', missingRecommended.join(', '));
   }
 
   if (!/^[0-9a-fA-F]{64}$/.test(process.env.ENCRYPTION_KEY)) {

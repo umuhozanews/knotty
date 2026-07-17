@@ -14,10 +14,10 @@ router.post('/backup', authenticate, authorize('ADMIN'), async (req, res, next) 
   }
 });
 
-// Vercel Cron endpoint — authenticated by CRON_SECRET, backs up all schools
+// Vercel Cron endpoint — authenticated by BACKUP_CRON_SECRET, backs up all schools
 router.post('/cron/backup', async (req, res) => {
   const token = (req.headers.authorization || '').replace('Bearer ', '');
-  if (!process.env.CRON_SECRET || token !== process.env.CRON_SECRET) {
+  if (!process.env.BACKUP_CRON_SECRET || token !== process.env.BACKUP_CRON_SECRET) {
     return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
   try {

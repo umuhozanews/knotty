@@ -14,5 +14,11 @@
       "src": "/(.*)",
       "dest": "src/app.js"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/v1/admin/cron/backup",
+      "schedule": "0 2 * * *"
+    }
   ]
 }

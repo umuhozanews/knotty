@@ -1,18 +1,55 @@
 require('dotenv').config();
-process.on('uncaughtException', (e) => process.stderr.write('[UNCAUGHT] ' + e.stack + '\n'));
-process.on('unhandledRejection', (e) => process.stderr.write('[UNHANDLED] ' + e + '\n'));
+
+const { validateEnv } = require('./utils/validateEnv');
+validateEnv();
+
+// Sentry must be initialized before any other requires
+const Sentry = require('@sentry/node');
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV || 'development',
+    tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 0,
+  });
+}
+
+process.on('uncaughtException', (e) => {
+  Sentry.captureException(e);
+  process.stderr.write('[UNCAUGHT] ' + e.stack + '\n');
+});
+process.on('unhandledRejection', (e) => {
+  Sentry.captureException(e);
+  process.stderr.write('[UNHANDLED] ' + e + '\n');
+});
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const errorHandler = require('./middleware/errorHandler');
 const { globalLimiter } = require('./middleware/rateLimiter');
+const { waf } = require('./middleware/waf');
 
 const path = require('path');
 const app = express();
 
 // ─── Security & Parsing ───
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'https://res.cloudinary.com'],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+  hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+}));
 app.use(globalLimiter);
 const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000')
   .split(',').map(o => o.trim());
@@ -26,6 +63,8 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+// WAF runs after body parsing so req.body is populated
+app.use(waf);
 
 // ─── Routes ───
 const API = '/api/v1';
@@ -48,6 +87,7 @@ app.use(`${API}/materials`, require('./modules/materials/routes'));
 app.use(`${API}/library`, require('./modules/library/routes'));
 app.use(`${API}/gate-access`, require('./modules/gate-access/routes'));
 app.use(`${API}/academics`, require('./modules/academics/routes'));
+app.use(`${API}/admin`, require('./modules/admin/routes'));
 
 // ─── Static uploads (local dev fallback) ───
 app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
@@ -79,6 +119,7 @@ app.get('/health', async (req, res) => {
 app.use((req, res) => res.status(404).json({ success: false, message: `Route ${req.path} not found` }));
 
 // ─── Error Handler ───
+if (process.env.SENTRY_DSN) app.use(Sentry.expressErrorHandler());
 app.use(errorHandler);
 
 if (!process.env.VERCEL) {

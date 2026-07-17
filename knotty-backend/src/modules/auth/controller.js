@@ -26,7 +26,8 @@ async function refresh(req, res, next) {
 
 async function logout(req, res, next) {
   try {
-    await authService.logout(req.user.id);
+    const token = req.headers.authorization?.split(' ')[1];
+    await authService.logout(req.user.id, token);
     res.json({ success: true, message: 'Logged out' });
   } catch (err) {
     next(err);

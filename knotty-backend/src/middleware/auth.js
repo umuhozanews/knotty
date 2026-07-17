@@ -13,6 +13,15 @@ async function authenticate(req, res, next) {
   const token = authHeader.split(' ')[1];
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Reject blacklisted tokens (logged-out sessions)
+    if (payload.jti) {
+      try {
+        const revoked = await redis.get(`blacklist:${payload.jti}`);
+        if (revoked) return res.status(401).json({ success: false, message: 'Token has been revoked' });
+      } catch { /* Redis down — allow through to avoid locking out all users */ }
+    }
+
     const cacheKey = `user:${payload.userId}`;
 
     // Try cache first — avoids a DB hit on every request

@@ -20,9 +20,22 @@ const pool = new Pool({
 });
 const adapter = new PrismaPg(pool);
 
+const AUDIT_READ_OPS = new Set(['findUnique', 'findFirst', 'findMany', 'findUniqueOrThrow', 'findFirstOrThrow', 'count', 'aggregate', 'groupBy', 'create', 'createMany']);
+
 const prisma = new PrismaClient({
   adapter,
   log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+}).$extends({
+  query: {
+    auditLog: {
+      $allOperations({ operation, args, query }) {
+        if (!AUDIT_READ_OPS.has(operation)) {
+          throw new Error(`AuditLog is immutable — ${operation} is not permitted`);
+        }
+        return query(args);
+      },
+    },
+  },
 });
 
 module.exports = prisma;

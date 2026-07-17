@@ -2,11 +2,70 @@ const prisma = require('../../config/database');
 const { logAction } = require('../../utils/audit');
 const { paginate, paginatedResponse } = require('../../utils/helpers');
 const { sendSMS } = require('../../integrations/africas-talking');
+const { encrypt, decrypt } = require('../../utils/encryption');
+
+// ─── Field-level encrypt/decrypt helpers ───
+function encryptHealthRecord(data) {
+  const out = { ...data };
+  if (out.description !== undefined) out.description = encrypt(out.description);
+  if (out.treatment_given !== undefined) out.treatment_given = encrypt(out.treatment_given);
+  return out;
+}
+function decryptHealthRecord(r) {
+  if (!r) return r;
+  return { ...r, description: decrypt(r.description), treatment_given: decrypt(r.treatment_given) };
+}
+
+function encryptMedicalProfile(data) {
+  const out = { ...data };
+  if (out.blood_type !== undefined) out.blood_type = encrypt(out.blood_type);
+  if (out.allergies !== undefined) out.allergies = encrypt(out.allergies);
+  if (out.chronic_conditions !== undefined) out.chronic_conditions = encrypt(out.chronic_conditions);
+  if (out.emergency_contact_phone !== undefined) out.emergency_contact_phone = encrypt(out.emergency_contact_phone);
+  return out;
+}
+function decryptMedicalProfile(r) {
+  if (!r) return r;
+  return {
+    ...r,
+    blood_type: decrypt(r.blood_type),
+    allergies: decrypt(r.allergies),
+    chronic_conditions: decrypt(r.chronic_conditions),
+    emergency_contact_phone: decrypt(r.emergency_contact_phone),
+  };
+}
+
+function encryptClinicVisit(data) {
+  const out = { ...data };
+  if (out.presenting_complaint !== undefined) out.presenting_complaint = encrypt(out.presenting_complaint);
+  if (out.treatment_notes !== undefined) out.treatment_notes = encrypt(out.treatment_notes);
+  return out;
+}
+function decryptClinicVisit(r) {
+  if (!r) return r;
+  return {
+    ...r,
+    presenting_complaint: decrypt(r.presenting_complaint),
+    treatment_notes: decrypt(r.treatment_notes),
+    medications: r.medications ? r.medications.map(decryptMedication) : r.medications,
+  };
+}
+
+function encryptMedication(data) {
+  const out = { ...data };
+  if (out.medication_name !== undefined) out.medication_name = encrypt(out.medication_name);
+  if (out.dosage !== undefined) out.dosage = encrypt(out.dosage);
+  return out;
+}
+function decryptMedication(r) {
+  if (!r) return r;
+  return { ...r, medication_name: decrypt(r.medication_name), dosage: decrypt(r.dosage) };
+}
 
 // ─── Existing Health Incident Records (Legacy/Direct Incident Logs) ───
 async function create(data, recordedBy, schoolId) {
   const record = await prisma.healthRecord.create({
-    data: { ...data, recorded_by: recordedBy, school_id: schoolId },
+    data: { ...encryptHealthRecord(data), recorded_by: recordedBy, school_id: schoolId },
   });
   logAction({
     school_id: schoolId,
@@ -16,7 +75,7 @@ async function create(data, recordedBy, schoolId) {
     entity_id: record.id,
     after_state: { type: record.type, student_id: record.student_id, title: record.title },
   }).catch(() => {});
-  return record;
+  return decryptHealthRecord(record);
 }
 
 async function list(studentId, { page, limit }) {
@@ -31,7 +90,7 @@ async function list(studentId, { page, limit }) {
     }),
     prisma.healthRecord.count({ where: { student_id: studentId } }),
   ]);
-  return paginatedResponse(data, total, page, limit);
+  return paginatedResponse(data.map(decryptHealthRecord), total, page, limit);
 }
 
 async function listSchool(schoolId, { page, limit } = {}) {
@@ -49,7 +108,7 @@ async function listSchool(schoolId, { page, limit } = {}) {
     }),
     prisma.healthRecord.count({ where: { school_id: schoolId } }),
   ]);
-  return paginatedResponse(data, total, page || 1, limit || 30);
+  return paginatedResponse(data.map(decryptHealthRecord), total, page || 1, limit || 30);
 }
 
 async function update(id, schoolId, data, actorId) {
@@ -57,7 +116,7 @@ async function update(id, schoolId, data, actorId) {
     where: { id, school_id: schoolId },
     select: { type: true, title: true },
   });
-  const result = await prisma.healthRecord.updateMany({ where: { id, school_id: schoolId }, data });
+  const result = await prisma.healthRecord.updateMany({ where: { id, school_id: schoolId }, data: encryptHealthRecord(data) });
   logAction({
     school_id: schoolId,
     actor_user_id: actorId,
@@ -65,7 +124,7 @@ async function update(id, schoolId, data, actorId) {
     entity_type: 'HealthRecord',
     entity_id: id,
     before_state: before,
-    after_state: data,
+    after_state: { type: data.type, title: data.title },
   }).catch(() => {});
   return result;
 }
@@ -83,7 +142,7 @@ async function remove(id, schoolId, actorId) {
       action: 'HEALTH_RECORD_DELETED',
       entity_type: 'HealthRecord',
       entity_id: id,
-      before_state: before,
+      before_state: { type: before.type, title: before.title },
     }).catch(() => {});
   }
   return result;
@@ -95,9 +154,8 @@ async function getMedicalProfile(studentId, schoolId) {
     where: { student_id: studentId, school_id: schoolId },
   });
 
-  // If no profile exists, return a blank template instead of 404, facilitating lazy creation
   if (!profile) {
-    profile = {
+    return {
       student_id: studentId,
       school_id: schoolId,
       blood_type: null,
@@ -106,7 +164,7 @@ async function getMedicalProfile(studentId, schoolId) {
       emergency_contact_phone: '',
     };
   }
-  return profile;
+  return decryptMedicalProfile(profile);
 }
 
 async function upsertMedicalProfile(studentId, schoolId, data, actorId) {
@@ -116,15 +174,14 @@ async function upsertMedicalProfile(studentId, schoolId, data, actorId) {
     where: { student_id: studentId, school_id: schoolId },
   });
 
+  const encrypted = encryptMedicalProfile({ blood_type, allergies, chronic_conditions, emergency_contact_phone });
+
   let result;
   if (existing) {
-    result = await prisma.medicalProfile.update({
-      where: { id: existing.id },
-      data: { blood_type, allergies, chronic_conditions, emergency_contact_phone },
-    });
+    result = await prisma.medicalProfile.update({ where: { id: existing.id }, data: encrypted });
   } else {
     result = await prisma.medicalProfile.create({
-      data: { school_id: schoolId, student_id: studentId, blood_type, allergies, chronic_conditions, emergency_contact_phone },
+      data: { school_id: schoolId, student_id: studentId, ...encrypted },
     });
   }
 
@@ -138,26 +195,28 @@ async function upsertMedicalProfile(studentId, schoolId, data, actorId) {
     after_state: { blood_type, allergies, chronic_conditions },
   }).catch(() => {});
 
-  return result;
+  return decryptMedicalProfile(result);
 }
 
 // ─── New Immunization Records ───
 async function addImmunizationRecord(studentId, data) {
   const { vaccine_name, date_administered } = data;
-  return prisma.immunizationRecord.create({
+  const record = await prisma.immunizationRecord.create({
     data: {
       student_id: studentId,
-      vaccine_name,
+      vaccine_name: encrypt(vaccine_name),
       date_administered: new Date(date_administered),
     },
   });
+  return { ...record, vaccine_name: decrypt(record.vaccine_name) };
 }
 
 async function listImmunizations(studentId) {
-  return prisma.immunizationRecord.findMany({
+  const records = await prisma.immunizationRecord.findMany({
     where: { student_id: studentId },
     orderBy: { date_administered: 'desc' },
   });
+  return records.map((r) => ({ ...r, vaccine_name: decrypt(r.vaccine_name) }));
 }
 
 async function removeImmunizationRecord(id, schoolId) {
@@ -188,15 +247,15 @@ async function createClinicVisit(studentId, schoolId, data, recorderId) {
       data: {
         school_id: schoolId,
         student_id: studentId,
-        presenting_complaint,
-        treatment_notes,
+        presenting_complaint: encrypt(presenting_complaint),
+        treatment_notes: encrypt(treatment_notes),
         recorded_by_staff_id: recorderId,
         follow_up_required,
       },
     });
 
     if (medications.length > 0) {
-      const medsData = medications.map(med => ({
+      const medsData = medications.map((med) => encryptMedication({
         school_id: schoolId,
         student_id: studentId,
         clinic_visit_id: visit.id,
@@ -212,7 +271,6 @@ async function createClinicVisit(studentId, schoolId, data, recorderId) {
       const studentName = `${student.user.first_name} ${student.user.last_name}`;
       const msg = `KNOTTY Health Alert: ${studentName} visited the school clinic today. Complaint: ${presenting_complaint}. Treatment: ${treatment_notes || 'Observed'}.`;
 
-      // Create in-app notification
       await tx.notification.create({
         data: {
           user_id: parentUser.id,
@@ -226,7 +284,6 @@ async function createClinicVisit(studentId, schoolId, data, recorderId) {
 
       if (parentUser.phone) {
         sendSMS(parentUser.phone, msg).catch(console.error);
-
         await tx.notificationLog.create({
           data: {
             school_id: schoolId,
@@ -258,7 +315,7 @@ async function createClinicVisit(studentId, schoolId, data, recorderId) {
     },
   }).catch(() => {});
 
-  return visit;
+  return decryptClinicVisit(visit);
 }
 
 async function listClinicVisits(studentId, schoolId, { page = 1, limit = 20 } = {}) {
@@ -284,7 +341,7 @@ async function listClinicVisits(studentId, schoolId, { page = 1, limit = 20 } = 
     prisma.clinicVisit.count({ where }),
   ]);
 
-  return paginatedResponse(data, total, page, limit);
+  return paginatedResponse(data.map(decryptClinicVisit), total, page, limit);
 }
 
 module.exports = {

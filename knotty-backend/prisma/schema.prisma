@@ -1080,12 +1080,15 @@ model AuditLog {
   entity_id     String
   before_state  Json?
   after_state   Json?
+  checksum      String? // SHA-256 of this entry's content
+  prev_checksum String? // checksum of the preceding entry — forms a hash chain
   created_at    DateTime @default(now())
 
   school School @relation(fields: [school_id], references: [id])
   actor  User?  @relation("AuditActor", fields: [actor_user_id], references: [id])
 
   @@index([school_id])
+  @@index([created_at])
 }
 
 model ConsentRecord {

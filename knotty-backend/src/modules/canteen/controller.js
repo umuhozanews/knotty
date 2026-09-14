@@ -57,10 +57,28 @@ async function listProducts(req, res, next) {
 
 async function createProduct(req, res, next) {
   try {
-    const { uploadImage } = require('../../integrations/cloudinary');
     let photo_url = req.body.photo_url || null;
     if (req.file) {
-      photo_url = await uploadImage(req.file.buffer, 'canteen', `product_${Date.now()}`);
+      const CLOUDINARY_CONFIGURED =
+        process.env.CLOUDINARY_CLOUD_NAME &&
+        process.env.CLOUDINARY_CLOUD_NAME !== 'your-cloud-name';
+
+      if (CLOUDINARY_CONFIGURED) {
+        const { uploadImage } = require('../../integrations/cloudinary');
+        photo_url = await uploadImage(req.file.buffer, 'canteen', `product_${Date.now()}`);
+      } else if (process.env.VERCEL) {
+        photo_url = `data:${req.file.mimetype || 'image/jpeg'};base64,${req.file.buffer.toString('base64')}`;
+      } else {
+        const fs = require('fs');
+        const path = require('path');
+        const baseDir = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
+        const UPLOADS_DIR = path.join(baseDir, '../../../uploads/canteen');
+        if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+        const ext = (req.file.mimetype && req.file.mimetype.split('/')[1]) || 'jpg';
+        const filename = `product_${Date.now()}.${ext}`;
+        fs.writeFileSync(path.join(UPLOADS_DIR, filename), req.file.buffer);
+        photo_url = `/uploads/canteen/${filename}`;
+      }
     }
     const data = await service.createProduct({ ...req.body, photo_url, school_id: req.user.school_id });
     res.status(201).json({ success: true, data });

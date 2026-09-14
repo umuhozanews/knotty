@@ -8,7 +8,8 @@ const CLOUDINARY_CONFIGURED =
   process.env.CLOUDINARY_CLOUD_NAME &&
   process.env.CLOUDINARY_CLOUD_NAME !== 'your-cloud-name';
 
-const UPLOADS_DIR = path.join(__dirname, '../../../../uploads/materials');
+const baseDir = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
+const UPLOADS_DIR = path.join(baseDir, '../../../../uploads/materials');
 
 async function uploadMaterial(schoolId, uploadedBy, { title, description, subject, classId, levelId }, file) {
   let file_url = '';

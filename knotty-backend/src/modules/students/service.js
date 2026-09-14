@@ -41,7 +41,8 @@ async function handleProfilePhotoUpload(base64Data, schoolId, userId) {
     return base64Data;
   } else {
     try {
-      const UPLOADS_DIR = path.join(__dirname, '../../../../uploads/profiles');
+      const baseDir = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
+      const UPLOADS_DIR = path.join(baseDir, '../../../../uploads/profiles');
       if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
       const filename = `${userId}-${Date.now()}.${extension}`;
       fs.writeFileSync(path.join(UPLOADS_DIR, filename), buffer);

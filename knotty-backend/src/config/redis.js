@@ -28,8 +28,8 @@ const mockRedis = {
   on: () => {},
 };
 
-if (process.env.NO_REDIS === 'true') {
-  console.log('Redis: Using in-memory fallback (NO_REDIS=true)');
+if (process.env.NO_REDIS === 'true' || process.env.NODE_ENV === 'production' || typeof globalThis.navigator !== 'undefined') {
+  console.log('Redis: Using in-memory fallback');
   redis = mockRedis;
 } else {
   redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {

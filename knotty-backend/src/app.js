@@ -90,7 +90,8 @@ app.use(`${API}/academics`, require('./modules/academics/routes'));
 app.use(`${API}/admin`, require('./modules/admin/routes'));
 
 // ─── Static uploads (local dev fallback) ───
-app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
+const baseDir = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
+app.use('/uploads', express.static(path.join(baseDir, '../../uploads')));
 
 // ─── Health check ───
 app.get('/health', async (req, res) => {
@@ -122,7 +123,7 @@ app.use((req, res) => res.status(404).json({ success: false, message: `Route ${r
 if (process.env.SENTRY_DSN) app.use(Sentry.expressErrorHandler());
 app.use(errorHandler);
 
-if (!process.env.VERCEL) {
+if (require.main === module) {
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => {
     console.log(`KNOTTY Backend running on port ${PORT} [${process.env.NODE_ENV}]`);

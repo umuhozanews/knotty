@@ -195,7 +195,7 @@ async function createProduct({ school_id, name, price, category, emoji, photo_ur
   const p = Number(price);
   if (!Number.isFinite(p) || p <= 0) throw Object.assign(new Error('Invalid price'), { status: 400 });
   const product = await prisma.canteenProduct.create({
-    data: { school_id, name: name.trim(), price: Math.round(p), category: category || 'Other', emoji: emoji || '🍽️', photo_url: photo_url || null },
+    data: { school_id, name: name.trim(), price: Math.round(p), category: category || 'Other', emoji: emoji || 'food', photo_url: photo_url || null },
   });
   redis.del(`canteen_products:${school_id}`).catch(() => {});
   return product;

@@ -1,9 +1,10 @@
 const rateLimit = require('express-rate-limit');
 
 // Applied to all /api routes — blocks brute-force and scraping
+const isDev = process.env.NODE_ENV === 'development';
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 300,
+  max: isDev ? 10000 : 300,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'Too many requests. Please slow down and try again.' },

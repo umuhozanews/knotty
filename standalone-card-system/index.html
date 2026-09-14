@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KNOTTY — Standalone Card Registration & Tap Terminal</title>
+  
+  <!-- Google Fonts & Tailwind CSS -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- FontAwesome Icons & QRCode JS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#f0f6ff',
+              100: '#e0edff',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              900: '#0f172a',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: #090d16;
+      color: #f3f4f6;
+    }
+
+    /* Glassmorphism elements */
+    .glass-card {
+      background: rgba(17, 24, 39, 0.7);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .glass-nav {
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    /* Holographic Student ID Card Styling */
+    .smart-card {
+      background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 50%, #1e293b 100%);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .smart-card::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    .card-hologram {
+      background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.2) 50%, transparent 70%);
+      background-size: 200% 100%;
+      animation: holo 6s infinite linear;
+    }
+
+    @keyframes holo {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+
+    .pulse-ring {
+      position: relative;
+    }
+    .pulse-ring::after {
+      content: '';
+      position: absolute;
+      inset: -8px;
+      border-radius: 9999px;
+      border: 2px solid #3b82f6;
+      animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    }
+
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.15); opacity: 0; }
+      100% { transform: scale(0.95); opacity: 0; }
+    }
+
+    /* Custom scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-blue-500 selection:text-white">
+
+  <!-- Top Navigation Header -->
+  <header class="sticky top-0 z-40 glass-nav px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
+        <i class="fa-solid fa-address-card text-white text-lg"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-extrabold text-white tracking-tight flex items-center gap-2">
+          KNOTTY <span class="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 font-semibold">Standalone Module</span>
+        </h1>
+        <p class="text-xs text-gray-400">Card Registration, Granting & Live Tap-In/Tap-Out Terminal</p>
+      </div>
+    </div>
+
+    <!-- Mode Selector Tabs -->
+    <nav class="flex bg-slate-900/80 p-1 rounded-xl border border-white/10 text-xs font-semibold">
+      <button id="tab-terminal-btn" onclick="switchTab('terminal')" class="px-4 py-2 rounded-lg text-white bg-blue-600 shadow-md transition flex items-center gap-2">
+        <i class="fa-solid fa-wifi"></i> Live Tap Terminal
+      </button>
+      <button id="tab-grant-btn" onclick="switchTab('grant')" class="px-4 py-2 rounded-lg text-gray-400 hover:text-white transition flex items-center gap-2">
+        <i class="fa-solid fa-id-card-clip"></i> Grant & Register Card
+      </button>
+      <button id="tab-logs-btn" onclick="switchTab('logs')" class="px-4 py-2 rounded-lg text-gray-400 hover:text-white transition flex items-center gap-2">
+        <i class="fa-solid fa-clock-rotate-left"></i> Attendance Records
+      </button>
+      <button id="tab-api-btn" onclick="switchTab('api')" class="px-4 py-2 rounded-lg text-gray-400 hover:text-white transition flex items-center gap-2">
+        <i class="fa-solid fa-code-compare"></i> 3rd-Party API Docs
+      </button>
+    </nav>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 p-6 max-w-7xl mx-auto w-full space-y-6">
+
+    <!-- KPI Summary Bar -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div class="glass-card p-4 rounded-2xl flex items-center justify-between border-l-4 border-blue-500">
+        <div>
+          <p class="text-xs text-gray-400 font-medium">Total Registered Cards</p>
+          <p id="kpi-total-cards" class="text-2xl font-bold text-white mt-1">0</p>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center text-xl">
+          <i class="fa-solid fa-credit-card"></i>
+        </div>
+      </div>
+
+      <div class="glass-card p-4 rounded-2xl flex items-center justify-between border-l-4 border-emerald-500">
+        <div>
+          <p class="text-xs text-gray-400 font-medium">Today's Tap-Ins</p>
+          <p id="kpi-tap-ins" class="text-2xl font-bold text-emerald-400 mt-1">0</p>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-xl">
+          <i class="fa-solid fa-right-to-bracket"></i>
+        </div>
+      </div>
+
+      <div class="glass-card p-4 rounded-2xl flex items-center justify-between border-l-4 border-amber-500">
+        <div>
+          <p class="text-xs text-gray-400 font-medium">Today's Tap-Outs</p>
+          <p id="kpi-tap-outs" class="text-2xl font-bold text-amber-400 mt-1">0</p>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-xl">
+          <i class="fa-solid fa-right-from-bracket"></i>
+        </div>
+      </div>
+
+      <div class="glass-card p-4 rounded-2xl flex items-center justify-between border-l-4 border-rose-500">
+        <div>
+          <p class="text-xs text-gray-400 font-medium">Late Arrivals Today</p>
+          <p id="kpi-late" class="text-2xl font-bold text-rose-400 mt-1">0</p>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center text-xl">
+          <i class="fa-solid fa-user-clock"></i>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ==================== TAB 1: LIVE TAP TERMINAL ==================== -->
+    <section id="tab-terminal" class="tab-content space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Left: Interactive Scanner Panel -->
+        <div class="lg:col-span-7 space-y-6">
+          <div class="glass-card p-6 rounded-2xl relative overflow-hidden">
+            <div class="flex items-center justify-between mb-6">
+              <div>
+                <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                  <i class="fa-solid fa-rss text-blue-400"></i> Live Gate Reader Terminal
+                </h2>
+                <p class="text-xs text-gray-400">Continuous reader active for NFC tags, USB RFID readers, & QR codes</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span> ONLINE
+                </span>
+              </div>
+            </div>
+
+            <!-- Tap Interaction Zone -->
+            <div class="flex flex-col items-center justify-center p-8 rounded-2xl border-2 border-dashed border-blue-500/30 bg-slate-900/60 text-center space-y-4">
+              <div class="pulse-ring inline-block">
+                <div class="w-24 h-24 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center text-3xl shadow-xl shadow-blue-500/30 cursor-pointer hover:scale-105 transition" onclick="triggerWebNFC()">
+                  <i class="fa-solid fa-wifi"></i>
+                </div>
+              </div>
+              <div>
+                <p class="text-sm font-semibold text-white">Ready for Physical Card Tap</p>
+                <p class="text-xs text-gray-400 mt-1">Tap your physical NFC card onto your device, scan with USB reader, or test below</p>
+              </div>
+
+              <!-- Input form for RFID keyboard scanners or simulator testing -->
+              <div class="w-full max-w-md pt-2">
+                <form onsubmit="handleManualTapSubmit(event)" class="flex gap-2">
+                  <input 
+                    type="text" 
+                    id="terminal-card-input"
+                    placeholder="Scan RFID/NFC UID or Card # (e.g. KNT-8492-1001)..." 
+                    class="flex-1 bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-sm font-mono text-white outline-none focus:border-blue-500 transition placeholder:text-gray-600"
+                    autofocus
+                  />
+                  <button type="submit" class="px-5 py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm rounded-xl transition flex items-center gap-2 shadow-lg shadow-blue-600/20">
+                    <i class="fa-solid fa-bolt"></i> Tap
+                  </button>
+                </form>
+              </div>
+
+              <!-- Quick Demo Tap Presets -->
+              <div id="quick-tap-presets" class="flex flex-wrap items-center justify-center gap-2 pt-2">
+                <span class="text-xs text-gray-500">Quick Test Cards:</span>
+                <!-- Populated dynamically JS -->
+              </div>
+            </div>
+
+            <!-- Terminal Settings / Cut-off Config -->
+            <div class="mt-6 pt-4 border-t border-white/5 flex items-center justify-between text-xs text-gray-400">
+              <div class="flex items-center gap-4">
+                <span>School Start Time: <strong class="text-white">08:30 AM</strong></span>
+                <span>Auto-Toggle: <strong class="text-emerald-400">IN → OUT</strong></span>
+              </div>
+              <button onclick="clearTodayAttendance()" class="text-rose-400 hover:underline">Reset Today's Taps</button>
+            </div>
+          </div>
+
+          <!-- Webhook Live Stream Feed -->
+          <div class="glass-card p-4 rounded-2xl">
+            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center justify-between">
+              <span><i class="fa-solid fa-satellite-dish text-blue-400 mr-2"></i> External System Webhook Event Stream</span>
+              <span class="text-[10px] text-gray-500 font-mono">POST /api/v1/cards/scan-external</span>
+            </h3>
+            <div id="webhook-stream" class="h-32 overflow-y-auto font-mono text-xs bg-slate-950/80 p-3 rounded-xl border border-white/5 space-y-1 text-gray-300">
+              <p class="text-gray-600">// Real-time external JSON payloads will output here on card tap...</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Tap Result Result Card -->
+        <div class="lg:col-span-5">
+          <div id="tap-result-panel" class="glass-card p-6 rounded-2xl h-full flex flex-col justify-between border-2 border-white/5 transition duration-300">
+            <div class="text-center py-12 space-y-3 my-auto">
+              <div class="w-16 h-16 rounded-2xl bg-white/5 text-gray-500 flex items-center justify-center mx-auto text-2xl">
+                <i class="fa-solid fa-id-card"></i>
+              </div>
+              <h3 class="text-base font-bold text-white">Awaiting Card Tap</h3>
+              <p class="text-xs text-gray-400 max-w-xs mx-auto">When a student taps their card, their profile, wallet balance, and tap status will appear here instantly.</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+
+    <!-- ==================== TAB 2: GRANT & REGISTER CARD ==================== -->
+    <section id="tab-grant" class="tab-content space-y-6 hidden">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Form: Register Student & Issue Card -->
+        <div class="lg:col-span-7 glass-card p-6 rounded-2xl space-y-5">
+          <div>
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-user-plus text-blue-400"></i> Register New Student & Issue Smart Card
+            </h2>
+            <p class="text-xs text-gray-400">Register student details and bind a physical NFC tag UID or card number</p>
+          </div>
+
+          <form onsubmit="handleRegisterStudent(event)" class="space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-gray-300 uppercase mb-1">First Name *</label>
+                <input type="text" id="reg-fname" required placeholder="e.g. Jean" class="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-blue-500">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-300 uppercase mb-1">Last Name *</label>
+                <input type="text" id="reg-lname" required placeholder="e.g. Nshuti" class="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-blue-500">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-gray-300 uppercase mb-1">Student Code / ID *</label>
+                <input type="text" id="reg-code" required placeholder="e.g. STU-2026-009" class="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white font-mono outline-none focus:border-blue-500">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-300 uppercase mb-1">Class / Grade *</label>
+                <input type="text" id="reg-class" required placeholder="e.g. Senior 4 Science" class="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-blue-500">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-gray-300 uppercase mb-1">Parent Phone (SMS Alerts)</label>
+                <input type="tel" id="reg-parent" placeholder="+250 788 000 000" class="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-blue-500">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-300 uppercase mb-1">Initial Wallet Balance (RWF)</label>
+                <input type="number" id="reg-wallet" min="0" value="5000" class="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white font-mono outline-none focus:border-blue-500">
+              </div>
+            </div>
+
+            <!-- NFC Hardware Tag Linking -->
+            <div class="p-4 rounded-xl bg-slate-950 border border-blue-500/20 space-y-3">
+              <label class="block text-xs font-bold text-blue-400 uppercase tracking-wider flex items-center gap-2">
+                <i class="fa-solid fa-wifi"></i> Pair Physical NFC / RFID Hardware UID
+              </label>
+              <div class="flex gap-2">
+                <input type="text" id="reg-nfc-uid" placeholder="Hardware UID (e.g. 04:A3:B2:C1:D0)" class="flex-1 bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-white outline-none focus:border-blue-500">
+                <button type="button" onclick="scanNFCForRegistration()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5">
+                  <i class="fa-solid fa-microchip"></i> Read Tag
+                </button>
+              </div>
+              <p class="text-[11px] text-gray-400">Leave blank to auto-assign virtual card number only.</p>
+            </div>
+
+            <button type="submit" class="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl shadow-lg shadow-blue-600/30 transition flex items-center justify-center gap-2">
+              <i class="fa-solid fa-credit-card"></i> Issue & Grant Smart Card
+            </button>
+          </form>
+        </div>
+
+        <!-- Live Digital Card Hologram Preview -->
+        <div class="lg:col-span-5 flex flex-col justify-between space-y-4">
+          <div class="glass-card p-6 rounded-2xl space-y-4">
+            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Live KNOTTY Smart Card Preview</h3>
+            
+            <!-- Metallic Card Component -->
+            <div id="card-preview-element" class="smart-card rounded-2xl p-6 text-white card-hologram min-h-[220px] flex flex-col justify-between">
+              <div class="flex items-start justify-between">
+                <div>
+                  <p class="text-[10px] font-semibold text-blue-300 uppercase tracking-widest">KNOTTY SMART SCHOOL</p>
+                  <p id="prev-name" class="text-lg font-bold tracking-wide mt-1">Student Name</p>
+                  <p id="prev-class" class="text-xs text-gray-300 font-medium">Class / Grade</p>
+                </div>
+                <div class="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20">
+                  <i class="fa-solid fa-wifi text-blue-400 text-lg"></i>
+                </div>
+              </div>
+
+              <div class="flex items-end justify-between mt-6">
+                <div>
+                  <p class="text-[9px] text-gray-400 uppercase tracking-wider">CARD NUMBER</p>
+                  <p id="prev-card-no" class="font-mono text-sm font-bold tracking-wider text-blue-200">KNT-8492-XXXX</p>
+                  <p id="prev-nfc-uid" class="font-mono text-[10px] text-gray-400">UID: NOT_LINKED</p>
+                </div>
+                <div id="prev-qr-box" class="w-14 h-14 bg-white p-1 rounded-lg shadow-md flex items-center justify-center">
+                  <!-- QR Code Rendered JS -->
+                </div>
+              </div>
+            </div>
+
+            <div class="p-3 bg-slate-900/60 rounded-xl text-xs text-gray-400 space-y-1">
+              <p><i class="fa-solid fa-circle-info text-blue-400 mr-1"></i> Once granted, student cards immediately function at gate terminals, canteen POS, and third-party systems.</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Granted Cards Management Table -->
+      <div class="glass-card p-6 rounded-2xl space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-address-book text-blue-400"></i> Issued Cards Directory
+          </h3>
+          <div class="relative w-64">
+            <input type="text" id="directory-search" oninput="renderCardDirectory()" placeholder="Search directory..." class="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white outline-none">
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead>
+              <tr class="text-gray-400 border-b border-white/10 uppercase tracking-wider">
+                <th class="pb-3">Student</th>
+                <th class="pb-3">Card Number</th>
+                <th class="pb-3">NFC Hardware UID</th>
+                <th class="pb-3">Wallet Balance</th>
+                <th class="pb-3">Status</th>
+                <th class="pb-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="card-directory-table" class="divide-y divide-white/5 text-gray-300">
+              <!-- Rendered JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ==================== TAB 3: ATTENDANCE RECORDS ==================== -->
+    <section id="tab-logs" class="tab-content space-y-6 hidden">
+      <div class="glass-card p-6 rounded-2xl space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-list-check text-blue-400"></i> Today's Attendance Tap History
+            </h2>
+            <p class="text-xs text-gray-400">Complete timestamped audit trail of all student tap-ins & tap-outs</p>
+          </div>
+          <button onclick="exportAttendanceCSV()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold border border-white/10 transition flex items-center gap-2">
+            <i class="fa-solid fa-file-csv"></i> Export CSV
+          </button>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead>
+              <tr class="text-gray-400 border-b border-white/10 uppercase tracking-wider">
+                <th class="pb-3">Timestamp</th>
+                <th class="pb-3">Student</th>
+                <th class="pb-3">Card Number</th>
+                <th class="pb-3">Action</th>
+                <th class="pb-3">Punctuality</th>
+                <th class="pb-3">Check-In</th>
+                <th class="pb-3">Check-Out</th>
+              </tr>
+            </thead>
+            <tbody id="attendance-logs-table" class="divide-y divide-white/5 text-gray-300 font-mono">
+              <!-- Rendered JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ==================== TAB 4: 3RD-PARTY API DOCS ==================== -->
+    <section id="tab-api" class="tab-content space-y-6 hidden">
+      <div class="glass-card p-6 rounded-2xl space-y-6">
+        <div>
+          <h2 class="text-lg font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-code text-blue-400"></i> Integration with External Systems
+          </h2>
+          <p class="text-xs text-gray-400">How turnstiles, canteen POS, library management, and IoT hardware validate these cards</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <!-- Card Identifier Specs -->
+          <div class="bg-slate-950 p-4 rounded-xl border border-white/10 space-y-3">
+            <h3 class="text-sm font-bold text-blue-400 flex items-center gap-2">
+              <i class="fa-solid fa-key"></i> Supported Identifiers
+            </h3>
+            <ul class="text-xs text-gray-300 space-y-2">
+              <li class="flex items-start gap-2">
+                <strong class="text-white font-mono bg-white/10 px-1.5 py-0.5 rounded">nfc_uid</strong>
+                <span>Hardware chip serial number read by 13.56MHz NFC readers (e.g. <code class="text-blue-300">04:A3:B2:C1:D0</code>).</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <strong class="text-white font-mono bg-white/10 px-1.5 py-0.5 rounded">card_number</strong>
+                <span>Primary system string printed on card & barcode (e.g. <code class="text-blue-300">KNT-8492-1001</code>).</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <strong class="text-white font-mono bg-white/10 px-1.5 py-0.5 rounded">secure_qr</strong>
+                <span>Dynamic HMAC-SHA256 token generated by mobile app (<code class="text-blue-300">KS:KNT-8492-1001:...</code>).</span>
+              </li>
+            </ul>
+          </div>
+
+          <!-- HTTP API Spec -->
+          <div class="bg-slate-950 p-4 rounded-xl border border-white/10 space-y-3">
+            <h3 class="text-sm font-bold text-emerald-400 flex items-center gap-2">
+              <i class="fa-solid fa-network-wired"></i> External API Endpoint
+            </h3>
+            <div class="font-mono text-xs text-gray-300 space-y-2">
+              <p><span class="text-emerald-400 font-bold">POST</span> /api/v1/cards/scan-external</p>
+              <pre class="bg-slate-900 p-2.5 rounded-lg border border-white/5 text-[11px] text-gray-400 overflow-x-auto">
+{
+  "card_identifier": "04A3B2C1D0",
+  "reader_location": "GATE_TURNSTILE_1",
+  "requested_action": "AUTO"
+}</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+
+  <!-- ==================== JAVASCRIPT APPLICATION LOGIC ==================== -->
+  <script>
+    // Initial State Database (Persisted in LocalStorage)
+    const DEFAULT_STUDENTS = [
+      { id: '1', first_name: 'Jean', last_name: 'Mugabo', student_code: 'STU-2026-001', class_name: 'Senior 4 Science A', card_number: 'KNT-8492-1001', nfc_uid: '04A3B2C1D0', wallet_balance: 5000, is_frozen: false },
+      { id: '2', first_name: 'Aline', last_name: 'Uwase', student_code: 'STU-2026-002', class_name: 'Senior 4 Science A', card_number: 'KNT-8492-1002', nfc_uid: '04F5E6D7C8', wallet_balance: 12000, is_frozen: false },
+      { id: '3', first_name: 'Eric', last_name: 'Manzi', student_code: 'STU-2026-003', class_name: 'Senior 5 Arts B', card_number: 'KNT-8492-1003', nfc_uid: '0411223344', wallet_balance: 1500, is_frozen: false }
+    ];
+
+    let students = JSON.parse(localStorage.getItem('knotty_students')) || DEFAULT_STUDENTS;
+    let attendanceLogs = JSON.parse(localStorage.getItem('knotty_attendance_today')) || [];
+
+    // Web Audio Sound Synthesizer (for tap chimes without external mp3s)
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+
+    function playSound(type) {
+      try {
+        if (!audioCtx) audioCtx = new AudioCtx();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        if (type === 'SUCCESS') {
+          osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+          osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.1); // E5
+          gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.35);
+        } else if (type === 'OUT') {
+          osc.frequency.setValueAtTime(659.25, audioCtx.currentTime); // E5
+          osc.frequency.setValueAtTime(440.00, audioCtx.currentTime + 0.1); // A4
+          gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.35);
+        } else if (type === 'ERROR') {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(220, audioCtx.currentTime);
+          gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.4);
+        }
+      } catch (e) {}
+    }
+
+    // App Initialization
+    document.addEventListener('DOMContentLoaded', () => {
+      saveState();
+      updateKPIs();
+      renderQuickPresets();
+      renderCardDirectory();
+      renderAttendanceLogs();
+      setupCardPreview();
+    });
+
+    function saveState() {
+      localStorage.setItem('knotty_students', JSON.stringify(students));
+      localStorage.setItem('knotty_attendance_today', JSON.stringify(attendanceLogs));
+    }
+
+    // Tab Navigation
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+
+      ['terminal', 'grant', 'logs', 'api'].forEach(t => {
+        const btn = document.getElementById(`tab-${t}-btn`);
+        if (t === tabId) {
+          btn.className = 'px-4 py-2 rounded-lg text-white bg-blue-600 shadow-md transition flex items-center gap-2';
+        } else {
+          btn.className = 'px-4 py-2 rounded-lg text-gray-400 hover:text-white transition flex items-center gap-2';
+        }
+      });
+    }
+
+    // Update KPI Tiles
+    function updateKPIs() {
+      document.getElementById('kpi-total-cards').textContent = students.length;
+      
+      const ins = attendanceLogs.filter(l => l.action === 'TAP_IN').length;
+      const outs = attendanceLogs.filter(l => l.action === 'TAP_OUT').length;
+      const lates = attendanceLogs.filter(l => l.status === 'LATE').length;
+
+      document.getElementById('kpi-tap-ins').textContent = ins;
+      document.getElementById('kpi-tap-outs').textContent = outs;
+      document.getElementById('kpi-late').textContent = lates;
+    }
+
+    // Process Card Tap (Core Logic)
+    function processCardTap(cardQuery) {
+      const input = cardQuery.trim().toUpperCase();
+      if (!input) return;
+
+      // Find student by card_number or nfc_uid
+      const student = students.find(s => 
+        s.card_number.toUpperCase() === input || 
+        (s.nfc_uid && s.nfc_uid.toUpperCase() === input)
+      );
+
+      const panel = document.getElementById('tap-result-panel');
+
+      if (!student) {
+        playSound('ERROR');
+        panel.innerHTML = `
+          <div class="text-center py-10 space-y-4 my-auto">
+            <div class="w-16 h-16 rounded-full bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto text-3xl border border-rose-500/20">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <h3 class="text-xl font-bold text-white">Card Not Found</h3>
+            <p class="text-xs text-gray-400 max-w-xs mx-auto">No student registered with Card/UID: <span class="font-mono text-rose-300 font-bold">${input}</span></p>
+          </div>
+        `;
+        logWebhookEvent({ error: 'CARD_NOT_FOUND', query: input });
+        return;
+      }
+
+      if (student.is_frozen) {
+        playSound('ERROR');
+        panel.innerHTML = `
+          <div class="text-center py-10 space-y-4 my-auto">
+            <div class="w-16 h-16 rounded-full bg-amber-500/10 text-amber-400 flex items-center justify-center mx-auto text-3xl border border-amber-500/20">
+              <i class="fa-solid fa-lock"></i>
+            </div>
+            <h3 class="text-xl font-bold text-white">Card Frozen</h3>
+            <p class="text-xs text-gray-400 max-w-xs mx-auto">Card <span class="font-mono text-white">${student.card_number}</span> belongs to ${student.first_name} ${student.last_name} but is currently blocked.</p>
+          </div>
+        `;
+        logWebhookEvent({ error: 'CARD_FROZEN', card_number: student.card_number, student_id: student.id });
+        return;
+      }
+
+      // Check existing attendance for today
+      const existing = attendanceLogs.find(l => l.student_id === student.id);
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      
+      let actionTaken = 'TAP_IN';
+      let punctuality = 'PRESENT';
+
+      if (!existing) {
+        // TAP IN logic: Late if after 08:30 AM
+        const isLate = now.getHours() > 8 || (now.getHours() === 8 && now.getMinutes() >= 30);
+        punctuality = isLate ? 'LATE' : 'PRESENT';
+        
+        attendanceLogs.unshift({
+          id: Date.now().toString(),
+          student_id: student.id,
+          student_name: `${student.first_name} ${student.last_name}`,
+          card_number: student.card_number,
+          action: 'TAP_IN',
+          status: punctuality,
+          check_in_time: timeStr,
+          check_out_time: null,
+          timestamp: now.toISOString()
+        });
+
+        playSound('SUCCESS');
+      } else if (existing && !existing.check_out_time) {
+        // TAP OUT logic
+        actionTaken = 'TAP_OUT';
+        existing.check_out_time = timeStr;
+        existing.action = 'TAP_OUT';
+        
+        playSound('OUT');
+      } else {
+        // Already checked out
+        actionTaken = 'ALREADY_OUT';
+        playSound('ERROR');
+      }
+
+      saveState();
+      updateKPIs();
+      renderAttendanceLogs();
+
+      // Render Result Card UI
+      const isTapIn = actionTaken === 'TAP_IN';
+      const isTapOut = actionTaken === 'TAP_OUT';
+
+      panel.className = `glass-card p-6 rounded-2xl h-full flex flex-col justify-between border-2 transition duration-300 ${
+        isTapIn ? 'border-emerald-500/50 bg-emerald-950/20' : isTapOut ? 'border-amber-500/50 bg-amber-950/20' : 'border-blue-500/30'
+      }`;
+
+      panel.innerHTML = `
+        <div class="space-y-4">
+          <!-- Status Header Badge -->
+          <div class="flex items-center justify-between">
+            <span class="px-3 py-1 rounded-full text-xs font-bold ${
+              isTapIn ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' :
+              isTapOut ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' :
+              'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+            }">
+              <i class="fa-solid ${isTapIn ? 'fa-circle-check' : isTapOut ? 'fa-door-open' : 'fa-info-circle'} mr-1"></i>
+              ${isTapIn ? 'CHECKED IN (TAP IN)' : isTapOut ? 'CHECKED OUT (TAP OUT)' : 'ALREADY COMPLETED FOR TODAY'}
+            </span>
+            <span class="text-xs font-mono text-gray-400">${timeStr}</span>
+          </div>
+
+          <!-- Student Profile -->
+          <div class="flex items-center gap-4 p-4 rounded-xl bg-slate-900/60 border border-white/5">
+            <div class="w-14 h-14 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold text-xl flex items-center justify-center shadow-lg">
+              ${student.first_name[0]}${student.last_name[0]}
+            </div>
+            <div>
+              <h3 class="text-lg font-bold text-white">${student.first_name} ${student.last_name}</h3>
+              <p class="text-xs text-gray-300">${student.class_name} · <span class="font-mono text-blue-400">${student.student_code}</span></p>
+            </div>
+          </div>
+
+          <!-- Card Details & Balance -->
+          <div class="grid grid-cols-2 gap-3 text-xs">
+            <div class="p-3 bg-slate-900/60 rounded-xl border border-white/5">
+              <p class="text-gray-400">Card Number</p>
+              <p class="font-mono font-bold text-white mt-0.5">${student.card_number}</p>
+            </div>
+            <div class="p-3 bg-slate-900/60 rounded-xl border border-white/5">
+              <p class="text-gray-400">Wallet Balance</p>
+              <p class="font-mono font-bold text-emerald-400 mt-0.5">${student.wallet_balance.toLocaleString()} RWF</p>
+            </div>
+          </div>
+
+          <!-- Punctuality / Notification Box -->
+          ${punctuality === 'LATE' && isTapIn ? `
+            <div class="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 flex items-center gap-2">
+              <i class="fa-solid fa-clock"></i>
+              <span>LATE ARRIVAL — SMS notification alert dispatched to parent.</span>
+            </div>
+          ` : ''}
+        </div>
+
+        <div class="pt-4 border-t border-white/10 text-center">
+          <p class="text-[11px] text-gray-400">Ready for next tap...</p>
+        </div>
+      `;
+
+      logWebhookEvent({
+        event: 'CARD_TAP_EVENT',
+        action: actionTaken,
+        student_id: student.id,
+        student_name: `${student.first_name} ${student.last_name}`,
+        card_number: student.card_number,
+        nfc_uid: student.nfc_uid,
+        wallet_balance: student.wallet_balance,
+        timestamp: now.toISOString()
+      });
+    }
+
+    function handleManualTapSubmit(e) {
+      e.preventDefault();
+      const input = document.getElementById('terminal-card-input');
+      processCardTap(input.value);
+      input.value = '';
+    }
+
+    // Register Student Form Submission
+    function handleRegisterStudent(e) {
+      e.preventDefault();
+      const fname = document.getElementById('reg-fname').value.trim();
+      const lname = document.getElementById('reg-lname').value.trim();
+      const code = document.getElementById('reg-code').value.trim();
+      const className = document.getElementById('reg-class').value.trim();
+      const wallet = parseInt(document.getElementById('reg-wallet').value) || 0;
+      const nfcUid = document.getElementById('reg-nfc-uid').value.trim().toUpperCase();
+
+      const newCardNo = `KNT-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+      const newStudent = {
+        id: Date.now().toString(),
+        first_name: fname,
+        last_name: lname,
+        student_code: code,
+        class_name: className,
+        card_number: newCardNo,
+        nfc_uid: nfcUid || null,
+        wallet_balance: wallet,
+        is_frozen: false
+      };
+
+      students.unshift(newStudent);
+      saveState();
+      updateKPIs();
+      renderQuickPresets();
+      renderCardDirectory();
+
+      alert(`✅ Card Granted Successfully!\nCard Number: ${newCardNo}\nIssued to: ${fname} ${lname}`);
+      
+      e.target.reset();
+      switchTab('terminal');
+      processCardTap(newCardNo);
+    }
+
+    // Render Quick Tap Presets
+    function renderQuickPresets() {
+      const box = document.getElementById('quick-tap-presets');
+      box.innerHTML = '<span class="text-xs text-gray-500">Quick Test Cards:</span>';
+
+      students.slice(0, 4).forEach(s => {
+        const btn = document.createElement('button');
+        btn.className = 'px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-gray-300 text-xs rounded-lg border border-white/10 transition font-mono';
+        btn.textContent = `${s.first_name} (${s.card_number})`;
+        btn.onclick = () => processCardTap(s.card_number);
+        box.appendChild(btn);
+      });
+    }
+
+    // Directory Table Render
+    function renderCardDirectory() {
+      const tbody = document.getElementById('card-directory-table');
+      const query = (document.getElementById('directory-search')?.value || '').toLowerCase();
+
+      const filtered = students.filter(s => 
+        s.first_name.toLowerCase().includes(query) || 
+        s.last_name.toLowerCase().includes(query) || 
+        s.card_number.toLowerCase().includes(query)
+      );
+
+      tbody.innerHTML = filtered.map(s => `
+        <tr class="hover:bg-white/5 transition">
+          <td class="py-3 font-semibold text-white">
+            ${s.first_name} ${s.last_name}
+            <div class="text-[10px] text-gray-400 font-normal">${s.class_name} · ${s.student_code}</div>
+          </td>
+          <td class="py-3 font-mono text-blue-300">${s.card_number}</td>
+          <td class="py-3 font-mono">${s.nfc_uid ? `<span class="text-emerald-400"><i class="fa-solid fa-wifi mr-1"></i>${s.nfc_uid}</span>` : '<span class="text-gray-600">Not linked</span>'}</td>
+          <td class="py-3 font-mono font-semibold text-emerald-400">${s.wallet_balance.toLocaleString()} RWF</td>
+          <td class="py-3">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${s.is_frozen ? 'bg-rose-500/20 text-rose-400' : 'bg-emerald-500/20 text-emerald-400'}">
+              ${s.is_frozen ? 'Frozen' : 'Active'}
+            </span>
+          </td>
+          <td class="py-3 text-right">
+            <button onclick="toggleFreeze('${s.id}')" class="px-2.5 py-1 text-[11px] rounded-lg border ${s.is_frozen ? 'border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10' : 'border-rose-500/40 text-rose-400 hover:bg-rose-500/10'} transition">
+              ${s.is_frozen ? 'Unfreeze' : 'Freeze'}
+            </button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function toggleFreeze(id) {
+      const student = students.find(s => s.id === id);
+      if (student) {
+        student.is_frozen = !student.is_frozen;
+        saveState();
+        renderCardDirectory();
+      }
+    }
+
+    // Attendance Log Table Render
+    function renderAttendanceLogs() {
+      const tbody = document.getElementById('attendance-logs-table');
+      if (attendanceLogs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="py-8 text-center text-gray-500">No taps logged today yet.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = attendanceLogs.map(l => `
+        <tr class="hover:bg-white/5 transition">
+          <td class="py-3 text-gray-400">${l.check_in_time || '—'}</td>
+          <td class="py-3 font-sans font-semibold text-white">${l.student_name}</td>
+          <td class="py-3 text-blue-300">${l.card_number}</td>
+          <td class="py-3">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${l.action === 'TAP_IN' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}">
+              ${l.action}
+            </span>
+          </td>
+          <td class="py-3">
+            <span class="text-[11px] font-semibold ${l.status === 'LATE' ? 'text-rose-400' : 'text-emerald-400'}">
+              ${l.status || 'PRESENT'}
+            </span>
+          </td>
+          <td class="py-3 text-gray-300">${l.check_in_time || '—'}</td>
+          <td class="py-3 text-gray-300">${l.check_out_time || '—'}</td>
+        </tr>
+      `).join('');
+    }
+
+    function clearTodayAttendance() {
+      if (confirm('Clear today\'s attendance taps?')) {
+        attendanceLogs = [];
+        saveState();
+        updateKPIs();
+        renderAttendanceLogs();
+      }
+    }
+
+    function logWebhookEvent(payload) {
+      const box = document.getElementById('webhook-stream');
+      const time = new Date().toLocaleTimeString();
+      const p = document.createElement('p');
+      p.innerHTML = `<span class="text-blue-400">[${time}]</span> ${JSON.stringify(payload)}`;
+      box.prepend(p);
+    }
+
+    // Web NFC Reader Integration
+    async function triggerWebNFC() {
+      if (!('NDEFReader' in window)) {
+        alert('Web NFC requires Chrome on Android. Use manual text input or USB scanner instead.');
+        return;
+      }
+      try {
+        const ndef = new NDEFReader();
+        await ndef.scan();
+        alert('NFC Scanner Ready! Touch card to back of device.');
+        ndef.onreading = (event) => {
+          const serialNo = event.serialNumber.replace(/:/g, '').toUpperCase();
+          processCardTap(serialNo);
+        };
+      } catch (err) {
+        alert(`NFC Permission error: ${err.message}`);
+      }
+    }
+
+    function scanNFCForRegistration() {
+      if (!('NDEFReader' in window)) {
+        alert('Web NFC requires Chrome on Android.');
+        return;
+      }
+      const ndef = new NDEFReader();
+      ndef.scan().then(() => {
+        ndef.onreading = (event) => {
+          const serialNo = event.serialNumber.replace(/:/g, '').toUpperCase();
+          document.getElementById('reg-nfc-uid').value = serialNo;
+        };
+      });
+    }
+
+    // Dynamic QR Preview
+    function setupCardPreview() {
+      const box = document.getElementById('prev-qr-box');
+      box.innerHTML = '';
+      if (window.QRCode) {
+        new QRCode(box, {
+          text: "KNT-PREVIEW",
+          width: 48,
+          height: 48
+        });
+      }
+    }
+  </script>
+</body>
+</html>

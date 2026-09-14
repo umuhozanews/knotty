@@ -34,8 +34,7 @@ console.log('Running database schema push...');
 try {
   execSync('npx prisma db push --accept-data-loss', { stdio: 'inherit' });
 } catch (error) {
-  console.error('Database push failed:', error);
-  process.exit(1);
+  console.warn('Database push failed (non-fatal, continuing deployment):', error.message || error);
 }
 
 console.log('Seeding demo data...');

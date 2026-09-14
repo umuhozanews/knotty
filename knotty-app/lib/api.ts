@@ -1,6 +1,6 @@
 import { DEMO_STUDENTS } from "./demo";
 
-const BASE = "/api/v1";
+const BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, '') || "/api/v1";
 
 function getToken(): string | null {
   if (typeof window === "undefined") return null;

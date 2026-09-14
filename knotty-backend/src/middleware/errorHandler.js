@@ -13,8 +13,12 @@ function errorHandler(err, req, res, next) {
     return res.status(409).json({ success: false, message: 'Duplicate entry — record already exists' });
   }
 
+  if (err.code === 'P1001' || err.code === 'ECONNREFUSED' || err.message?.includes('DatabaseNotReachable') || err.message?.includes("Can't reach database server") || err.message?.includes('ECONNREFUSED')) {
+    return res.status(503).json({ success: false, message: 'Database connection failed. Please ensure PostgreSQL is running.' });
+  }
+
   const status = err.status || err.statusCode || 500;
-  const message = status < 500 ? err.message : 'Internal server error';
+  const message = status < 500 ? err.message : (process.env.NODE_ENV === 'development' ? (err.message || 'Internal server error') : 'Internal server error');
   res.status(status).json({ success: false, message });
 }
 

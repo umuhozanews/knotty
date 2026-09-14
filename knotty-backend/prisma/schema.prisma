@@ -420,7 +420,7 @@ model CanteenProduct {
   name       String
   price      Int
   category   String   @default("Other")
-  emoji      String   @default("🍽️")
+  emoji      String   @default("food")
   photo_url  String?
   is_active  Boolean  @default(true)
   created_at DateTime @default(now())

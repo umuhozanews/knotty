@@ -5,9 +5,10 @@ validateEnv();
 
 // Sentry must be initialized before any other requires
 const Sentry = require('@sentry/node');
-if (process.env.SENTRY_DSN) {
+const sentryDsn = (process.env.SENTRY_DSN || '').replace(/^\uFEFF/, '').trim();
+if (sentryDsn) {
   Sentry.init({
-    dsn: process.env.SENTRY_DSN,
+    dsn: sentryDsn,
     environment: process.env.NODE_ENV || 'development',
     tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 0,
   });
@@ -32,6 +33,7 @@ const { waf } = require('./middleware/waf');
 
 const path = require('path');
 const app = express();
+app.set('trust proxy', 1);
 
 // ─── Security & Parsing ───
 app.use(helmet({

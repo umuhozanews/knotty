@@ -7,6 +7,7 @@ const globalLimiter = rateLimit({
   max: isDev ? 10000 : 300,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
   message: { success: false, message: 'Too many requests. Please slow down and try again.' },
 });
 
@@ -16,6 +17,7 @@ const transactionLimiter = rateLimit({
   max: 60,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
   message: { success: false, message: 'Too many transaction requests. Please wait a moment.' },
 });
 

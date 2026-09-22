@@ -1,4 +1,4 @@
-# KNOTTY Card — Backend API
+# Ishuri hub Card — Backend API
 
 Smart school management system for Rwanda. Node.js + Express + PostgreSQL + Prisma.
 
@@ -139,7 +139,7 @@ All protected endpoints require: `Authorization: Bearer <access_token>`
 
 ---
 
-### KNOTTY CARD
+### ISHURI HUB CARD
 
 | Method | Endpoint                    | Access         | Description           |
 |--------|-----------------------------|----------------|-----------------------|

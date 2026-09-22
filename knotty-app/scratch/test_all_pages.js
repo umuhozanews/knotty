@@ -2,7 +2,7 @@ const { chromium } = require('playwright');
 const path = require('path');
 
 async function runTest() {
-  console.log('Starting Playwright test of all KNOTTY system pages...');
+  console.log('Starting Playwright test of all Ishuri hub system pages...');
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
     viewport: { width: 1280, height: 800 }

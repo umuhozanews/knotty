@@ -20,7 +20,7 @@ async function sendSMS(to, message) {
     const result = await sms.send({
       to: recipients,
       message,
-      from: process.env.AFRICAS_TALKING_SENDER_ID || 'KNOTTY',
+      from: process.env.AFRICAS_TALKING_SENDER_ID || 'IshuriHub',
     });
     return result;
   } catch (err) {
@@ -32,8 +32,8 @@ async function sendSMS(to, message) {
 async function sendAttendanceAlert(parentPhone, studentName, status, time) {
   const msg =
     status === 'ABSENT'
-      ? `KNOTTY Alert: ${studentName} was marked ABSENT today (${new Date().toLocaleDateString()}). Contact school for details.`
-      : `KNOTTY Alert: ${studentName} arrived LATE at ${time}. Contact school if needed.`;
+      ? `Ishuri hub Alert: ${studentName} was marked ABSENT today (${new Date().toLocaleDateString()}). Contact school for details.`
+      : `Ishuri hub Alert: ${studentName} arrived LATE at ${time}. Contact school if needed.`;
 
   return sendSMS(parentPhone, msg);
 }

@@ -133,7 +133,7 @@ function IssueCardModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-        <h3 className="font-bold text-gray-800 mb-4">Issue KNOTTY Card</h3>
+        <h3 className="font-bold text-gray-800 mb-4">Issue Ishuri hub Card</h3>
         <div className="space-y-3">
           <div className="relative">
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search student without a card…" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500" />
@@ -212,7 +212,7 @@ export default function CardsPage() {
       <div className="p-4 space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-gray-800">KNOTTY Cards</h1>
+            <h1 className="text-xl font-bold text-gray-800">Ishuri hub Cards</h1>
             <p className="text-sm text-gray-400">{total} cards issued</p>
           </div>
           <button onClick={() => setModal("issue")} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition">

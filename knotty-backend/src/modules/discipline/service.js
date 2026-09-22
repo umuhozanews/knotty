@@ -33,7 +33,7 @@ async function create(data, recordedBy, schoolId) {
     const name = `${record.student.user.first_name} ${record.student.user.last_name}`;
     sendSMS(
       record.student.parent.phone,
-      `KNOTTY Alert: A discipline record (${record.type}) has been filed for ${name}. Contact school for details.`
+      `Ishuri hub Alert: A discipline record (${record.type}) has been filed for ${name}. Contact school for details.`
     ).catch(console.error);
   }
 

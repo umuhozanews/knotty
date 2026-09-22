@@ -490,7 +490,7 @@ export default function AttendancePage() {
       setCardInput(num);
       await lookupCard(num, result.type === "uid");
     });
-    if (ok) toast("NFC scanner active — tap a KNOTTY card", "info");
+    if (ok) toast("NFC scanner active — tap an Ishuri hub card", "info");
   }
 
   async function handleBulkSubmit() {
@@ -747,7 +747,7 @@ export default function AttendancePage() {
                   {listening && (
                     <div className="mt-2 flex items-center gap-2 text-xs text-blue-600">
                       <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse inline-block" />
-                      NFC scanner active — tap a KNOTTY card
+                      NFC scanner active — tap an Ishuri hub card
                     </div>
                   )}
                   {nfcError && <p className="mt-1 text-xs text-red-500">{nfcError}</p>}

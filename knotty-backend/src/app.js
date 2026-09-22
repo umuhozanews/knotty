@@ -112,7 +112,7 @@ app.get('/health', async (req, res) => {
   const allOk = checks.db && checks.redis;
   res.status(allOk ? 200 : 503).json({
     status: allOk ? 'ok' : 'degraded',
-    service: 'KNOTTY Backend',
+    service: 'Ishuri hub Backend',
     checks,
     timestamp: new Date(),
   });
@@ -128,7 +128,7 @@ app.use(errorHandler);
 if (require.main === module) {
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => {
-    console.log(`KNOTTY Backend running on port ${PORT} [${process.env.NODE_ENV}]`);
+    console.log(`Ishuri hub Backend running on port ${PORT} [${process.env.NODE_ENV}]`);
   });
 }
 

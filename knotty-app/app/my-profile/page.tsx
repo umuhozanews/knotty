@@ -247,7 +247,7 @@ export default function MyProfilePage() {
 
                 {s.card && (
                   <div>
-                    <p className="font-extrabold tracking-tight text-[#121212] border-b border-[#dcd9d9] pb-3 mb-2">My KNOTTY Card</p>
+                    <p className="font-extrabold tracking-tight text-[#121212] border-b border-[#dcd9d9] pb-3 mb-2">My Ishuri hub Card</p>
                     {field(CreditCard, "Card Number", s.card.card_number)}
                     {field(CreditCard, "Wallet Balance", `${(s.card.wallet_balance ?? 0).toLocaleString()} RWF`)}
                     {field(Calendar, "Expires", s.card.expires_at ? new Date(s.card.expires_at).toLocaleDateString("en-GB") : null)}

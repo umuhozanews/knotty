@@ -239,7 +239,7 @@ export default function StandaloneTapPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/90 p-4 rounded-2xl border border-white/10 text-white">
           <div>
             <h1 className="text-xl font-bold flex items-center gap-2">
-              <CreditCard className="text-blue-400" /> KNOTTY Standalone Tap Terminal & Card Granting
+              <CreditCard className="text-blue-400" /> Ishuri hub Standalone Tap Terminal & Card Granting
             </h1>
             <p className="text-xs text-gray-400">Self-contained card registration, tap-in / tap-out state machine, & logs</p>
           </div>
@@ -449,7 +449,7 @@ export default function StandaloneTapPage() {
           <div className="space-y-6">
             <div className="bg-slate-900 border border-white/10 p-6 rounded-2xl space-y-4">
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <UserPlus className="text-blue-400" /> Register Student & Issue KNOTTY Card
+                <UserPlus className="text-blue-400" /> Register Student & Issue Ishuri hub Card
               </h2>
 
               <form onSubmit={handleRegisterSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">

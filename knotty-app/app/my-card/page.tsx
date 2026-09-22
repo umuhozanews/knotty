@@ -81,7 +81,7 @@ export default function MyCardPage() {
               <div className="absolute top-0 left-0 right-0 h-[3px] bg-[#d9ff8c]" />
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="text-[10px] font-bold tracking-widest text-[#d9ff8c] uppercase">KNOTTY Smart Card</p>
+                  <p className="text-[10px] font-bold tracking-widest text-[#d9ff8c] uppercase">Ishuri hub Smart Card</p>
                   <p className="text-[9px] opacity-50">School Management System</p>
                 </div>
                 <span className="text-[9px] font-bold px-2 py-0.5 rounded border border-[#d9ff8c]/20 bg-[#d9ff8c]/10 text-[#d9ff8c]">
@@ -144,7 +144,7 @@ export default function MyCardPage() {
               )}
 
               <p className="text-xs text-gray-500 bg-[#fcf9f8] px-3 py-2 rounded-lg border border-[#dcd9d9] font-semibold">
-                🔒 Protected by KNOTTY Secure-Scan Algorithm: refreshes automatically to prevent screenshot sharing or attendance fraud.
+                🔒 Protected by Ishuri hub Secure-Scan Algorithm: refreshes automatically to prevent screenshot sharing or attendance fraud.
               </p>
             </div>
 

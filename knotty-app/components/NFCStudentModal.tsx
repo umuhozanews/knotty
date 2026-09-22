@@ -144,7 +144,7 @@ export default function NFCStudentModal({ mode, onClose }: { mode: NFCMode; onCl
                   </div>
                   <div className="text-center">
                     <p className="text-sm font-semibold text-gray-700">
-                      {listening ? "Ready — tap a KNOTTY card" : "Starting NFC scanner…"}
+                      {listening ? "Ready — tap an Ishuri hub card" : "Starting NFC scanner…"}
                     </p>
                     <p className="text-xs text-gray-400 mt-1">Hold the NFC card near the back of your phone</p>
                   </div>

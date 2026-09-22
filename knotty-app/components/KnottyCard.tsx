@@ -78,11 +78,11 @@ export default function KnottyCard({ card, glowColor, tapping }: Props) {
         {card.student.school_logo ? (
           <img src={card.student.school_logo} alt="school" className="w-7 h-7 rounded-md object-contain" />
         ) : (
-          <div className="w-7 h-7 rounded-md bg-blue-600 flex items-center justify-center text-white text-[10px] font-bold">K</div>
+          <div className="w-7 h-7 rounded-md bg-blue-600 flex items-center justify-center text-white text-[10px] font-bold">I</div>
         )}
         <div>
           <p className="text-white text-[9px] font-bold leading-tight uppercase tracking-wider truncate max-w-[140px]">
-            {card.student.school_name || "KNOTTY SCHOOL"}
+            {card.student.school_name || "ISHURI HUB SCHOOL"}
           </p>
           <p className="text-blue-400 text-[7px] font-medium tracking-widest">SMART SCHOOL SYSTEM</p>
         </div>

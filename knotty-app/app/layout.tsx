@@ -6,8 +6,8 @@ import { ToastProvider } from "@/context/ToastContext";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 
 export const metadata: Metadata = {
-  title: "KNOTTY — Smart School Hub",
-  description: "KNOTTY Smart School Management System",
+  title: "Ishuri hub — Smart School Hub",
+  description: "Ishuri hub Smart School Management System",
   manifest: "/manifest.json",
 };
 
@@ -20,7 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="KNOTTY" />
+        <meta name="apple-mobile-web-app-title" content="Ishuri hub" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
         <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
         <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />

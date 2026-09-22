@@ -299,8 +299,8 @@ async function payInvoice(schoolId, payerUserId, { invoice_id, amount, channel, 
 
   if (channel === 'WALLET') {
     const card = invoice.student.card;
-    if (!card) throw Object.assign(new Error('Student does not have a linked Knotty Card'), { status: 400 });
-    if (card.is_frozen || !card.is_active) throw Object.assign(new Error('Knotty Card is frozen or inactive'), { status: 400 });
+    if (!card) throw Object.assign(new Error('Student does not have a linked Ishuri hub Card'), { status: 400 });
+    if (card.is_frozen || !card.is_active) throw Object.assign(new Error('Ishuri hub Card is frozen or inactive'), { status: 400 });
     if (card.wallet_balance < amount) throw Object.assign(new Error(`Insufficient wallet balance (${card.wallet_balance} RWF)`), { status: 400 });
 
     // Deduct from wallet and record transaction
@@ -360,7 +360,7 @@ async function payInvoice(schoolId, payerUserId, { invoice_id, amount, channel, 
       after_state: { payment, walletTx },
     });
 
-    return { payment, new_balance: updatedCard.wallet_balance, message: 'Fee paid successfully via Knotty Card Wallet' };
+    return { payment, new_balance: updatedCard.wallet_balance, message: 'Fee paid successfully via Ishuri hub Card Wallet' };
   }
 
   if (channel === 'MOMO') {

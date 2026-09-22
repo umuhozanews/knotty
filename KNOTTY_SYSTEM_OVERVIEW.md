@@ -1,17 +1,17 @@
-# KNOTTY Card — Smart School Management System
+# Ishuri hub Card — Smart School Management System
 ### Complete System Documentation
 
 ---
 
 ## Table of Contents
 
-1. [What Is KNOTTY?](#1-what-is-knotty)
+1. [What Is Ishuri hub?](#1-what-is-ishuri-hub)
 2. [System Architecture](#2-system-architecture)
 3. [Technology Stack](#3-technology-stack)
 4. [Database Schema](#4-database-schema)
 5. [Backend Modules & API](#5-backend-modules--api)
 6. [Frontend Pages & Components](#6-frontend-pages--components)
-7. [The KNOTTY Card (NFC/QR)](#7-the-knotty-card-nfcqr)
+7. [The Ishuri hub Card (NFC/QR)](#7-the-ishuri-hub-card-nfcqr)
 8. [Attendance System (Tap-In / Tap-Out)](#8-attendance-system-tap-in--tap-out)
 9. [Academic Reports & PDF Generator](#9-academic-reports--pdf-generator)
 10. [Wallet & Canteen (Cashless POS)](#10-wallet--canteen-cashless-pos)
@@ -24,13 +24,13 @@
 
 ---
 
-## 1. What Is KNOTTY?
+## 1. What Is Ishuri hub?
 
-**KNOTTY** is a full-stack smart school management platform built for Rwandan schools. Its core idea is a **physical NFC + QR smart card** issued to every student — one card that replaces manual registers, cash at the canteen, and paper reports.
+**Ishuri hub** is a full-stack smart school management platform built for Rwandan schools. Its core idea is a **physical NFC + QR smart card** issued to every student — one card that replaces manual registers, cash at the canteen, and paper reports.
 
 ### Core Problems It Solves
 
-| Problem | KNOTTY Solution |
+| Problem | Ishuri hub Solution |
 |---|---|
 | Manual attendance registers (late, lossy) | NFC card tap-in / tap-out — instant, timestamped |
 | Cash at the canteen (theft, miscounting) | Card wallet — top-up via MTN MoMo or cash, deduct at POS |
@@ -551,7 +551,7 @@ All calls go through a shared `request<T>()` helper that injects the JWT header 
 
 ---
 
-## 7. The KNOTTY Card (NFC/QR)
+## 7. The Ishuri hub Card (NFC/QR)
 
 Each student gets **one physical card** — a standard CR80 PVC card with an embedded NFC chip (ISO 14443-A, NTAG216 recommended).
 
@@ -984,7 +984,7 @@ NEXT_PUBLIC_API_URL=http://localhost:5000/api/v1
 
 ## Summary
 
-KNOTTY is a complete school ERP system purpose-built for Rwanda with:
+Ishuri hub is a complete school ERP system purpose-built for Rwanda with:
 
 - **1 physical card** per student → handles attendance, canteen, and ID
 - **16-table PostgreSQL schema** covering every aspect of school life
@@ -998,5 +998,5 @@ KNOTTY is a complete school ERP system purpose-built for Rwanda with:
 
 ---
 
-*KNOTTY Card — Built for Rwandan Schools*
+*Ishuri hub Card — Built for Rwandan Schools*
 *Stack: Next.js 16 · React 19 · TypeScript · Tailwind v4 · Node.js · Express 5 · Prisma 7 · PostgreSQL · Redis · PDFKit · MTN MoMo · Africa's Talking*

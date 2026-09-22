@@ -10,11 +10,11 @@ if exist "C:\Program Files\PostgreSQL\17\bin\pg_ctl.exe" (
   )
 )
 
-echo Starting KNOTTY Backend...
-start "KNOTTY Backend" cmd /k "cd /d %~dp0knotty-backend && node src/app.js"
+echo Starting Ishuri hub Backend...
+start "Ishuri hub Backend" cmd /k "cd /d %~dp0knotty-backend && node src/app.js"
 timeout /t 3 /nobreak >nul
-echo Starting KNOTTY Frontend...
-start "KNOTTY Frontend" cmd /k "cd /d %~dp0knotty-app && npm run dev"
+echo Starting Ishuri hub Frontend...
+start "Ishuri hub Frontend" cmd /k "cd /d %~dp0knotty-app && npm run dev"
 echo.
 echo Both servers starting:
 echo   Backend  ^> http://localhost:5000

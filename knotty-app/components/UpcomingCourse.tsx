@@ -15,9 +15,9 @@ export default function UpcomingCourse() {
             Learn more
           </button>
         </div>
-        <h2 className="text-xl font-bold mb-2">KNOTTY Orientation</h2>
+        <h2 className="text-xl font-bold mb-2">Ishuri hub Orientation</h2>
         <p className="text-xs text-green-100/80 mb-4 leading-relaxed">
-          Introduction to the KNOTTY Smart Card system — attendance, fees, and canteen management for all students.
+          Introduction to the Ishuri hub Smart Card system — attendance, fees, and canteen management for all students.
         </p>
         <div className="flex flex-wrap gap-2">
           <span className="flex items-center gap-1.5 bg-white/15 rounded-xl px-3 py-1.5 text-xs">

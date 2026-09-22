@@ -13,14 +13,14 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  console.log('Seeding KNOTTY database with rich mock data...');
+  console.log('Seeding Ishuri hub database with rich mock data...');
 
   // 1. School
   const school = await prisma.school.upsert({
     where: { email: 'admin@knottyschool.rw' },
-    update: {},
+    update: { name: 'Ishuri hub Model School' },
     create: {
-      name: 'KNOTTY Model School',
+      name: 'Ishuri hub Model School',
       email: 'admin@knottyschool.rw',
       code: 'KMS',
       address: 'KG 12 Ave, Kigali, Rwanda',

@@ -81,7 +81,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
               <path d="M2 12l10 5 10-5" stroke="#FFB800" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </div>
-          <span className="font-bold text-lg text-gray-800">KNOTTY</span>
+          <span className="font-bold text-lg text-gray-800">Ishuri hub</span>
         </div>
         {onClose && (
           <button onClick={onClose} className="md:hidden p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
@@ -110,7 +110,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       {/* Role badge */}
       <div className="mx-3 mb-3 mt-2 rounded-2xl p-3" style={{ background: "#FFF3EC", border: "1px solid #FFD4B2" }}>
-        <p className="text-xs font-semibold mb-0.5" style={{ color: "#121212" }}>KNOTTY Smart School</p>
+        <p className="text-xs font-semibold mb-0.5" style={{ color: "#121212" }}>Ishuri hub Smart School</p>
         <p className="text-xs" style={{ color: "#666666" }}>Card-based management</p>
         {user && (
           <p className="text-xs mt-1 font-semibold" style={{ color: "#FF7A22" }}>{ROLE_LABELS[role] ?? role}</p>

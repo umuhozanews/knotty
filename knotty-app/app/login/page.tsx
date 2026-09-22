@@ -60,7 +60,7 @@ export default function LoginPage() {
               <path d="M2 12l10 5 10-5" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </div>
-          <span className="text-2xl font-bold text-gray-800">KNOTTY</span>
+          <span className="text-2xl font-bold text-gray-800">Ishuri hub</span>
         </div>
 
         <div className="bg-white rounded-3xl shadow-sm p-8">

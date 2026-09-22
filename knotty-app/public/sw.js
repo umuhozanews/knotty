@@ -1,5 +1,5 @@
-// KNOTTY Service Worker — minimal install support
-const CACHE = 'knotty-v1';
+// Ishuri hub Service Worker — minimal install support
+const CACHE = 'ishurihub-v1';
 const PRECACHE = ['/', '/login', '/icon-192.png', '/icon-512.png', '/manifest.json'];
 
 self.addEventListener('install', (e) => {

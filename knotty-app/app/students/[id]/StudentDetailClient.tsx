@@ -979,7 +979,7 @@ export default function StudentProfilePage() {
   async function issueCard() {
     try {
       await cards.issue(studentId);
-      show("KNOTTY Card issued successfully", "success");
+      show("Ishuri hub Card issued successfully", "success");
       await reloadProfile();
     } catch (err) { show(err instanceof Error ? err.message : "Error", "error"); }
   }
@@ -1166,7 +1166,7 @@ export default function StudentProfilePage() {
               ) : (
                 user?.role !== "TEACHER" && (
                   <button onClick={issueCard} className="flex items-center gap-1.5 text-sm text-blue-600 border border-blue-500 rounded-xl px-3 py-2 hover:bg-blue-50 transition">
-                    <CreditCard size={14} /> Issue KNOTTY Card
+                    <CreditCard size={14} /> Issue Ishuri hub Card
                   </button>
                 )
               )}
@@ -1241,9 +1241,9 @@ export default function StudentProfilePage() {
 
               {/* Card & Medical */}
               <div className="space-y-5">
-                {/* KNOTTY Card */}
+                {/* Ishuri hub Card */}
                 <div>
-                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">KNOTTY Card</h3>
+                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Ishuri hub Card</h3>
                   {profile.card ? (
                     <div className="space-y-0">
                       {[
@@ -1454,7 +1454,7 @@ export default function StudentProfilePage() {
               ) : (
                 <div className="text-center py-8">
                   <Wallet size={36} className="text-gray-200 mx-auto mb-3" />
-                  <p className="text-gray-500 mb-3">No card issued — issue a KNOTTY card first</p>
+                  <p className="text-gray-500 mb-3">No card issued — issue an Ishuri hub card first</p>
                   <button onClick={issueCard} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition">Issue Card</button>
                 </div>
               )}

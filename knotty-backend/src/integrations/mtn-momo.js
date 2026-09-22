@@ -43,7 +43,7 @@ async function requestTopUp({ amount, phone, referenceId, description }) {
       currency: 'RWF',
       externalId,
       payer: { partyIdType: 'MSISDN', partyId: phone },
-      payerMessage: description || 'KNOTTY Wallet Top Up',
+      payerMessage: description || 'Ishuri hub Wallet Top Up',
       payeeNote: 'School wallet funding',
     },
     {

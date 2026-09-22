@@ -12,7 +12,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/": "Dashboard",
   "/students": "Students",
   "/attendance": "Attendance",
-  "/cards": "KNOTTY Cards",
+  "/cards": "Ishuri hub Cards",
   "/canteen": "Canteen",
   "/fees": "Fees",
   "/reports": "Reports",
@@ -75,7 +75,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const notifRef = useRef<HTMLDivElement>(null);
 
   const today = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
-  const title = Object.entries(PAGE_TITLES).find(([k]) => pathname === k || pathname.startsWith(k + "/"))?.[1] ?? "KNOTTY";
+  const title = Object.entries(PAGE_TITLES).find(([k]) => pathname === k || pathname.startsWith(k + "/"))?.[1] ?? "Ishuri hub";
 
   const loadNotifs = useCallback(() => {
     notifApi.list().then((r) => {

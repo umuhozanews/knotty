@@ -269,7 +269,7 @@ async function createClinicVisit(studentId, schoolId, data, recorderId) {
     if (student && student.parent) {
       const parentUser = student.parent;
       const studentName = `${student.user.first_name} ${student.user.last_name}`;
-      const msg = `KNOTTY Health Alert: ${studentName} visited the school clinic today. Complaint: ${presenting_complaint}. Treatment: ${treatment_notes || 'Observed'}.`;
+      const msg = `Ishuri hub Health Alert: ${studentName} visited the school clinic today. Complaint: ${presenting_complaint}. Treatment: ${treatment_notes || 'Observed'}.`;
 
       await tx.notification.create({
         data: {

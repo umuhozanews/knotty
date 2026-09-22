@@ -20,4 +20,4 @@ echo Both servers starting:
 echo   Backend  ^> http://localhost:5000
 echo   Frontend ^> http://localhost:3000
 echo.
-echo Login: admin@knottyschool.rw / Admin@2024
+echo Login: admin@ishurihub.rw / Admin@2024

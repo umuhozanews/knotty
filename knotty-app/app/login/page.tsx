@@ -5,6 +5,14 @@ import { useAuth } from "@/context/AuthContext";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 
 const DEMO_ACCOUNTS = [
+  { email: "admin@ishurihub.rw",        password: "Admin@2024",   role: "ADMIN",      first_name: "School",   last_name: "Admin"  },
+  { email: "teacher@ishurihub.rw",      password: "Staff@2024",   role: "TEACHER",    first_name: "Kagabo",   last_name: "Robert" },
+  { email: "bursar@ishurihub.rw",       password: "Staff@2024",   role: "BURSAR",     first_name: "Nshimiye", last_name: "Paul"   },
+  { email: "nurse@ishurihub.rw",        password: "Staff@2024",   role: "NURSE",      first_name: "Mutoni",   last_name: "Diane"  },
+  { email: "discipline@ishurihub.rw",   password: "Staff@2024",   role: "DISCIPLINE", first_name: "Rugamba",  last_name: "Victor" },
+  { email: "canteen@ishurihub.rw",      password: "Staff@2024",   role: "CANTEEN",    first_name: "Umutoni",  last_name: "Claire" },
+  { email: "hirwa.jean@ishurihub.rw",   password: "Student@2024", role: "STUDENT",    first_name: "Hirwa",    last_name: "Jean"   },
+  // Aliases for legacy credentials
   { email: "admin@knottyschool.rw",       password: "Admin@2024",   role: "ADMIN",      first_name: "School",   last_name: "Admin"  },
   { email: "teacher@knottyschool.rw",     password: "Staff@2024",   role: "TEACHER",    first_name: "Kagabo",   last_name: "Robert" },
   { email: "bursar@knottyschool.rw",      password: "Staff@2024",   role: "BURSAR",     first_name: "Nshimiye", last_name: "Paul"   },
@@ -118,7 +126,7 @@ export default function LoginPage() {
           </form>
 
           <p className="text-xs text-gray-400 text-center mt-4">
-            Demo: <span className="font-mono">admin@knottyschool.rw</span> / <span className="font-mono">Admin@2024</span>
+            Demo: <span className="font-mono">admin@ishurihub.rw</span> / <span className="font-mono">Admin@2024</span>
           </p>
         </div>
 

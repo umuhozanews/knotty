@@ -78,7 +78,7 @@ All protected endpoints require: `Authorization: Bearer <access_token>`
 
 **Login body:**
 ```json
-{ "email": "admin@knottyschool.rw", "password": "Admin@2024" }
+{ "email": "admin@ishurihub.rw", "password": "Admin@2024" }
 ```
 
 **Login response:**

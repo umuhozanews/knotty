@@ -48,12 +48,12 @@ async function main() {
   // 3. Staff Users
   const staffPassword = await bcrypt.hash('Staff@2024', 10);
   const staffData = [
-    { role: 'TEACHER',    first: 'Kagabo',   last: 'Robert',  email: 'teacher@knottyschool.rw',    phone: '+250788100001' },
-    { role: 'NURSE',      first: 'Mutoni',   last: 'Diane',   email: 'nurse@knottyschool.rw',      phone: '+250788100002' },
-    { role: 'BURSAR',     first: 'Nshimiye', last: 'Paul',    email: 'bursar@knottyschool.rw',     phone: '+250788100003' },
-    { role: 'DISCIPLINE', first: 'Rugamba',  last: 'Victor',  email: 'discipline@knottyschool.rw', phone: '+250788100004' },
-    { role: 'CANTEEN',    first: 'Umutoni',  last: 'Claire',  email: 'canteen@knottyschool.rw',    phone: '+250788100005' },
-    { role: 'LIBRARIAN',  first: 'Mutoni',   last: 'Librarian', email: 'librarian@knottyschool.rw', phone: '+250788100006' },
+    { role: 'TEACHER',    first: 'Kagabo',   last: 'Robert',  email: 'teacher@ishurihub.rw',    phone: '+250788100001' },
+    { role: 'NURSE',      first: 'Mutoni',   last: 'Diane',   email: 'nurse@ishurihub.rw',      phone: '+250788100002' },
+    { role: 'BURSAR',     first: 'Nshimiye', last: 'Paul',    email: 'bursar@ishurihub.rw',     phone: '+250788100003' },
+    { role: 'DISCIPLINE', first: 'Rugamba',  last: 'Victor',  email: 'discipline@ishurihub.rw', phone: '+250788100004' },
+    { role: 'CANTEEN',    first: 'Umutoni',  last: 'Claire',  email: 'canteen@ishurihub.rw',    phone: '+250788100005' },
+    { role: 'LIBRARIAN',  first: 'Mutoni',   last: 'Librarian', email: 'librarian@ishurihub.rw', phone: '+250788100006' },
   ];
   
   const staff = {};
@@ -137,16 +137,16 @@ async function main() {
   // 6. Students
   const studentPassword = await bcrypt.hash('Student@2024', 10);
   const studentsData = [
-    { first: 'Hirwa', last: 'Jean', email: 'hirwa.jean@knotty.rw', class_id: classA.id, level_id: s5.id },
-    { first: 'Uwase', last: 'Marie', email: 'uwase.marie@knotty.rw', class_id: classA.id, level_id: s5.id },
-    { first: 'Nkurunziza', last: 'Eric', email: 'nkurunziza.eric@knotty.rw', class_id: classB.id, level_id: s5.id },
-    { first: 'Mukamana', last: 'Alice', email: 'mukamana.alice@knotty.rw', class_id: classB.id, level_id: s5.id },
-    { first: 'Habimana', last: 'Patrick', email: 'habimana.patrick@knotty.rw', class_id: classA.id, level_id: s5.id },
-    { first: 'Uwimana', last: 'Grace', email: 'uwimana.grace@knotty.rw', class_id: classC.id, level_id: s6.id },
-    { first: 'Mutabazi', last: 'David', email: 'mutabazi.david@knotty.rw', class_id: classC.id, level_id: s6.id },
-    { first: 'Ingabire', last: 'Sandra', email: 'ingabire.sandra@knotty.rw', class_id: classA.id, level_id: s5.id },
-    { first: 'Ishimwe', last: 'Christian', email: 'ishimwe.christian@knotty.rw', class_id: classB.id, level_id: s5.id },
-    { first: 'Kayitesi', last: 'Florentine', email: 'kayitesi.florentine@knotty.rw', class_id: classC.id, level_id: s6.id },
+    { first: 'Hirwa', last: 'Jean', email: 'hirwa.jean@ishurihub.rw', class_id: classA.id, level_id: s5.id },
+    { first: 'Uwase', last: 'Marie', email: 'uwase.marie@ishurihub.rw', class_id: classA.id, level_id: s5.id },
+    { first: 'Nkurunziza', last: 'Eric', email: 'nkurunziza.eric@ishurihub.rw', class_id: classB.id, level_id: s5.id },
+    { first: 'Mukamana', last: 'Alice', email: 'mukamana.alice@ishurihub.rw', class_id: classB.id, level_id: s5.id },
+    { first: 'Habimana', last: 'Patrick', email: 'habimana.patrick@ishurihub.rw', class_id: classA.id, level_id: s5.id },
+    { first: 'Uwimana', last: 'Grace', email: 'uwimana.grace@ishurihub.rw', class_id: classC.id, level_id: s6.id },
+    { first: 'Mutabazi', last: 'David', email: 'mutabazi.david@ishurihub.rw', class_id: classC.id, level_id: s6.id },
+    { first: 'Ingabire', last: 'Sandra', email: 'ingabire.sandra@ishurihub.rw', class_id: classA.id, level_id: s5.id },
+    { first: 'Ishimwe', last: 'Christian', email: 'ishimwe.christian@ishurihub.rw', class_id: classB.id, level_id: s5.id },
+    { first: 'Kayitesi', last: 'Florentine', email: 'kayitesi.florentine@ishurihub.rw', class_id: classC.id, level_id: s6.id },
   ];
 
   const students = [];
@@ -192,7 +192,7 @@ async function main() {
           student_id: student.id,
           school_id: school.id,
           card_number: `KNT-KMS-2026-${String(seq).padStart(5, '0')}`,
-          qr_code: `https://placeholder.knotty.rw/qr/${studentCode}`,
+          qr_code: `https://placeholder.ishurihub.rw/qr/${studentCode}`,
           wallet_balance: 15000,
           expires_at: expires,
         },

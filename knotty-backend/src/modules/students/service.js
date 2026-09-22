@@ -60,7 +60,7 @@ async function createStudent(data, schoolId) {
   if (!school) throw Object.assign(new Error('School not found'), { status: 404 });
 
   const student_code = await generateStudentCode(school.code);
-  const password_hash = await bcrypt.hash(studentDetails.password || 'Knotty@2024', 10);
+  const password_hash = await bcrypt.hash(studentDetails.password || 'Ishuri@2024', 10);
 
   return prisma.$transaction(async (tx) => {
     let parentId = studentDetails.parent_id;

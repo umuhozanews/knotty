@@ -45,7 +45,7 @@ interface StudentForm {
   profile_photo: string;
 }
 const BLANK: StudentForm = {
-  first_name: "", last_name: "", email: "", phone: "", password: "Knotty@2024",
+  first_name: "", last_name: "", email: "", phone: "", password: "Ishuri@2024",
   gender: "M", level_id: "", class_id: "", date_of_birth: "", nationality: "Rwandan",
   guardian_name: "", guardian_phone: "", guardian_email: "", medical_notes: "", initial_balance: "",
   profile_photo: "",
@@ -188,7 +188,7 @@ function StudentModal({
         setCreatedCredentials({
           name: `${form.first_name} ${form.last_name}`,
           email: form.email,
-          password: form.password || "Knotty@2024",
+          password: form.password || "Ishuri@2024",
         });
         onSuccess();
         return; // stay open to show credentials

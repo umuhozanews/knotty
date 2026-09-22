@@ -5,7 +5,7 @@ const createStudentSchema = Joi.object({
   last_name: Joi.string().required(),
   email: Joi.string().required(),
   phone: Joi.string().optional().allow(''),
-  password: Joi.string().min(8).default('Knotty@2024'),
+  password: Joi.string().min(8).default('Ishuri@2024'),
   date_of_birth: Joi.date().optional().allow(null, ''),
   gender: Joi.string().valid('M', 'F', 'OTHER').optional(),
   nationality: Joi.string().optional().allow(''),

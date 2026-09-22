@@ -194,11 +194,11 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
     const val = localStorage.getItem("knotty_demo_staff");
     if (!val) {
       const initial = [
-        { id: "staff-bursar", first_name: "Nshimiye", last_name: "Paul", email: "bursar@knottyschool.rw", role: "BURSAR", is_active: true, last_login: null, created_at: new Date().toISOString() },
-        { id: "staff-nurse", first_name: "Mutoni", last_name: "Diane", email: "nurse@knottyschool.rw", role: "NURSE", is_active: true, last_login: null, created_at: new Date().toISOString() },
-        { id: "staff-discipline", first_name: "Rugamba", last_name: "Victor", email: "discipline@knottyschool.rw", role: "DISCIPLINE", is_active: true, last_login: null, created_at: new Date().toISOString() },
-        { id: "staff-canteen", first_name: "Umutoni", last_name: "Claire", email: "canteen@knottyschool.rw", role: "CANTEEN", is_active: true, last_login: null, created_at: new Date().toISOString() },
-        { id: "staff-teacher", first_name: "Kagabo", last_name: "Robert", email: "teacher@knottyschool.rw", role: "TEACHER", is_active: true, last_login: null, created_at: new Date().toISOString() },
+        { id: "staff-bursar", first_name: "Nshimiye", last_name: "Paul", email: "bursar@ishurihub.rw", role: "BURSAR", is_active: true, last_login: null, created_at: new Date().toISOString() },
+        { id: "staff-nurse", first_name: "Mutoni", last_name: "Diane", email: "nurse@ishurihub.rw", role: "NURSE", is_active: true, last_login: null, created_at: new Date().toISOString() },
+        { id: "staff-discipline", first_name: "Rugamba", last_name: "Victor", email: "discipline@ishurihub.rw", role: "DISCIPLINE", is_active: true, last_login: null, created_at: new Date().toISOString() },
+        { id: "staff-canteen", first_name: "Umutoni", last_name: "Claire", email: "canteen@ishurihub.rw", role: "CANTEEN", is_active: true, last_login: null, created_at: new Date().toISOString() },
+        { id: "staff-teacher", first_name: "Kagabo", last_name: "Robert", email: "teacher@ishurihub.rw", role: "TEACHER", is_active: true, last_login: null, created_at: new Date().toISOString() },
       ];
       localStorage.setItem("knotty_demo_staff", JSON.stringify(initial));
       return initial;
@@ -221,7 +221,7 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           user: {
             first_name: "Kagabo",
             last_name: "Robert",
-            email: "teacher@knottyschool.rw",
+            email: "teacher@ishurihub.rw",
             phone: "+250788100001"
           }
         }
@@ -628,7 +628,7 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           homeroom_staff_id: "staff-teacher",
           program: { id: "prog-pcm", name: "PCM (Physics-Chemistry-Math)" },
           term: { id: "term-1", name: "Term 1 2026" },
-          homeroom_teacher: { id: "staff-teacher", first_name: "Kagabo", last_name: "Robert", email: "teacher@knottyschool.rw" },
+          homeroom_teacher: { id: "staff-teacher", first_name: "Kagabo", last_name: "Robert", email: "teacher@ishurihub.rw" },
           _count: { enrollments: 2 }
         }
       ];
@@ -651,7 +651,7 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           student: {
             id: "std-1",
             student_code: "KMS260001",
-            user: { first_name: "Kamanzi", last_name: "Eric", email: "eric@knottyschool.rw", phone: "+250788000011" }
+            user: { first_name: "Kamanzi", last_name: "Eric", email: "eric@ishurihub.rw", phone: "+250788000011" }
           }
         },
         {
@@ -662,7 +662,7 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           student: {
             id: "std-2",
             student_code: "KMS260002",
-            user: { first_name: "Uwineza", last_name: "Divine", email: "divine@knottyschool.rw", phone: "+250788000012" }
+            user: { first_name: "Uwineza", last_name: "Divine", email: "divine@ishurihub.rw", phone: "+250788000012" }
           }
         }
       ];
@@ -1698,7 +1698,7 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
         homeroom_staff_id: body.homeroom_staff_id || null,
         program: progObj,
         term: termObj,
-        homeroom_teacher: { id: "staff-teacher", first_name: "Kagabo", last_name: "Robert", email: "teacher@knottyschool.rw" },
+        homeroom_teacher: { id: "staff-teacher", first_name: "Kagabo", last_name: "Robert", email: "teacher@ishurihub.rw" },
         _count: { enrollments: 0 }
       };
       sectList.push(newSect);

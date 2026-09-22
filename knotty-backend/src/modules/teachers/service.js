@@ -3,7 +3,7 @@ const prisma = require('../../config/database');
 const { paginate, paginatedResponse } = require('../../utils/helpers');
 
 async function create(data, schoolId) {
-  const { first_name, last_name, email, phone, password = 'Knotty@2024', ...teacherData } = data;
+  const { first_name, last_name, email, phone, password = 'Ishuri@2024', ...teacherData } = data;
   const password_hash = await bcrypt.hash(password, 10);
 
   const count = await prisma.teacher.count({ where: { school_id: schoolId } });

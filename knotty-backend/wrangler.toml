@@ -1,4 +1,4 @@
-name = "knotty-backend"
+name = "ishuri-hub-backend"
 main = "src/worker.mjs"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]

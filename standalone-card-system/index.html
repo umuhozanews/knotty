@@ -533,13 +533,13 @@
   <script>
     // Initial State Database (Persisted in LocalStorage)
     const DEFAULT_STUDENTS = [
-      { id: '1', first_name: 'Jean', last_name: 'Mugabo', student_code: 'STU-2026-001', class_name: 'Senior 4 Science A', card_number: 'KNT-8492-1001', nfc_uid: '04A3B2C1D0', wallet_balance: 5000, is_frozen: false },
-      { id: '2', first_name: 'Aline', last_name: 'Uwase', student_code: 'STU-2026-002', class_name: 'Senior 4 Science A', card_number: 'KNT-8492-1002', nfc_uid: '04F5E6D7C8', wallet_balance: 12000, is_frozen: false },
-      { id: '3', first_name: 'Eric', last_name: 'Manzi', student_code: 'STU-2026-003', class_name: 'Senior 5 Arts B', card_number: 'KNT-8492-1003', nfc_uid: '0411223344', wallet_balance: 1500, is_frozen: false }
+      { id: '1', first_name: 'Jean', last_name: 'Mugabo', student_code: 'STU-2026-001', class_name: 'Senior 4 Science A', card_number: 'ISH-8492-1001', nfc_uid: '04A3B2C1D0', wallet_balance: 5000, is_frozen: false },
+      { id: '2', first_name: 'Aline', last_name: 'Uwase', student_code: 'STU-2026-002', class_name: 'Senior 4 Science A', card_number: 'ISH-8492-1002', nfc_uid: '04F5E6D7C8', wallet_balance: 12000, is_frozen: false },
+      { id: '3', first_name: 'Eric', last_name: 'Manzi', student_code: 'STU-2026-003', class_name: 'Senior 5 Arts B', card_number: 'ISH-8492-1003', nfc_uid: '0411223344', wallet_balance: 1500, is_frozen: false }
     ];
 
-    let students = JSON.parse(localStorage.getItem('knotty_students')) || DEFAULT_STUDENTS;
-    let attendanceLogs = JSON.parse(localStorage.getItem('knotty_attendance_today')) || [];
+    let students = JSON.parse(localStorage.getItem('ishuri_students') || localStorage.getItem('knotty_students')) || DEFAULT_STUDENTS;
+    let attendanceLogs = JSON.parse(localStorage.getItem('ishuri_attendance_today') || localStorage.getItem('knotty_attendance_today')) || [];
 
     // Web Audio Sound Synthesizer (for tap chimes without external mp3s)
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -589,8 +589,8 @@
     });
 
     function saveState() {
-      localStorage.setItem('knotty_students', JSON.stringify(students));
-      localStorage.setItem('knotty_attendance_today', JSON.stringify(attendanceLogs));
+      localStorage.setItem('ishuri_students', JSON.stringify(students));
+      localStorage.setItem('ishuri_attendance_today', JSON.stringify(attendanceLogs));
     }
 
     // Tab Navigation

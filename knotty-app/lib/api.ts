@@ -2,14 +2,24 @@ import { DEMO_STUDENTS } from "./demo";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, '') || "/api/v1";
 
+function getDemoStorage(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(key) || localStorage.getItem(key.replace(/^ishuri_/, "knotty_"));
+}
+
+function setDemoStorage(key: string, value: string): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(key, value);
+}
+
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("knotty_token");
+  return localStorage.getItem("ishuri_token") || localStorage.getItem("knotty_token");
 }
 
 function getRefreshToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("knotty_refresh");
+  return localStorage.getItem("ishuri_refresh") || localStorage.getItem("knotty_refresh");
 }
 
 let _refreshing: Promise<string | null> | null = null;
@@ -33,8 +43,8 @@ async function refreshAccessToken(): Promise<string | null> {
     });
     const json = await safeJson(res) as Record<string, string>;
     if (!res.ok) return null;
-    localStorage.setItem("knotty_token", json.accessToken);
-    localStorage.setItem("knotty_refresh", json.refreshToken);
+    localStorage.setItem("ishuri_token", json.accessToken);
+    localStorage.setItem("ishuri_refresh", json.refreshToken);
     return json.accessToken;
   } catch {
     return null;
@@ -42,6 +52,10 @@ async function refreshAccessToken(): Promise<string | null> {
 }
 
 function clearSessionAndRedirect() {
+  localStorage.removeItem("ishuri_token");
+  localStorage.removeItem("ishuri_refresh");
+  localStorage.removeItem("ishuri_demo");
+  localStorage.removeItem("ishuri_demo_user");
   localStorage.removeItem("knotty_token");
   localStorage.removeItem("knotty_refresh");
   localStorage.removeItem("knotty_demo");
@@ -84,44 +98,44 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
   const cleanParts = cleanPath.split("/");
 
   const getLevels = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_levels");
+    const val = getDemoStorage("ishuri_demo_levels");
     if (!val) {
       const initial = [
         { id: "l1", name: "Senior 5", description: "Senior 5 level", order_index: 0 },
         { id: "l2", name: "Senior 6", description: "Senior 6 level", order_index: 1 },
       ];
-      localStorage.setItem("knotty_demo_levels", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_levels", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
 
   const getClasses = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_classes");
+    const val = getDemoStorage("ishuri_demo_classes");
     if (!val) {
       const initial = [
         { id: "c1", name: "A", level: { id: "l1", name: "Senior 5" }, class_teacher_id: "demo-teacher", academic_year: "2025-2026" },
         { id: "c2", name: "B", level: { id: "l1", name: "Senior 5" }, class_teacher_id: "demo-teacher", academic_year: "2025-2026" },
         { id: "c3", name: "Science", level: { id: "l2", name: "Senior 6" }, class_teacher_id: "demo-teacher", academic_year: "2025-2026" },
       ];
-      localStorage.setItem("knotty_demo_classes", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_classes", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
 
   const getStudents = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_students");
+    const val = getDemoStorage("ishuri_demo_students");
     if (!val) {
       const initial = DEMO_STUDENTS;
-      localStorage.setItem("knotty_demo_students", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_students", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
 
   const getDemoHealthProfiles = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_health_profiles");
+    const val = getDemoStorage("ishuri_demo_health_profiles");
     if (!val) {
       const initial = [
         {
@@ -141,28 +155,28 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           emergency_contact_phone: "+250788000022"
         }
       ];
-      localStorage.setItem("knotty_demo_health_profiles", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_health_profiles", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
 
   const getDemoImmunizations = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_health_immunizations");
+    const val = getDemoStorage("ishuri_demo_health_immunizations");
     if (!val) {
       const initial = [
         { id: "imm-1", student_id: "std-1", vaccine_name: "BCG", date_administered: "2015-05-12", created_at: new Date().toISOString() },
         { id: "imm-2", student_id: "std-1", vaccine_name: "MMR", date_administered: "2018-08-20", created_at: new Date().toISOString() },
         { id: "imm-3", student_id: "std-2", vaccine_name: "BCG", date_administered: "2016-02-14", created_at: new Date().toISOString() }
       ];
-      localStorage.setItem("knotty_demo_health_immunizations", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_health_immunizations", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
 
   const getDemoClinicVisits = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_health_visits");
+    const val = getDemoStorage("ishuri_demo_health_visits");
     if (!val) {
       const initial = [
         {
@@ -177,21 +191,21 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           recorder: { first_name: "Mutoni", last_name: "Diane" }
         }
       ];
-      localStorage.setItem("knotty_demo_health_visits", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_health_visits", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
 
-  const saveLevels = (data: any[]) => localStorage.setItem("knotty_demo_levels", JSON.stringify(data));
-  const saveClasses = (data: any[]) => localStorage.setItem("knotty_demo_classes", JSON.stringify(data));
-  const saveStudents = (data: any[]) => localStorage.setItem("knotty_demo_students", JSON.stringify(data));
-  const saveDemoHealthProfiles = (data: any[]) => localStorage.setItem("knotty_demo_health_profiles", JSON.stringify(data));
-  const saveDemoImmunizations = (data: any[]) => localStorage.setItem("knotty_demo_health_immunizations", JSON.stringify(data));
-  const saveDemoClinicVisits = (data: any[]) => localStorage.setItem("knotty_demo_health_visits", JSON.stringify(data));
+  const saveLevels = (data: any[]) => setDemoStorage("ishuri_demo_levels", JSON.stringify(data));
+  const saveClasses = (data: any[]) => setDemoStorage("ishuri_demo_classes", JSON.stringify(data));
+  const saveStudents = (data: any[]) => setDemoStorage("ishuri_demo_students", JSON.stringify(data));
+  const saveDemoHealthProfiles = (data: any[]) => setDemoStorage("ishuri_demo_health_profiles", JSON.stringify(data));
+  const saveDemoImmunizations = (data: any[]) => setDemoStorage("ishuri_demo_health_immunizations", JSON.stringify(data));
+  const saveDemoClinicVisits = (data: any[]) => setDemoStorage("ishuri_demo_health_visits", JSON.stringify(data));
 
   const getStaffList = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_staff");
+    const val = getDemoStorage("ishuri_demo_staff");
     if (!val) {
       const initial = [
         { id: "staff-bursar", first_name: "Nshimiye", last_name: "Paul", email: "bursar@ishurihub.rw", role: "BURSAR", is_active: true, last_login: null, created_at: new Date().toISOString() },
@@ -200,14 +214,14 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
         { id: "staff-canteen", first_name: "Umutoni", last_name: "Claire", email: "canteen@ishurihub.rw", role: "CANTEEN", is_active: true, last_login: null, created_at: new Date().toISOString() },
         { id: "staff-teacher", first_name: "Kagabo", last_name: "Robert", email: "teacher@ishurihub.rw", role: "TEACHER", is_active: true, last_login: null, created_at: new Date().toISOString() },
       ];
-      localStorage.setItem("knotty_demo_staff", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_staff", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
 
   const getTeachersList = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_teachers");
+    const val = getDemoStorage("ishuri_demo_teachers");
     if (!val) {
       const initial = [
         {
@@ -226,17 +240,17 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           }
         }
       ];
-      localStorage.setItem("knotty_demo_teachers", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_teachers", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
 
-  const saveStaffList = (data: any[]) => localStorage.setItem("knotty_demo_staff", JSON.stringify(data));
-  const saveTeachersList = (data: any[]) => localStorage.setItem("knotty_demo_teachers", JSON.stringify(data));
+  const saveStaffList = (data: any[]) => setDemoStorage("ishuri_demo_staff", JSON.stringify(data));
+  const saveTeachersList = (data: any[]) => setDemoStorage("ishuri_demo_teachers", JSON.stringify(data));
 
   const getMaterials = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_materials");
+    const val = getDemoStorage("ishuri_demo_materials");
     if (!val) {
       const initial = [
         {
@@ -266,16 +280,16 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           level: { name: "Senior 6" }
         }
       ];
-      localStorage.setItem("knotty_demo_materials", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_materials", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
 
-  const saveMaterials = (data: any[]) => localStorage.setItem("knotty_demo_materials", JSON.stringify(data));
+  const saveMaterials = (data: any[]) => setDemoStorage("ishuri_demo_materials", JSON.stringify(data));
 
   const getReports = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_reports");
+    const val = getDemoStorage("ishuri_demo_reports");
     if (!val) {
       const initial = [
         {
@@ -299,30 +313,30 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           created_at: new Date().toISOString()
         }
       ];
-      localStorage.setItem("knotty_demo_reports", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_reports", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
 
-  const saveReports = (data: any[]) => localStorage.setItem("knotty_demo_reports", JSON.stringify(data));
+  const saveReports = (data: any[]) => setDemoStorage("ishuri_demo_reports", JSON.stringify(data));
 
   const getDemoBooks = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_library_books");
+    const val = getDemoStorage("ishuri_demo_library_books");
     if (!val) {
       const initial = [
         { id: "book-1", title: "Advanced Physics for A-Level", author: "Dr. Musoni", isbn: "9781234567890", category: "PHYSICS", total_copies: 5, created_at: "2026-01-10T10:00:00.000Z" },
         { id: "book-2", title: "Pure Mathematics Vol 1", author: "Prof. Kagabo", isbn: "9780987654321", category: "MATH", total_copies: 3, created_at: "2026-01-12T11:30:00.000Z" }
       ];
-      localStorage.setItem("knotty_demo_library_books", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_library_books", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
-  const saveDemoBooks = (data: any[]) => localStorage.setItem("knotty_demo_library_books", JSON.stringify(data));
+  const saveDemoBooks = (data: any[]) => setDemoStorage("ishuri_demo_library_books", JSON.stringify(data));
 
   const getDemoBorrows = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_library_borrows");
+    const val = getDemoStorage("ishuri_demo_library_borrows");
     if (!val) {
       const initial = [
         {
@@ -336,15 +350,15 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           copy: { id: "copy-1-1", copy_tag: "PHYS-001", status: "BORROWED", created_at: "2026-01-10T10:00:00.000Z", book: { id: "book-1", title: "Advanced Physics for A-Level", author: "Dr. Musoni" } }
         }
       ];
-      localStorage.setItem("knotty_demo_library_borrows", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_library_borrows", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
-  const saveDemoBorrows = (data: any[]) => localStorage.setItem("knotty_demo_library_borrows", JSON.stringify(data));
+  const saveDemoBorrows = (data: any[]) => setDemoStorage("ishuri_demo_library_borrows", JSON.stringify(data));
 
   const getDemoDiscipline = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_discipline");
+    const val = getDemoStorage("ishuri_demo_discipline");
     if (!val) {
       const initial = [
         {
@@ -363,15 +377,15 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           recorder: { first_name: "Rugamba", last_name: "Victor", role: "DISCIPLINE" }
         }
       ];
-      localStorage.setItem("knotty_demo_discipline", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_discipline", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
-  const saveDemoDiscipline = (data: any[]) => localStorage.setItem("knotty_demo_discipline", JSON.stringify(data));
+  const saveDemoDiscipline = (data: any[]) => setDemoStorage("ishuri_demo_discipline", JSON.stringify(data));
 
   const getDemoHealth = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_health");
+    const val = getDemoStorage("ishuri_demo_health");
     if (!val) {
       const initial = [
         {
@@ -389,51 +403,51 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           recorder: { first_name: "Mutoni", last_name: "Diane", role: "NURSE" }
         }
       ];
-      localStorage.setItem("knotty_demo_health", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_health", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
-  const saveDemoHealth = (data: any[]) => localStorage.setItem("knotty_demo_health", JSON.stringify(data));
+  const saveDemoHealth = (data: any[]) => setDemoStorage("ishuri_demo_health", JSON.stringify(data));
 
   const getDemoCampuses = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_campuses");
+    const val = getDemoStorage("ishuri_demo_campuses");
     if (!val) {
       const initial = [{ id: "camp-main", name: "Main Campus", address: "KG 12 Ave, Kigali" }];
-      localStorage.setItem("knotty_demo_campuses", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_campuses", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
-  const saveDemoCampuses = (data: any[]) => localStorage.setItem("knotty_demo_campuses", JSON.stringify(data));
+  const saveDemoCampuses = (data: any[]) => setDemoStorage("ishuri_demo_campuses", JSON.stringify(data));
 
   const getDemoDevices = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_devices");
+    const val = getDemoStorage("ishuri_demo_devices");
     if (!val) {
       const initial = [
         { id: "dev-main-in", campus_id: "camp-main", name: "Main Gate Entry", location_type: "CAMPUS_GATE", zone_id: null, campus: { name: "Main Campus" } },
         { id: "dev-main-out", campus_id: "camp-main", name: "Main Gate Exit", location_type: "CAMPUS_GATE", zone_id: null, campus: { name: "Main Campus" } }
       ];
-      localStorage.setItem("knotty_demo_devices", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_devices", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
-  const saveDemoDevices = (data: any[]) => localStorage.setItem("knotty_demo_devices", JSON.stringify(data));
+  const saveDemoDevices = (data: any[]) => setDemoStorage("ishuri_demo_devices", JSON.stringify(data));
 
   const getDemoZones = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_zones");
+    const val = getDemoStorage("ishuri_demo_zones");
     if (!val) {
       const initial = [{ id: "zone-lab", campus_id: "camp-main", name: "Computer Science Lab", description: "Access restricted to S5/S6 science students.", campus: { name: "Main Campus" } }];
-      localStorage.setItem("knotty_demo_zones", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_zones", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
-  const saveDemoZones = (data: any[]) => localStorage.setItem("knotty_demo_zones", JSON.stringify(data));
+  const saveDemoZones = (data: any[]) => setDemoStorage("ishuri_demo_zones", JSON.stringify(data));
 
   const getDemoAccessLogs = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_access_logs");
+    const val = getDemoStorage("ishuri_demo_access_logs");
     if (!val) {
       const initial = [
         {
@@ -449,15 +463,15 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           card: { student: { user: { first_name: "Kamanzi", last_name: "Eric", profile_photo: null } } }
         }
       ];
-      localStorage.setItem("knotty_demo_access_logs", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_access_logs", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
-  const saveDemoAccessLogs = (data: any[]) => localStorage.setItem("knotty_demo_access_logs", JSON.stringify(data));
+  const saveDemoAccessLogs = (data: any[]) => setDemoStorage("ishuri_demo_access_logs", JSON.stringify(data));
 
   const getDemoVisitors = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_visitors");
+    const val = getDemoStorage("ishuri_demo_visitors");
     if (!val) {
       const initial = [
         {
@@ -471,15 +485,15 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           campus: { name: "Main Campus" }
         }
       ];
-      localStorage.setItem("knotty_demo_visitors", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_visitors", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
-  const saveDemoVisitors = (data: any[]) => localStorage.setItem("knotty_demo_visitors", JSON.stringify(data));
+  const saveDemoVisitors = (data: any[]) => setDemoStorage("ishuri_demo_visitors", JSON.stringify(data));
 
   const getDemoCanteenTransactions = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_canteen_transactions");
+    const val = getDemoStorage("ishuri_demo_canteen_transactions");
     if (!val) {
       const initial = [
         {
@@ -495,28 +509,28 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           student: { user: { first_name: "Kamanzi", last_name: "Eric" } }
         }
       ];
-      localStorage.setItem("knotty_demo_canteen_transactions", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_canteen_transactions", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
-  const saveDemoCanteenTransactions = (data: any[]) => localStorage.setItem("knotty_demo_canteen_transactions", JSON.stringify(data));
+  const saveDemoCanteenTransactions = (data: any[]) => setDemoStorage("ishuri_demo_canteen_transactions", JSON.stringify(data));
 
   const getDemoFeeStructures = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_fee_structures");
+    const val = getDemoStorage("ishuri_demo_fee_structures");
     if (!val) {
       const initial = [
         { id: "struct-1", name: "S5 PCM Tuition Fee", academic_term_id: "term-1", applies_to: ["Senior 5"], amount: 120000, created_at: "2026-01-05T09:00:00.000Z" }
       ];
-      localStorage.setItem("knotty_demo_fee_structures", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_fee_structures", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
-  const saveDemoFeeStructures = (data: any[]) => localStorage.setItem("knotty_demo_fee_structures", JSON.stringify(data));
+  const saveDemoFeeStructures = (data: any[]) => setDemoStorage("ishuri_demo_fee_structures", JSON.stringify(data));
 
   const getDemoInvoices = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_invoices");
+    const val = getDemoStorage("ishuri_demo_invoices");
     if (!val) {
       const initial = [
         {
@@ -544,26 +558,26 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           fee_structure: { name: "S5 PCM Tuition Fee" }
         }
       ];
-      localStorage.setItem("knotty_demo_invoices", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_invoices", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
-  const saveDemoInvoices = (data: any[]) => localStorage.setItem("knotty_demo_invoices", JSON.stringify(data));
+  const saveDemoInvoices = (data: any[]) => setDemoStorage("ishuri_demo_invoices", JSON.stringify(data));
 
   const getDemoRefunds = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_refunds");
+    const val = getDemoStorage("ishuri_demo_refunds");
     if (!val) {
       const initial = [] as any[];
-      localStorage.setItem("knotty_demo_refunds", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_refunds", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
-  const saveDemoRefunds = (data: any[]) => localStorage.setItem("knotty_demo_refunds", JSON.stringify(data));
+  const saveDemoRefunds = (data: any[]) => setDemoStorage("ishuri_demo_refunds", JSON.stringify(data));
 
   const getDemoFeePayments = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_fee_payments");
+    const val = getDemoStorage("ishuri_demo_fee_payments");
     if (!val) {
       const initial = [
         {
@@ -580,43 +594,43 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           student: { id: "std-1", user: { first_name: "Kamanzi", last_name: "Eric" } }
         }
       ];
-      localStorage.setItem("knotty_demo_fee_payments", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_fee_payments", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
-  const saveDemoFeePayments = (data: any[]) => localStorage.setItem("knotty_demo_fee_payments", JSON.stringify(data));
+  const saveDemoFeePayments = (data: any[]) => setDemoStorage("ishuri_demo_fee_payments", JSON.stringify(data));
 
   const getDemoTerms = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_terms");
+    const val = getDemoStorage("ishuri_demo_terms");
     if (!val) {
       const initial = [
         { id: "term-1", name: "Term 1 2026", start_date: "2026-01-05", end_date: "2026-04-10" },
         { id: "term-2", name: "Term 2 2026", start_date: "2026-04-20", end_date: "2026-07-15" }
       ];
-      localStorage.setItem("knotty_demo_terms", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_terms", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
-  const saveDemoTerms = (data: any[]) => localStorage.setItem("knotty_demo_terms", JSON.stringify(data));
+  const saveDemoTerms = (data: any[]) => setDemoStorage("ishuri_demo_terms", JSON.stringify(data));
 
   const getDemoPrograms = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_programs");
+    const val = getDemoStorage("ishuri_demo_programs");
     if (!val) {
       const initial = [
         { id: "prog-pcm", name: "PCM (Physics-Chemistry-Math)" },
         { id: "prog-mcg", name: "MCG (Math-Chem-Geography)" }
       ];
-      localStorage.setItem("knotty_demo_programs", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_programs", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
-  const saveDemoPrograms = (data: any[]) => localStorage.setItem("knotty_demo_programs", JSON.stringify(data));
+  const saveDemoPrograms = (data: any[]) => setDemoStorage("ishuri_demo_programs", JSON.stringify(data));
 
   const getDemoSections = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_sections");
+    const val = getDemoStorage("ishuri_demo_sections");
     if (!val) {
       const initial = [
         {
@@ -632,15 +646,15 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           _count: { enrollments: 2 }
         }
       ];
-      localStorage.setItem("knotty_demo_sections", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_sections", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
-  const saveDemoSections = (data: any[]) => localStorage.setItem("knotty_demo_sections", JSON.stringify(data));
+  const saveDemoSections = (data: any[]) => setDemoStorage("ishuri_demo_sections", JSON.stringify(data));
 
   const getDemoEnrollments = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_enrollments");
+    const val = getDemoStorage("ishuri_demo_enrollments");
     if (!val) {
       const initial = [
         {
@@ -666,15 +680,15 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           }
         }
       ];
-      localStorage.setItem("knotty_demo_enrollments", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_enrollments", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
-  const saveDemoEnrollments = (data: any[]) => localStorage.setItem("knotty_demo_enrollments", JSON.stringify(data));
+  const saveDemoEnrollments = (data: any[]) => setDemoStorage("ishuri_demo_enrollments", JSON.stringify(data));
 
   const getDemoTimetable = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_timetable");
+    const val = getDemoStorage("ishuri_demo_timetable");
     if (!val) {
       const initial = [
         {
@@ -702,15 +716,15 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           teacher: { id: "staff-teacher", first_name: "Kagabo", last_name: "Robert" }
         }
       ];
-      localStorage.setItem("knotty_demo_timetable", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_timetable", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
-  const saveDemoTimetable = (data: any[]) => localStorage.setItem("knotty_demo_timetable", JSON.stringify(data));
+  const saveDemoTimetable = (data: any[]) => setDemoStorage("ishuri_demo_timetable", JSON.stringify(data));
 
   const getDemoExams = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_exams");
+    const val = getDemoStorage("ishuri_demo_exams");
     if (!val) {
       const initial = [
         {
@@ -725,15 +739,15 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           term: { id: "term-1", name: "Term 1 2026" }
         }
       ];
-      localStorage.setItem("knotty_demo_exams", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_exams", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
-  const saveDemoExams = (data: any[]) => localStorage.setItem("knotty_demo_exams", JSON.stringify(data));
+  const saveDemoExams = (data: any[]) => setDemoStorage("ishuri_demo_exams", JSON.stringify(data));
 
   const getDemoExamResults = (): any[] => {
-    const val = localStorage.getItem("knotty_demo_exam_results");
+    const val = getDemoStorage("ishuri_demo_exam_results");
     if (!val) {
       const initial = [
         {
@@ -763,12 +777,12 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           approver: { first_name: "Kagabo", last_name: "Robert" }
         }
       ];
-      localStorage.setItem("knotty_demo_exam_results", JSON.stringify(initial));
+      setDemoStorage("ishuri_demo_exam_results", JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(val);
   };
-  const saveDemoExamResults = (data: any[]) => localStorage.setItem("knotty_demo_exam_results", JSON.stringify(data));
+  const saveDemoExamResults = (data: any[]) => setDemoStorage("ishuri_demo_exam_results", JSON.stringify(data));
 
   // 1. Levels
   if (path.startsWith("/structure/levels")) {
@@ -1585,10 +1599,10 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
   // 7. Grading Scale
   if (path.startsWith("/academics/grading-scale")) {
     if (method === "POST") {
-      localStorage.setItem("knotty_demo_grading_scale", JSON.stringify(body));
+      setDemoStorage("ishuri_demo_grading_scale", JSON.stringify(body));
       return { success: true, data: body } as unknown as T;
     }
-    const val = localStorage.getItem("knotty_demo_grading_scale");
+    const val = getDemoStorage("ishuri_demo_grading_scale");
     if (val) {
       return { success: true, data: JSON.parse(val) } as unknown as T;
     }
@@ -2056,7 +2070,7 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
 
       let creatorUser = { first_name: "Teacher", last_name: "User" };
       if (typeof window !== "undefined") {
-        const saved = localStorage.getItem("knotty_demo_user");
+        const saved = getDemoStorage("ishuri_demo_user");
         if (saved) {
           try {
             const parsed = JSON.parse(saved);
@@ -2310,7 +2324,7 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
   }
 
   if (path.startsWith("/schools/settings/attendance")) {
-    const val = localStorage.getItem("knotty_demo_att_settings");
+    const val = getDemoStorage("ishuri_demo_att_settings");
     let currentSettings = { tap_out_after_minutes: 180, school_start_time: "08:30" };
     if (val) {
       try { currentSettings = JSON.parse(val); } catch {}
@@ -2325,7 +2339,7 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
 
     if (method === "PUT") {
       const updated = { ...currentSettings, ...body };
-      localStorage.setItem("knotty_demo_att_settings", JSON.stringify(updated));
+      setDemoStorage("ishuri_demo_att_settings", JSON.stringify(updated));
       return {
         success: true,
         data: updated
@@ -2345,7 +2359,7 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  if (typeof window !== "undefined" && localStorage.getItem("knotty_demo") === "true") {
+  if (typeof window !== "undefined" && getDemoStorage("ishuri_demo") === "true") {
     return handleDemoRequest<T>(path, options);
   }
   const token = getToken();
@@ -2384,7 +2398,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 async function requestBlob(path: string): Promise<Blob> {
-  if (typeof window !== "undefined" && localStorage.getItem("knotty_demo") === "true") {
+  if (typeof window !== "undefined" && getDemoStorage("ishuri_demo") === "true") {
     return new Blob(["%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Contents 4 0 R >>\nendobj\n4 0 obj\n<< /Length 43 >>\nstream\nBT\n/F1 12 Tf\n72 712 Td\n(Mock Student Report Card) Tj\nET\nendstream\nendobj\nxref\n0 5\n0000000000 65535 f\n0000000009 00000 n\n0000000056 00000 n\n0000000111 00000 n\n0000000212 00000 n\ntrailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n306\n%%EOF"], { type: "application/pdf" });
   }
   const token = getToken();
@@ -2633,7 +2647,7 @@ export const attendance = {
 };
 
 // ─── Cards ────────────────────────────────────────────────
-export interface KnottyCard {
+export interface IshuriCard {
   id: string;
   card_number: string;
   qr_code: string;
@@ -2659,17 +2673,19 @@ export interface CardScanResult {
   today_attendance: string | null;
 }
 
+export type KnottyCard = IshuriCard;
+
 export const cards = {
   list: (params?: { page?: number; limit?: number; search?: string }) => {
     const qs = new URLSearchParams(Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))).toString();
-    return request<{ success: boolean; data: KnottyCard[]; pagination: unknown }>(`/cards${qs ? `?${qs}` : ""}`);
+    return request<{ success: boolean; data: IshuriCard[]; pagination: unknown }>(`/cards${qs ? `?${qs}` : ""}`);
   },
   scan: (cardNumber: string) =>
     request<{ success: boolean; data: CardScanFull }>(`/cards/${cardNumber}/scan`),
   scanNFC: (nfcUid: string) =>
     request<{ success: boolean; data: CardScanResult }>(`/cards/nfc/${nfcUid}`),
   issue: (studentId: string) =>
-    request<{ success: boolean; data: KnottyCard }>(`/cards/issue/${studentId}`, { method: "POST" }),
+    request<{ success: boolean; data: IshuriCard }>(`/cards/issue/${studentId}`, { method: "POST" }),
   freeze: (id: string) => request(`/cards/${id}/freeze`, { method: "PUT" }),
   unfreeze: (id: string) => request(`/cards/${id}/unfreeze`, { method: "PUT" }),
   linkNFC: (id: string, nfc_uid: string) =>

@@ -9,7 +9,7 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  const email = 'admin@knottyschool.rw';
+  const email = 'admin@ishurihub.rw';
   const password = 'Admin@2024';
 
   const hash = await bcrypt.hash(password, 10);

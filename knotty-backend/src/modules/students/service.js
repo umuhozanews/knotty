@@ -30,7 +30,7 @@ async function handleProfilePhotoUpload(base64Data, schoolId, userId) {
     const cloudinary = require('../../config/cloudinary');
     const result = await new Promise((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
-        { folder: `knotty/${schoolId}/profiles`, public_id: userId, overwrite: true },
+        { folder: `ishurihub/${schoolId}/profiles`, public_id: userId, overwrite: true },
         (err, res) => (err ? reject(err) : resolve(res))
       );
       stream.end(buffer);

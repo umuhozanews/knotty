@@ -19,7 +19,7 @@ async function uploadMaterial(schoolId, uploadedBy, { title, description, subjec
     try {
       const result = await new Promise((resolve, reject) => {
         const stream = cloudinary.uploader.upload_stream(
-          { folder: `knotty/${schoolId}/materials`, resource_type: 'auto', use_filename: true },
+          { folder: `ishurihub/${schoolId}/materials`, resource_type: 'auto', use_filename: true },
           (err, res) => (err ? reject(err) : resolve(res))
         );
         stream.end(file.buffer);

@@ -5,7 +5,7 @@ const cloudinary = require('../../config/cloudinary');
 async function _uploadJson(data, publicId) {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
-      { resource_type: 'raw', folder: 'knotty-backups', public_id: publicId, overwrite: true },
+      { resource_type: 'raw', folder: 'ishurihub-backups', public_id: publicId, overwrite: true },
       (err, result) => (err ? reject(err) : resolve(result))
     );
     const pass = new PassThrough();

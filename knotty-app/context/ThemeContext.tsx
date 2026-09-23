@@ -9,7 +9,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>("light");
 
   useEffect(() => {
-    const saved = localStorage.getItem("knotty_theme") as Theme | null;
+    const saved = (localStorage.getItem("ishuri_theme") || localStorage.getItem("knotty_theme")) as Theme | null;
     const initial = saved ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
     setTheme(initial);
     document.documentElement.classList.toggle("dark", initial === "dark");
@@ -18,7 +18,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   function toggle() {
     setTheme((t) => {
       const next = t === "light" ? "dark" : "light";
-      localStorage.setItem("knotty_theme", next);
+      localStorage.setItem("ishuri_theme", next);
       document.documentElement.classList.toggle("dark", next === "dark");
       return next;
     });

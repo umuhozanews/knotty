@@ -1,10 +1,10 @@
-// Seeds 10 students per class with parent accounts and KnottyCards
+// Seeds 10 students per class with parent accounts and Ishuri hub cards
 const prisma = require('../src/config/database');
 const bcrypt = require('bcryptjs');
 
 const SCHOOL_ID = '5dbebafe-be5b-466f-bdb2-54035eb7eb75';
 const SCHOOL_CODE = 'KMS';
-const DEFAULT_PASSWORD = 'Knotty@2024';
+const DEFAULT_PASSWORD = 'Ishuri@2024';
 
 // Real Rwandan names pool
 const FIRST_NAMES_M = ['Jean', 'Eric', 'Christian', 'Patrick', 'Emmanuel', 'Celestin', 'Olivier', 'Alain', 'Gilbert', 'Thierry', 'Kevin', 'Fabrice', 'Didier', 'Bruno', 'Felix'];
@@ -58,12 +58,12 @@ async function createStudent(cls, index) {
   const firstName = pick(firstNames, index + cls.id.charCodeAt(0));
   const lastName = pick(LAST_NAMES, index * 3 + cls.id.charCodeAt(2));
   const studentCode = await getNextCode();
-  const email = `${firstName.toLowerCase().replace(/[^a-z]/g, '')}.${lastName.toLowerCase()}${studentCode.toLowerCase()}@student.knotty.rw`;
+  const email = `${firstName.toLowerCase().replace(/[^a-z]/g, '')}.${lastName.toLowerCase()}${studentCode.toLowerCase()}@student.ishurihub.rw`;
   const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10);
 
   const parentFirstName = pick(PARENT_FIRST_NAMES, index + cls.id.charCodeAt(1));
   const parentPhone = `+25078${String(1000000 + index * 7 + cls.id.charCodeAt(0) * 13).slice(0, 7)}`;
-  const parentEmail = `parent.${lastName.toLowerCase()}${studentCode.toLowerCase()}@parent.knotty.rw`;
+  const parentEmail = `parent.${lastName.toLowerCase()}${studentCode.toLowerCase()}@parent.ishurihub.rw`;
   const parentPasswordHash = await bcrypt.hash('Parent@2024', 10);
 
   const dob = new Date(2006 + (index % 5), index % 12, (index % 28) + 1);
@@ -112,7 +112,7 @@ async function createStudent(cls, index) {
       }
     });
 
-    // Issue KnottyCard
+    // Issue Ishuri hub card
     const cardNumber = await generateCardNumber(SCHOOL_ID);
     const qrCode = `QR-${SCHOOL_CODE}-${studentCode}-${Date.now()}`;
     const card = await tx.knottyCard.create({

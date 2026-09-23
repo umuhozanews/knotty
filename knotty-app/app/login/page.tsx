@@ -12,14 +12,6 @@ const DEMO_ACCOUNTS = [
   { email: "discipline@ishurihub.rw",   password: "Staff@2024",   role: "DISCIPLINE", first_name: "Rugamba",  last_name: "Victor" },
   { email: "canteen@ishurihub.rw",      password: "Staff@2024",   role: "CANTEEN",    first_name: "Umutoni",  last_name: "Claire" },
   { email: "hirwa.jean@ishurihub.rw",   password: "Student@2024", role: "STUDENT",    first_name: "Hirwa",    last_name: "Jean"   },
-  // Aliases for legacy credentials
-  { email: "admin@knottyschool.rw",       password: "Admin@2024",   role: "ADMIN",      first_name: "School",   last_name: "Admin"  },
-  { email: "teacher@knottyschool.rw",     password: "Staff@2024",   role: "TEACHER",    first_name: "Kagabo",   last_name: "Robert" },
-  { email: "bursar@knottyschool.rw",      password: "Staff@2024",   role: "BURSAR",     first_name: "Nshimiye", last_name: "Paul"   },
-  { email: "nurse@knottyschool.rw",       password: "Staff@2024",   role: "NURSE",      first_name: "Mutoni",   last_name: "Diane"  },
-  { email: "discipline@knottyschool.rw",  password: "Staff@2024",   role: "DISCIPLINE", first_name: "Rugamba",  last_name: "Victor" },
-  { email: "canteen@knottyschool.rw",     password: "Staff@2024",   role: "CANTEEN",    first_name: "Umutoni",  last_name: "Claire" },
-  { email: "hirwa.jean@knotty.rw",        password: "Student@2024", role: "STUDENT",    first_name: "Hirwa",    last_name: "Jean"   },
 ];
 
 export default function LoginPage() {

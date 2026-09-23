@@ -73,8 +73,8 @@ export default function StandaloneTapPage() {
   const [dirSearch, setDirSearch] = useState("");
 
   useEffect(() => {
-    const savedSt = localStorage.getItem("knotty_standalone_students");
-    const savedLog = localStorage.getItem("knotty_standalone_logs");
+    const savedSt = localStorage.getItem("ishuri_standalone_students") || localStorage.getItem("knotty_standalone_students");
+    const savedLog = localStorage.getItem("ishuri_standalone_logs") || localStorage.getItem("knotty_standalone_logs");
     if (savedSt) setStudents(JSON.parse(savedSt));
     if (savedLog) setLogs(JSON.parse(savedLog));
   }, []);
@@ -82,8 +82,8 @@ export default function StandaloneTapPage() {
   const saveState = (updatedStudents: LocalStudent[], updatedLogs: AttendanceLog[]) => {
     setStudents(updatedStudents);
     setLogs(updatedLogs);
-    localStorage.setItem("knotty_standalone_students", JSON.stringify(updatedStudents));
-    localStorage.setItem("knotty_standalone_logs", JSON.stringify(updatedLogs));
+    localStorage.setItem("ishuri_standalone_students", JSON.stringify(updatedStudents));
+    localStorage.setItem("ishuri_standalone_logs", JSON.stringify(updatedLogs));
   };
 
   // Sound Synthesizer

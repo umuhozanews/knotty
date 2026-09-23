@@ -15,8 +15,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    if (localStorage.getItem("knotty_demo") === "true") {
-      const saved = localStorage.getItem("knotty_demo_user");
+    if (localStorage.getItem("ishuri_demo") === "true" || localStorage.getItem("knotty_demo") === "true") {
+      const saved = localStorage.getItem("ishuri_demo_user") || localStorage.getItem("knotty_demo_user");
       if (saved) setDemoUser(JSON.parse(saved));
     }
   }, []);

@@ -11,7 +11,7 @@ const prisma = new PrismaClient({ adapter });
 async function main() {
   console.log('Seeding timetable and new academic records...');
 
-  const school = await prisma.school.findFirst({ where: { email: 'admin@knottyschool.rw' } });
+  const school = await prisma.school.findFirst({ where: { email: 'admin@ishurihub.rw' } }) || await prisma.school.findFirst();
   if (!school) throw new Error('School not found. Run database seeds first.');
 
   const teacher = await prisma.user.findFirst({ where: { school_id: school.id, role: 'TEACHER' } });

@@ -211,7 +211,7 @@ async function deleteClass(id, schoolId) {
       // 7. Delete canteen transactions
       await tx.canteenTransaction.deleteMany({ where: { student_id: { in: studentIds } } });
 
-      // 8. Delete wallet transactions and knotty cards
+      // 8. Delete wallet transactions and student cards
       await tx.walletTransaction.deleteMany({ where: { student_id: { in: studentIds } } });
       await tx.knottyCard.deleteMany({ where: { student_id: { in: studentIds } } });
 

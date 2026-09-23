@@ -17,11 +17,11 @@ async function main() {
 
   // 1. School
   const school = await prisma.school.upsert({
-    where: { email: 'admin@knottyschool.rw' },
+    where: { email: 'admin@ishurihub.rw' },
     update: { name: 'Ishuri hub Model School' },
     create: {
       name: 'Ishuri hub Model School',
-      email: 'admin@knottyschool.rw',
+      email: 'admin@ishurihub.rw',
       code: 'KMS',
       address: 'KG 12 Ave, Kigali, Rwanda',
       phone: '+250788000001',
@@ -32,14 +32,14 @@ async function main() {
   // 2. Admin User
   const adminHash = await bcrypt.hash('Admin@2024', 10);
   const admin = await prisma.user.upsert({
-    where: { email: 'admin@knottyschool.rw' },
+    where: { email: 'admin@ishurihub.rw' },
     update: { password_hash: adminHash, is_active: true },
     create: {
       school_id: school.id,
       role: 'ADMIN',
       first_name: 'School',
       last_name: 'Admin',
-      email: 'admin@knottyschool.rw',
+      email: 'admin@ishurihub.rw',
       phone: '+250788000001',
       password_hash: adminHash,
     },

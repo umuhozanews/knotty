@@ -20,15 +20,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Restore demo session without hitting the backend
-    if (localStorage.getItem("knotty_demo") === "true") {
-      const saved = localStorage.getItem("knotty_demo_user");
+    if (localStorage.getItem("ishuri_demo") === "true" || localStorage.getItem("knotty_demo") === "true") {
+      const saved = localStorage.getItem("ishuri_demo_user") || localStorage.getItem("knotty_demo_user");
       if (saved) setUser(JSON.parse(saved) as User);
       setLoading(false);
       return;
     }
 
-    const token = localStorage.getItem("knotty_token");
-    const refreshToken = localStorage.getItem("knotty_refresh");
+    const token = localStorage.getItem("ishuri_token") || localStorage.getItem("knotty_token");
+    const refreshToken = localStorage.getItem("ishuri_refresh") || localStorage.getItem("knotty_refresh");
     if (!token && !refreshToken) { setLoading(false); return; }
 
     const timeout = new Promise<never>((_, reject) =>
@@ -38,6 +38,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     Promise.race([auth.me(), timeout])
       .then((res) => setUser((res as Awaited<ReturnType<typeof auth.me>>).user))
       .catch(() => {
+        localStorage.removeItem("ishuri_token");
+        localStorage.removeItem("ishuri_refresh");
         localStorage.removeItem("knotty_token");
         localStorage.removeItem("knotty_refresh");
       })
@@ -47,10 +49,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     try {
       const res = await auth.login(email, password);
+      localStorage.removeItem("ishuri_demo");
+      localStorage.removeItem("ishuri_demo_user");
       localStorage.removeItem("knotty_demo");
       localStorage.removeItem("knotty_demo_user");
-      localStorage.setItem("knotty_token", res.accessToken);
-      localStorage.setItem("knotty_refresh", res.refreshToken);
+      localStorage.setItem("ishuri_token", res.accessToken);
+      localStorage.setItem("ishuri_refresh", res.refreshToken);
       setUser(res.user);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
@@ -68,8 +72,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: demo.email,
           profile_photo: null,
         };
-        localStorage.setItem("knotty_demo", "true");
-        localStorage.setItem("knotty_demo_user", JSON.stringify(demoUser));
+        localStorage.setItem("ishuri_demo", "true");
+        localStorage.setItem("ishuri_demo_user", JSON.stringify(demoUser));
         setUser(demoUser);
       } else {
         throw err;
@@ -79,6 +83,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     auth.logout().catch(() => {});
+    localStorage.removeItem("ishuri_token");
+    localStorage.removeItem("ishuri_refresh");
+    localStorage.removeItem("ishuri_demo");
+    localStorage.removeItem("ishuri_demo_user");
     localStorage.removeItem("knotty_token");
     localStorage.removeItem("knotty_refresh");
     localStorage.removeItem("knotty_demo");

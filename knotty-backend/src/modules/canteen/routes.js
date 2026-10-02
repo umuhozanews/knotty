@@ -14,6 +14,8 @@ router.get('/transactions/:studentId', authorize('ADMIN', 'PARENT'), ctrl.studen
 router.get('/report', authorize('ADMIN', 'CANTEEN'), ctrl.dailyReport);
 router.get('/products', authorize('ADMIN', 'CANTEEN', 'STUDENT', 'TEACHER'), ctrl.listProducts);
 router.post('/products', authorize('ADMIN', 'CANTEEN'), upload.single('photo'), ctrl.createProduct);
+router.patch('/products/:id', authorize('ADMIN', 'CANTEEN'), upload.single('photo'), ctrl.updateProduct);
+router.patch('/products/:id/restock', authorize('ADMIN', 'CANTEEN'), ctrl.restockProduct);
 router.delete('/products/:id', authorize('ADMIN', 'CANTEEN'), ctrl.deleteProduct);
 
 module.exports = router;

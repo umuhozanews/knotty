@@ -1,4 +1,4 @@
-// Ishuri hub Service Worker — minimal install support
+// IshuriHUB Service Worker — minimal install support
 const CACHE = 'ishurihub-v1';
 const PRECACHE = ['/', '/login', '/icon-192.png', '/icon-512.png', '/manifest.json'];
 

@@ -26,7 +26,7 @@ async function purchase({ card_number, items, served_by, school_id }) {
 
   const total_amount = items.reduce((sum, item) => sum + Number(item.price) * Number(item.quantity), 0);
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     // Duplicate guard: reject if this card was charged within the last 5 seconds
     const recentTxn = await tx.canteenTransaction.findFirst({
       where: {
@@ -39,6 +39,50 @@ async function purchase({ card_number, items, served_by, school_id }) {
         new Error('Duplicate transaction detected — please wait a moment before retrying'),
         { status: 409 }
       );
+    }
+
+    // Check daily spending limit if set on card
+    if (card.daily_limit && card.daily_limit > 0) {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+
+      const todayAgg = await tx.canteenTransaction.aggregate({
+        where: {
+          card_id: card.id,
+          transaction_time: { gte: todayStart, lte: todayEnd },
+        },
+        _sum: { total_amount: true },
+      });
+      const spentToday = todayAgg._sum.total_amount || 0;
+      if (spentToday + total_amount > card.daily_limit) {
+        throw Object.assign(
+          new Error(`Daily spending limit exceeded. Limit: ${card.daily_limit.toLocaleString()} RWF (spent today: ${spentToday.toLocaleString()} RWF, trying: ${total_amount.toLocaleString()} RWF)`),
+          { status: 400 }
+        );
+      }
+    }
+
+    // Verify and decrement stock for inventory-tracked products
+    for (const item of items) {
+      const qty = Math.max(1, Number(item.quantity) || 1);
+      const prod = item.id
+        ? await tx.canteenProduct.findFirst({ where: { id: item.id, school_id } })
+        : await tx.canteenProduct.findFirst({ where: { name: item.name, school_id, is_active: true } });
+
+      if (prod && prod.stock_qty !== null && prod.stock_qty !== undefined) {
+        if (prod.stock_qty < qty) {
+          throw Object.assign(
+            new Error(`"${prod.name}" has insufficient stock (${prod.stock_qty} left, requested ${qty})`),
+            { status: 400 }
+          );
+        }
+        await tx.canteenProduct.update({
+          where: { id: prod.id },
+          data: { stock_qty: { decrement: qty } },
+        });
+      }
     }
 
     // Atomically deduct balance only if card is still usable and has enough funds.
@@ -98,11 +142,14 @@ async function purchase({ card_number, items, served_by, school_id }) {
     return { transaction: txn, new_balance: updatedCard.wallet_balance };
   });
 
-  // Bust the card scan cache so the next tap shows the updated balance
-  redis.del(`card:${card_number}`).catch(() => {});
+  // Bust the card scan and product catalog cache so the next tap shows the updated balance and stock
+  if (redis) {
+    redis.del(`card:${card_number}`).catch(() => {});
+    redis.del(`canteen_products:${school_id}`).catch(() => {});
+  }
 
   logAction({
-    school_id: schoolId,
+    school_id,
     actor_user_id: served_by,
     action: 'CANTEEN_PURCHASE',
     entity_type: 'CanteenTransaction',
@@ -190,15 +237,79 @@ async function listProducts(schoolId) {
   return products;
 }
 
-async function createProduct({ school_id, name, price, category, emoji, photo_url }) {
+async function createProduct({ school_id, name, price, category, emoji, photo_url, stock_qty }) {
   if (!name?.trim()) throw Object.assign(new Error('Product name required'), { status: 400 });
   const p = Number(price);
   if (!Number.isFinite(p) || p <= 0) throw Object.assign(new Error('Invalid price'), { status: 400 });
+
+  let parsedStock = null;
+  if (stock_qty !== undefined && stock_qty !== null && stock_qty !== '') {
+    const s = parseInt(stock_qty, 10);
+    parsedStock = isNaN(s) ? null : Math.max(0, s);
+  }
+
   const product = await prisma.canteenProduct.create({
-    data: { school_id, name: name.trim(), price: Math.round(p), category: category || 'Other', emoji: emoji || 'food', photo_url: photo_url || null },
+    data: {
+      school_id,
+      name: name.trim(),
+      price: Math.round(p),
+      category: category || 'Other',
+      emoji: emoji || 'food',
+      photo_url: photo_url || null,
+      stock_qty: parsedStock,
+    },
   });
   redis.del(`canteen_products:${school_id}`).catch(() => {});
   return product;
+}
+
+async function updateProduct(id, schoolId, data) {
+  const product = await prisma.canteenProduct.findFirst({ where: { id, school_id: schoolId } });
+  if (!product) throw Object.assign(new Error('Product not found'), { status: 404 });
+
+  const updateData = {};
+  if (data.name !== undefined) updateData.name = data.name.trim();
+  if (data.price !== undefined) {
+    const p = Number(data.price);
+    if (!Number.isFinite(p) || p <= 0) throw Object.assign(new Error('Invalid price'), { status: 400 });
+    updateData.price = Math.round(p);
+  }
+  if (data.category !== undefined) updateData.category = data.category;
+  if (data.emoji !== undefined) updateData.emoji = data.emoji;
+  if (data.photo_url !== undefined) updateData.photo_url = data.photo_url;
+  if (data.is_active !== undefined) updateData.is_active = Boolean(data.is_active);
+  if (data.stock_qty !== undefined) {
+    if (data.stock_qty === null || data.stock_qty === '') {
+      updateData.stock_qty = null;
+    } else {
+      const s = parseInt(data.stock_qty, 10);
+      updateData.stock_qty = isNaN(s) ? null : Math.max(0, s);
+    }
+  }
+
+  const updated = await prisma.canteenProduct.update({
+    where: { id },
+    data: updateData,
+  });
+  redis.del(`canteen_products:${schoolId}`).catch(() => {});
+  return updated;
+}
+
+async function restockProduct(id, schoolId, quantityToAdd) {
+  const qty = parseInt(quantityToAdd, 10);
+  if (!Number.isFinite(qty) || qty <= 0) {
+    throw Object.assign(new Error('Restock quantity must be a positive integer'), { status: 400 });
+  }
+  const product = await prisma.canteenProduct.findFirst({ where: { id, school_id: schoolId } });
+  if (!product) throw Object.assign(new Error('Product not found'), { status: 404 });
+
+  const currentStock = product.stock_qty ?? 0;
+  const updated = await prisma.canteenProduct.update({
+    where: { id },
+    data: { stock_qty: currentStock + qty },
+  });
+  redis.del(`canteen_products:${schoolId}`).catch(() => {});
+  return updated;
 }
 
 async function deleteProduct(id, schoolId) {
@@ -208,4 +319,13 @@ async function deleteProduct(id, schoolId) {
   redis.del(`canteen_products:${schoolId}`).catch(() => {});
 }
 
-module.exports = { purchase, getStudentTransactions, getDailyReport, listProducts, createProduct, deleteProduct };
+module.exports = {
+  purchase,
+  getStudentTransactions,
+  getDailyReport,
+  listProducts,
+  createProduct,
+  updateProduct,
+  restockProduct,
+  deleteProduct,
+};

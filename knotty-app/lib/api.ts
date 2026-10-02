@@ -2578,6 +2578,7 @@ export interface AttendanceRecord {
 export interface CardScanFull {
   card_number: string;
   wallet_balance: number;
+  daily_limit?: number | null;
   issued_at: string;
   expires_at: string;
   is_frozen: boolean;
@@ -2653,6 +2654,7 @@ export interface IshuriCard {
   qr_code: string;
   nfc_uid: string | null;
   wallet_balance: number;
+  daily_limit?: number | null;
   is_active: boolean;
   is_frozen: boolean;
   issued_at: string;
@@ -2669,6 +2671,7 @@ export interface IshuriCard {
 export interface CardScanResult {
   card_number: string;
   wallet_balance: number;
+  daily_limit?: number | null;
   student: { id: string; name: string; photo: string | null; class: string; student_code: string };
   today_attendance: string | null;
 }
@@ -2856,6 +2859,7 @@ export interface CanteenProduct {
   category: string;
   emoji: string;
   photo_url: string | null;
+  stock_qty?: number | null;
 }
 
 export const canteen = {
@@ -2872,7 +2876,7 @@ export const canteen = {
     request<{ success: boolean; transactions: CanteenTransaction[]; total_revenue: number; transaction_count: number }>(`/canteen/report${date ? `?date=${date}` : ""}`),
   listProducts: () =>
     request<{ success: boolean; data: CanteenProduct[] }>("/canteen/products"),
-  createProduct: async (data: { name: string; price: number; category?: string; emoji?: string; photo?: File | null }): Promise<{ success: boolean; data: CanteenProduct }> => {
+  createProduct: async (data: { name: string; price: number; category?: string; emoji?: string; photo?: File | null; photo_url?: string; stock_qty?: number | null }): Promise<{ success: boolean; data: CanteenProduct }> => {
     const token = getToken();
     const form = new FormData();
     form.append("name", data.name);
@@ -2880,6 +2884,10 @@ export const canteen = {
     if (data.category) form.append("category", data.category);
     if (data.emoji) form.append("emoji", data.emoji);
     if (data.photo) form.append("photo", data.photo);
+    if (data.photo_url) form.append("photo_url", data.photo_url);
+    if (data.stock_qty !== undefined && data.stock_qty !== null) {
+      form.append("stock_qty", String(data.stock_qty));
+    }
     const res = await fetch(`${BASE}/canteen/products`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
@@ -2889,6 +2897,16 @@ export const canteen = {
     if (!res.ok) throw new Error((json as any).message || "Failed to create product");
     return json;
   },
+  updateProduct: (id: string, data: Partial<CanteenProduct>) =>
+    request<{ success: boolean; data: CanteenProduct }>(`/canteen/products/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  restockProduct: (id: string, quantity: number) =>
+    request<{ success: boolean; data: CanteenProduct }>(`/canteen/products/${id}/restock`, {
+      method: "PATCH",
+      body: JSON.stringify({ quantity }),
+    }),
   deleteProduct: (id: string) =>
     request<{ success: boolean }>(`/canteen/products/${id}`, { method: "DELETE" }),
 };

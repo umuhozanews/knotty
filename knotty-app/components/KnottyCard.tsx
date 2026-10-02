@@ -82,7 +82,7 @@ export default function KnottyCard({ card, glowColor, tapping }: Props) {
         )}
         <div>
           <p className="text-white text-[9px] font-bold leading-tight uppercase tracking-wider truncate max-w-[140px]">
-            {card.student.school_name || "ISHURI HUB SCHOOL"}
+            {card.student.school_name || "ISHURIHUB SCHOOL"}
           </p>
           <p className="text-blue-400 text-[7px] font-medium tracking-widest">SMART SCHOOL SYSTEM</p>
         </div>

@@ -36,7 +36,7 @@ async function main() {
     const now = new Date();
     let status = 'NO CARD';
     let canAccess = false;
-    let reason = 'No Ishuri hub Card issued';
+    let reason = 'No IshuriHUB Card issued';
 
     if (card) {
       const expired = card.expires_at && new Date(card.expires_at) < now;
@@ -65,8 +65,8 @@ async function main() {
   const w = 120;
 
   console.log('\n' + '='.repeat(w));
-  console.log('ISHURI HUB GATE ACCESS REPORT — TAP IN / TAP OUT CAPABILITY');
-  console.log(`School: Ishuri hub School (${SCHOOL_ID})`);
+  console.log('ISHURIHUB GATE ACCESS REPORT — TAP IN / TAP OUT CAPABILITY');
+  console.log(`School: IshuriHUB School (${SCHOOL_ID})`);
   console.log(`Report Date: ${new Date().toLocaleString()}`);
   console.log(`Total Students: ${total}  |  CAN Tap: ${canTap.length}  |  CANNOT Tap: ${cannotTap.length}`);
   console.log('='.repeat(w));

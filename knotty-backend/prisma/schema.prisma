@@ -231,6 +231,7 @@ model User {
 
   @@index([school_id])
   @@index([email])
+  @@index([school_id, role, is_active])
 }
 
 model Student {
@@ -281,6 +282,7 @@ model Student {
 
   @@index([school_id])
   @@index([student_code])
+  @@index([school_id, class_id])
 }
 
 model KnottyCard {
@@ -291,6 +293,7 @@ model KnottyCard {
   qr_code        String
   nfc_uid        String?
   wallet_balance Int       @default(0)
+  daily_limit    Int?
   is_active      Boolean   @default(true)
   is_frozen      Boolean   @default(false)
   issued_at      DateTime  @default(now())
@@ -308,6 +311,8 @@ model KnottyCard {
 
   @@index([card_number])
   @@index([nfc_uid])
+  @@index([school_id, is_active])
+  @@index([student_id])
 }
 
 model Level {
@@ -369,6 +374,7 @@ model Attendance {
   @@unique([student_id, date])
   @@index([student_id, date])
   @@index([class_id, date])
+  @@index([school_id, date])
 }
 
 model FeePayment {
@@ -412,6 +418,7 @@ model CanteenTransaction {
 
   @@index([student_id])
   @@index([school_id, transaction_time])
+  @@index([card_id, transaction_time])
 }
 
 model CanteenProduct {
@@ -422,6 +429,7 @@ model CanteenProduct {
   category   String   @default("Other")
   emoji      String   @default("food")
   photo_url  String?
+  stock_qty  Int?
   is_active  Boolean  @default(true)
   created_at DateTime @default(now())
 

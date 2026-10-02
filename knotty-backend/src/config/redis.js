@@ -25,6 +25,25 @@ const mockRedis = {
     expiryMap.delete(key);
     return 1;
   },
+  incr: async (key) => {
+    const exp = expiryMap.get(key);
+    if (exp && Date.now() > exp) { store.delete(key); expiryMap.delete(key); }
+    const current = parseInt(store.get(key) || '0', 10);
+    const next = isNaN(current) ? 1 : current + 1;
+    store.set(key, String(next));
+    return next;
+  },
+  expire: async (key, seconds) => {
+    if (!store.has(key)) return 0;
+    expiryMap.set(key, Date.now() + Number(seconds) * 1000);
+    return 1;
+  },
+  ttl: async (key) => {
+    const exp = expiryMap.get(key);
+    if (!exp) return -1;
+    const remaining = Math.ceil((exp - Date.now()) / 1000);
+    return remaining > 0 ? remaining : -2;
+  },
   on: () => {},
 };
 

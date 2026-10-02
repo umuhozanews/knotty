@@ -118,12 +118,27 @@ export default function VirtualCardTap({ onTap, busy }: Props) {
                   >
                     {/* Avatar */}
                     {card.student.user.profile_photo ? (
-                      <img src={card.student.user.profile_photo} className="w-9 h-9 rounded-full object-cover flex-shrink-0" alt="" />
-                    ) : (
-                      <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ background: `hsl(${hue}, 60%, 55%)` }}>
-                        {initials}
-                      </div>
-                    )}
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={card.student.user.profile_photo}
+                        className="w-9 h-9 rounded-full object-cover flex-shrink-0"
+                        alt=""
+                        onError={(e) => {
+                          (e.currentTarget as HTMLElement).style.display = "none";
+                          const fallback = (e.currentTarget as HTMLElement).nextElementSibling as HTMLElement;
+                          if (fallback) fallback.style.display = "flex";
+                        }}
+                      />
+                    ) : null}
+                    <div
+                      className="w-9 h-9 rounded-full items-center justify-center text-white text-xs font-bold flex-shrink-0"
+                      style={{
+                        background: `hsl(${hue}, 60%, 55%)`,
+                        display: card.student.user.profile_photo ? "none" : "flex",
+                      }}
+                    >
+                      {initials}
+                    </div>
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">

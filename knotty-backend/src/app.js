@@ -53,12 +53,24 @@ app.use(helmet({
   hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
 }));
 app.use(globalLimiter);
-const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000')
-  .split(',').map(o => o.trim());
+const defaultOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost',
+  'https://localhost',
+  'capacitor://localhost',
+];
+const envOrigins = (process.env.FRONTEND_URL || '')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+const allowedOrigins = Array.from(new Set([...defaultOrigins, ...envOrigins]));
+
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin || allowedOrigins.some(o => origin === o)) return cb(null, true);
-    cb(new Error('Not allowed by CORS'));
+    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+    // Return false instead of Error so Express doesn't crash with 500
+    cb(null, false);
   },
   credentials: true,
 }));
@@ -94,6 +106,12 @@ app.use(`${API}/admin`, require('./modules/admin/routes'));
 // ─── Static uploads (local dev fallback) ───
 const baseDir = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
 app.use('/uploads', express.static(path.join(baseDir, '../../uploads')));
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+app.use('/uploads', express.static(path.join(process.cwd(), '../uploads')));
+app.use('/canteen', express.static(path.join(baseDir, '../../knotty-app/public/canteen')));
+app.use('/canteen', express.static(path.join(process.cwd(), '../knotty-app/public/canteen')));
+app.use('/canteen', express.static(path.join(process.cwd(), '../uploads/canteen')));
+app.use('/canteen', express.static(path.join(process.cwd(), 'uploads/canteen')));
 
 // ─── Health check ───
 app.get('/health', async (req, res) => {
@@ -112,7 +130,7 @@ app.get('/health', async (req, res) => {
   const allOk = checks.db && checks.redis;
   res.status(allOk ? 200 : 503).json({
     status: allOk ? 'ok' : 'degraded',
-    service: 'Ishuri hub Backend',
+    service: 'IshuriHUB Backend',
     checks,
     timestamp: new Date(),
   });
@@ -128,7 +146,7 @@ app.use(errorHandler);
 if (require.main === module) {
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => {
-    console.log(`Ishuri hub Backend running on port ${PORT} [${process.env.NODE_ENV}]`);
+    console.log(`IshuriHUB Backend running on port ${PORT} [${process.env.NODE_ENV}]`);
   });
 }
 

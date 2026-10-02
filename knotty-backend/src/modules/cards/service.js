@@ -89,6 +89,7 @@ async function scanCard(cardNumber) {
   const result = {
     card_number: card.card_number,
     wallet_balance: card.wallet_balance,
+    daily_limit: card.daily_limit || null,
     issued_at: card.issued_at,
     expires_at: card.expires_at,
     is_frozen: card.is_frozen,
@@ -156,7 +157,7 @@ async function topUpWallet(cardId, { amount, phone, schoolId }) {
   const referenceId = await momoService.requestTopUp({
     amount,
     phone,
-    description: `Ishuri hub Wallet Top-Up for ${card.card_number}`,
+    description: `IshuriHUB Wallet Top-Up for ${card.card_number}`,
   });
 
   // Store pending transaction — will be credited on webhook
@@ -333,9 +334,9 @@ async function generateSecureQR(userId) {
     include: { card: true },
   });
   if (!student) throw Object.assign(new Error('Student profile not found'), { status: 404 });
-  if (!student.card) throw Object.assign(new Error('Ishuri hub Card not issued yet'), { status: 404 });
+  if (!student.card) throw Object.assign(new Error('IshuriHUB Card not issued yet'), { status: 404 });
   if (!student.card.is_active || student.card.is_frozen) {
-    throw Object.assign(new Error('Ishuri hub Card is inactive or frozen'), { status: 403 });
+    throw Object.assign(new Error('IshuriHUB Card is inactive or frozen'), { status: 403 });
   }
 
   const crypto = require('crypto');

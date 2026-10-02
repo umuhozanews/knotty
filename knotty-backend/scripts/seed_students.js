@@ -1,4 +1,4 @@
-// Seeds 10 students per class with parent accounts and Ishuri hub cards
+// Seeds 10 students per class with parent accounts and IshuriHUB cards
 const prisma = require('../src/config/database');
 const bcrypt = require('bcryptjs');
 
@@ -112,7 +112,7 @@ async function createStudent(cls, index) {
       }
     });
 
-    // Issue Ishuri hub card
+    // Issue IshuriHUB card
     const cardNumber = await generateCardNumber(SCHOOL_ID);
     const qrCode = `QR-${SCHOOL_CODE}-${studentCode}-${Date.now()}`;
     const card = await tx.knottyCard.create({

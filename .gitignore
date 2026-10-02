@@ -23,4 +23,9 @@ pg_data/
 pg_data_start.log
 postgres_log.txt
 *.png
+!knotty-app/public/**/*.png
+!knotty-app/public/**/*.jpg
+!knotty-app/public/**/*.jpeg
+!knotty-app/public/**/*.webp
+!knotty-app/public/**/*.svg
 uploads/

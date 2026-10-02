@@ -35,7 +35,7 @@ async function redisDel(key) {
   try { await redis.del(key); } catch { /* no-op */ }
 }
 
-const LOCKOUT_MAX_ATTEMPTS = 5;
+const LOCKOUT_MAX_ATTEMPTS = process.env.NODE_ENV === 'production' ? 10 : 100;
 const LOCKOUT_WINDOW_SECS = 15 * 60; // 15 minutes
 
 function generateTokens(userId, role, schoolId) {
@@ -63,7 +63,18 @@ async function login(email, password) {
     );
   }
 
-  const user = await prisma.user.findUnique({ where: { email: cleanEmail } });
+  let user = await prisma.user.findUnique({ where: { email: cleanEmail } });
+  if (!user) {
+    // Check legacy / rebranded domain variations for seamless login
+    if (cleanEmail.includes('@ishurihub.rw')) {
+      const alt1 = cleanEmail.replace('@ishurihub.rw', '@knottyschool.rw');
+      const alt2 = cleanEmail.replace('@ishurihub.rw', '@knotty.rw');
+      user = await prisma.user.findFirst({ where: { email: { in: [alt1, alt2] } } });
+    } else if (cleanEmail.includes('@knottyschool.rw') || cleanEmail.includes('@knotty.rw')) {
+      const alt = cleanEmail.replace('@knottyschool.rw', '@ishurihub.rw').replace('@knotty.rw', '@ishurihub.rw');
+      user = await prisma.user.findUnique({ where: { email: alt } });
+    }
+  }
 
   if (!user || !user.is_active) {
     // Increment lockout counter even for unknown emails — prevents user enumeration
@@ -81,8 +92,11 @@ async function login(email, password) {
     throw Object.assign(new Error(msg), { status: 401 });
   }
 
-  // Successful login — clear lockout counter
+  // Successful login — clear lockout counter (for cleanEmail and user.email)
   await redisDel(lockKey);
+  if (user.email && user.email !== cleanEmail) {
+    await redisDel(`lockout:${user.email.toLowerCase()}`);
+  }
   await prisma.user.update({ where: { id: user.id }, data: { last_login: new Date() } });
 
   const { accessToken, refreshToken } = generateTokens(user.id, user.role, user.school_id);

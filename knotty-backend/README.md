@@ -1,4 +1,4 @@
-# Ishuri hub Card — Backend API
+# IshuriHUB Card — Backend API
 
 Smart school management system for Rwanda. Node.js + Express + PostgreSQL + Prisma.
 
@@ -139,7 +139,7 @@ All protected endpoints require: `Authorization: Bearer <access_token>`
 
 ---
 
-### ISHURI HUB CARD
+### ISHURIHUB CARD
 
 | Method | Endpoint                    | Access         | Description           |
 |--------|-----------------------------|----------------|-----------------------|

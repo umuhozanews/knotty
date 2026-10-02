@@ -1,17 +1,18 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, Building2, UserCheck, ShieldCheck, ChevronDown, Check } from "lucide-react";
+import { getAllDemoAccounts, DemoAccount } from "@/lib/demo";
 
-const DEMO_ACCOUNTS = [
-  { email: "admin@ishurihub.rw",        password: "Admin@2024",   role: "ADMIN",      first_name: "School",   last_name: "Admin"  },
-  { email: "teacher@ishurihub.rw",      password: "Staff@2024",   role: "TEACHER",    first_name: "Kagabo",   last_name: "Robert" },
-  { email: "bursar@ishurihub.rw",       password: "Staff@2024",   role: "BURSAR",     first_name: "Nshimiye", last_name: "Paul"   },
-  { email: "nurse@ishurihub.rw",        password: "Staff@2024",   role: "NURSE",      first_name: "Mutoni",   last_name: "Diane"  },
-  { email: "discipline@ishurihub.rw",   password: "Staff@2024",   role: "DISCIPLINE", first_name: "Rugamba",  last_name: "Victor" },
-  { email: "canteen@ishurihub.rw",      password: "Staff@2024",   role: "CANTEEN",    first_name: "Umutoni",  last_name: "Claire" },
-  { email: "hirwa.jean@ishurihub.rw",   password: "Student@2024", role: "STUDENT",    first_name: "Hirwa",    last_name: "Jean"   },
+const SCHOOL_TABS = [
+  { code: "KMS", name: "IshuriHUB Model" },
+  { code: "GHIA", name: "Green Hills" },
+  { code: "RHS", name: "Riviera High" },
+  { code: "KSS", name: "Kagarama Sec" },
+  { code: "LDK", name: "Lycée de Kigali" },
+  { code: "GSSF", name: "Sainte Famille" },
+  { code: "SOST", name: "SOS Technical" },
 ];
 
 export default function LoginPage() {
@@ -22,6 +23,15 @@ export default function LoginPage() {
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [selectedSchoolCode, setSelectedSchoolCode] = useState("KMS");
+  const [showQuickPicker, setShowQuickPicker] = useState(true);
+
+  const allAccounts = useMemo(() => getAllDemoAccounts(), []);
+
+  // Accounts for selected school
+  const currentSchoolAccounts = useMemo(() => {
+    return allAccounts.filter((a) => a.school_code === selectedSchoolCode);
+  }, [allAccounts, selectedSchoolCode]);
 
   useEffect(() => {
     if (!loading && user) router.replace("/");
@@ -41,53 +51,65 @@ export default function LoginPage() {
     }
   }
 
+  const handleSelectAccount = (acc: DemoAccount) => {
+    setEmail(acc.email);
+    setPassword(acc.password);
+    setError("");
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="animate-spin text-blue-600" size={32} />
+      <div className="min-h-screen flex items-center justify-center bg-[#F5F5F5]">
+        <Loader2 className="animate-spin text-orange-500" size={32} />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#f0f2f5] px-4">
-      <div className="w-full max-w-sm">
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="w-10 h-10 bg-[#e8f5e9] rounded-xl flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center bg-[#F5F5F5] px-4 py-8">
+      <div className="w-full max-w-md space-y-4">
+        {/* Brand Logo */}
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "#FFF3EC" }}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L2 7l10 5 10-5-10-5z" fill="#2e7d32" />
-              <path d="M2 17l10 5 10-5" stroke="#2e7d32" strokeWidth="2" strokeLinecap="round" />
-              <path d="M2 12l10 5 10-5" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" />
+              <path d="M12 2L2 7l10 5 10-5-10-5z" fill="#FF7A22" />
+              <path d="M2 17l10 5 10-5" stroke="#FF7A22" strokeWidth="2" strokeLinecap="round" />
+              <path d="M2 12l10 5 10-5" stroke="#FFB800" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </div>
           <span className="text-2xl font-bold text-gray-800">IshuriHUB</span>
         </div>
 
-        <div className="bg-white rounded-3xl shadow-sm p-8">
+        {/* Login Card */}
+        <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
           <h1 className="text-xl font-bold text-gray-800 mb-1">Welcome back</h1>
-          <p className="text-sm text-gray-400 mb-6">Sign in to your school dashboard</p>
+          <p className="text-xs text-gray-400 mb-5">Sign in to your school management or staff portal</p>
 
           {error && (
-            <div className="mb-4 px-4 py-3 bg-red-50 border border-red-100 rounded-2xl text-sm text-red-600">
+            <div className="mb-4 px-3.5 py-2.5 bg-red-50 border border-red-100 rounded-xl text-xs text-red-600">
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-3.5">
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1.5 block">Email or Username</label>
+              <label className="text-xs font-semibold text-gray-600 mb-1 block">
+                Email Address or Username
+              </label>
               <input
                 type="text"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                placeholder="student@school.rw"
-                className="w-full px-4 py-3 rounded-2xl border border-gray-200 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition bg-gray-50"
+                placeholder="staff@ishurihub.rw"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-orange-500 transition bg-white"
               />
             </div>
 
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1.5 block">Password</label>
+              <label className="text-xs font-semibold text-gray-600 mb-1 block">
+                Password
+              </label>
               <div className="relative">
                 <input
                   type={showPw ? "text" : "password"}
@@ -95,14 +117,14 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   placeholder="••••••••"
-                  className="w-full px-4 py-3 rounded-2xl border border-gray-200 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition bg-gray-50 pr-11"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-orange-500 transition bg-white pr-10"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPw((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
-                  {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                  {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
             </div>
@@ -110,18 +132,103 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={submitting}
-              className="w-full py-3 rounded-2xl bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700 transition disabled:opacity-60 flex items-center justify-center gap-2"
+              className="w-full py-2.5 rounded-xl text-white font-semibold text-xs transition disabled:opacity-60 flex items-center justify-center gap-2 mt-2 shadow-xs"
+              style={{ background: "#FF7A22" }}
             >
-              {submitting && <Loader2 size={15} className="animate-spin" />}
-              {submitting ? "Signing in…" : "Sign in"}
+              {submitting && <Loader2 size={14} className="animate-spin" />}
+              <span>{submitting ? "Signing in…" : "Sign in"}</span>
             </button>
           </form>
-
-          <p className="text-xs text-gray-400 text-center mt-4">
-            Demo: <span className="font-mono">admin@ishurihub.rw</span> / <span className="font-mono">Admin@2024</span>
-          </p>
         </div>
 
+        {/* ── Multi-School & Worker Account Quick-Select Panel ── */}
+        <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center gap-1.5">
+              <Building2 size={15} style={{ color: "#FF7A22" }} />
+              <span className="text-xs font-bold text-gray-800">
+                School Management & Worker Accounts
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowQuickPicker((v) => !v)}
+              className="text-xs text-gray-400 hover:text-gray-600 font-medium"
+            >
+              {showQuickPicker ? "Hide" : "Show All"}
+            </button>
+          </div>
+
+          {showQuickPicker && (
+            <div className="space-y-3 pt-1 border-t border-gray-100">
+              {/* School Tabs */}
+              <div>
+                <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider block mb-1.5">
+                  1. Select School Node
+                </span>
+                <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none">
+                  {SCHOOL_TABS.map((tab) => {
+                    const isSel = selectedSchoolCode === tab.code;
+                    return (
+                      <button
+                        key={tab.code}
+                        type="button"
+                        onClick={() => setSelectedSchoolCode(tab.code)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold shrink-0 transition ${
+                          isSel
+                            ? "bg-[#FFF3EC] text-[#FF7A22] border border-[#FFD4B2]"
+                            : "bg-gray-100 text-gray-600 hover:bg-gray-200 border border-transparent"
+                        }`}
+                      >
+                        {tab.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Roles for selected school */}
+              <div>
+                <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider block mb-1.5">
+                  2. Choose Account to Sign In As
+                </span>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {currentSchoolAccounts.map((acc) => {
+                    const isCurrent = email === acc.email;
+                    return (
+                      <button
+                        key={acc.email}
+                        type="button"
+                        onClick={() => handleSelectAccount(acc)}
+                        className={`flex items-center justify-between p-2 rounded-xl text-left text-xs border transition ${
+                          isCurrent
+                            ? "bg-[#FFF3EC] border-[#FF7A22] text-[#FF7A22]"
+                            : "bg-gray-50 border-gray-100 hover:border-gray-300 text-gray-700"
+                        }`}
+                      >
+                        <div className="min-w-0 pr-1">
+                          <p className="font-semibold truncate">
+                            {acc.role === "ADMIN" ? "Management (Admin)" : acc.role}
+                          </p>
+                          <p className="text-[10px] text-gray-400 truncate">
+                            {acc.first_name} {acc.last_name}
+                          </p>
+                        </div>
+                        {isCurrent && <Check size={13} className="shrink-0" style={{ color: "#FF7A22" }} />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-gray-100 text-center">
+                <p className="text-[11px] text-gray-400">
+                  Click any account above to populate credentials, then click <span className="font-semibold text-gray-700">Sign in</span>.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

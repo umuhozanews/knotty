@@ -10,9 +10,19 @@ import CanteenDashboard from "@/components/dashboards/CanteenDashboard";
 import StudentDashboard from "@/components/dashboards/StudentDashboard";
 import ParentDashboard from "@/components/dashboards/ParentDashboard";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+
 export default function DashboardPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const role = user?.role ?? "";
+
+  useEffect(() => {
+    if (role === "LIBRARIAN") {
+      router.replace("/library");
+    }
+  }, [role, router]);
 
   return (
     <DashboardShell>
@@ -24,6 +34,11 @@ export default function DashboardPage() {
       {role === "CANTEEN"    && <CanteenDashboard />}
       {role === "STUDENT"    && <StudentDashboard />}
       {role === "PARENT"     && <ParentDashboard />}
+      {role === "LIBRARIAN"  && (
+        <div className="py-20 flex flex-col items-center justify-center text-center">
+          <p className="text-sm font-semibold text-gray-700">Opening Library Management...</p>
+        </div>
+      )}
     </DashboardShell>
   );
 }

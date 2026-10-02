@@ -1,14 +1,107 @@
 import type { DashboardStats, AttendanceTrendPoint, Student } from "./api";
 
-export const DEMO_ACCOUNTS = [
-  { email: "admin@ishurihub.rw",        password: "Admin@2024",   role: "ADMIN",      first_name: "School",   last_name: "Admin"  },
-  { email: "teacher@ishurihub.rw",      password: "Staff@2024",   role: "TEACHER",    first_name: "Kagabo",   last_name: "Robert" },
-  { email: "bursar@ishurihub.rw",       password: "Staff@2024",   role: "BURSAR",     first_name: "Nshimiye", last_name: "Paul"   },
-  { email: "nurse@ishurihub.rw",        password: "Staff@2024",   role: "NURSE",      first_name: "Mutoni",   last_name: "Diane"  },
-  { email: "discipline@ishurihub.rw",   password: "Staff@2024",   role: "DISCIPLINE", first_name: "Rugamba",  last_name: "Victor" },
-  { email: "canteen@ishurihub.rw",      password: "Staff@2024",   role: "CANTEEN",    first_name: "Umutoni",  last_name: "Claire" },
-  { email: "hirwa.jean@ishurihub.rw",   password: "Student@2024", role: "STUDENT",    first_name: "Hirwa",    last_name: "Jean"   },
+export interface DemoAccount {
+  email: string;
+  password: string;
+  role: string;
+  first_name: string;
+  last_name: string;
+  school_id: string;
+  school_code: string;
+  school_name: string;
+  job_title?: string;
+}
+
+export const DEMO_ACCOUNTS: DemoAccount[] = [
+  // ── 1. IshuriHUB Model School (KMS) ──
+  { email: "admin@ishurihub.rw",        password: "Admin@2024",   role: "ADMIN",      first_name: "School",   last_name: "Admin", school_id: "demo-school-id", school_code: "KMS", school_name: "IshuriHUB Model School", job_title: "Head Administrator" },
+  { email: "teacher@ishurihub.rw",      password: "Staff@2024",   role: "TEACHER",    first_name: "Robert",   last_name: "Kagabo", school_id: "demo-school-id", school_code: "KMS", school_name: "IshuriHUB Model School", job_title: "Senior Physics & Math Teacher" },
+  { email: "canteen@ishurihub.rw",      password: "Staff@2024",   role: "CANTEEN",    first_name: "Claire",  last_name: "Umutoni", school_id: "demo-school-id", school_code: "KMS", school_name: "IshuriHUB Model School", job_title: "Head Cantinier / POS Manager" },
+  { email: "bursar@ishurihub.rw",       password: "Staff@2024",   role: "BURSAR",     first_name: "Paul",    last_name: "Nshimiye", school_id: "demo-school-id", school_code: "KMS", school_name: "IshuriHUB Model School", job_title: "Chief Bursar & Accountant" },
+  { email: "nurse@ishurihub.rw",        password: "Staff@2024",   role: "NURSE",      first_name: "Diane",   last_name: "Mukamana", school_id: "demo-school-id", school_code: "KMS", school_name: "IshuriHUB Model School", job_title: "Resident Medical Nurse" },
+  { email: "discipline@ishurihub.rw",   password: "Staff@2024",   role: "DISCIPLINE", first_name: "Victor",  last_name: "Rugamba", school_id: "demo-school-id", school_code: "KMS", school_name: "IshuriHUB Model School", job_title: "Chief Discipline Master" },
+  { email: "librarian@ishurihub.rw",    password: "Staff@2024",   role: "LIBRARIAN",  first_name: "Jeanne",  last_name: "Uwase", school_id: "demo-school-id", school_code: "KMS", school_name: "IshuriHUB Model School", job_title: "Head Librarian" },
+  { email: "hirwa.jean@ishurihub.rw",   password: "Student@2024", role: "STUDENT",    first_name: "Hirwa",    last_name: "Jean", school_id: "demo-school-id", school_code: "KMS", school_name: "IshuriHUB Model School", job_title: "Student" },
+
+  // ── 2. Green Hills International Academy (GHIA) ──
+  { email: "admin@greenhills.ishurihub.rw", password: "Admin@2024", role: "ADMIN", first_name: "Director", last_name: "GHIA", school_id: "sch-ghia", school_code: "GHIA", school_name: "Green Hills International Academy", job_title: "School Principal" },
+  { email: "teacher.ghia@ishurihub.rw", password: "Staff@2024", role: "TEACHER", first_name: "Robert", last_name: "Kagabo", school_id: "sch-ghia", school_code: "GHIA", school_name: "Green Hills International Academy", job_title: "Sciences Teacher" },
+  { email: "canteen.ghia@ishurihub.rw", password: "Staff@2024", role: "CANTEEN", first_name: "Claire", last_name: "Umutoni", school_id: "sch-ghia", school_code: "GHIA", school_name: "Green Hills International Academy", job_title: "Catering Supervisor" },
+  { email: "bursar.ghia@ishurihub.rw", password: "Staff@2024", role: "BURSAR", first_name: "Paul", last_name: "Nshimiye", school_id: "sch-ghia", school_code: "GHIA", school_name: "Green Hills International Academy", job_title: "Finance Manager" },
+  { email: "nurse.ghia@ishurihub.rw", password: "Staff@2024", role: "NURSE", first_name: "Diane", last_name: "Mukamana", school_id: "sch-ghia", school_code: "GHIA", school_name: "Green Hills International Academy", job_title: "Campus Nurse" },
+  { email: "discipline.ghia@ishurihub.rw", password: "Staff@2024", role: "DISCIPLINE", first_name: "Victor", last_name: "Rugamba", school_id: "sch-ghia", school_code: "GHIA", school_name: "Green Hills International Academy", job_title: "Dean of Students" },
+  { email: "librarian.ghia@ishurihub.rw", password: "Staff@2024", role: "LIBRARIAN", first_name: "Jeanne", last_name: "Uwase", school_id: "sch-ghia", school_code: "GHIA", school_name: "Green Hills International Academy", job_title: "Head Librarian" },
+
+  // ── 3. Riviera High School (RHS) ──
+  { email: "admin@riviera.ishurihub.rw", password: "Admin@2024", role: "ADMIN", first_name: "Director", last_name: "RHS", school_id: "sch-rhs", school_code: "RHS", school_name: "Riviera High School", job_title: "Headmaster" },
+  { email: "teacher.rhs@ishurihub.rw", password: "Staff@2024", role: "TEACHER", first_name: "Robert", last_name: "Kagabo", school_id: "sch-rhs", school_code: "RHS", school_name: "Riviera High School", job_title: "Senior Physics Instructor" },
+  { email: "canteen.rhs@ishurihub.rw", password: "Staff@2024", role: "CANTEEN", first_name: "Claire", last_name: "Umutoni", school_id: "sch-rhs", school_code: "RHS", school_name: "Riviera High School", job_title: "Canteen Manager" },
+  { email: "bursar.rhs@ishurihub.rw", password: "Staff@2024", role: "BURSAR", first_name: "Paul", last_name: "Nshimiye", school_id: "sch-rhs", school_code: "RHS", school_name: "Riviera High School", job_title: "Bursar & Accounts" },
+  { email: "nurse.rhs@ishurihub.rw", password: "Staff@2024", role: "NURSE", first_name: "Diane", last_name: "Mukamana", school_id: "sch-rhs", school_code: "RHS", school_name: "Riviera High School", job_title: "School Nurse" },
+  { email: "discipline.rhs@ishurihub.rw", password: "Staff@2024", role: "DISCIPLINE", first_name: "Victor", last_name: "Rugamba", school_id: "sch-rhs", school_code: "RHS", school_name: "Riviera High School", job_title: "Discipline Officer" },
+  { email: "librarian.rhs@ishurihub.rw", password: "Staff@2024", role: "LIBRARIAN", first_name: "Jeanne", last_name: "Uwase", school_id: "sch-rhs", school_code: "RHS", school_name: "Riviera High School", job_title: "Library Manager" },
+
+  // ── 4. Kagarama Secondary School (KSS) ──
+  { email: "admin@kagarama.ishurihub.rw", password: "Admin@2024", role: "ADMIN", first_name: "Director", last_name: "KSS", school_id: "sch-kss", school_code: "KSS", school_name: "Kagarama Secondary School", job_title: "Principal" },
+  { email: "teacher.kss@ishurihub.rw", password: "Staff@2024", role: "TEACHER", first_name: "Robert", last_name: "Kagabo", school_id: "sch-kss", school_code: "KSS", school_name: "Kagarama Secondary School", job_title: "Math Teacher" },
+  { email: "canteen.kss@ishurihub.rw", password: "Staff@2024", role: "CANTEEN", first_name: "Claire", last_name: "Umutoni", school_id: "sch-kss", school_code: "KSS", school_name: "Kagarama Secondary School", job_title: "Cafeteria Staff" },
+  { email: "bursar.kss@ishurihub.rw", password: "Staff@2024", role: "BURSAR", first_name: "Paul", last_name: "Nshimiye", school_id: "sch-kss", school_code: "KSS", school_name: "Kagarama Secondary School", job_title: "Bursar" },
+  { email: "nurse.kss@ishurihub.rw", password: "Staff@2024", role: "NURSE", first_name: "Diane", last_name: "Mukamana", school_id: "sch-kss", school_code: "KSS", school_name: "Kagarama Secondary School", job_title: "Nurse" },
+  { email: "discipline.kss@ishurihub.rw", password: "Staff@2024", role: "DISCIPLINE", first_name: "Victor", last_name: "Rugamba", school_id: "sch-kss", school_code: "KSS", school_name: "Kagarama Secondary School", job_title: "Discipline Master" },
+  { email: "librarian.kss@ishurihub.rw", password: "Staff@2024", role: "LIBRARIAN", first_name: "Jeanne", last_name: "Uwase", school_id: "sch-kss", school_code: "KSS", school_name: "Kagarama Secondary School", job_title: "Librarian" },
+
+  // ── 5. Lycée de Kigali (LDK) ──
+  { email: "admin@ldk.ishurihub.rw", password: "Admin@2024", role: "ADMIN", first_name: "Proviseur", last_name: "LDK", school_id: "sch-ldk", school_code: "LDK", school_name: "Lycée de Kigali", job_title: "Proviseur / Principal" },
+  { email: "teacher.ldk@ishurihub.rw", password: "Staff@2024", role: "TEACHER", first_name: "Robert", last_name: "Kagabo", school_id: "sch-ldk", school_code: "LDK", school_name: "Lycée de Kigali", job_title: "Professeur de Physique" },
+  { email: "canteen.ldk@ishurihub.rw", password: "Staff@2024", role: "CANTEEN", first_name: "Claire", last_name: "Umutoni", school_id: "sch-ldk", school_code: "LDK", school_name: "Lycée de Kigali", job_title: "Responsable Cantine" },
+  { email: "bursar.ldk@ishurihub.rw", password: "Staff@2024", role: "BURSAR", first_name: "Paul", last_name: "Nshimiye", school_id: "sch-ldk", school_code: "LDK", school_name: "Lycée de Kigali", job_title: "Économe / Bursar" },
+  { email: "nurse.ldk@ishurihub.rw", password: "Staff@2024", role: "NURSE", first_name: "Diane", last_name: "Mukamana", school_id: "sch-ldk", school_code: "LDK", school_name: "Lycée de Kigali", job_title: "Infirmière Scolaire" },
+  { email: "discipline.ldk@ishurihub.rw", password: "Staff@2024", role: "DISCIPLINE", first_name: "Victor", last_name: "Rugamba", school_id: "sch-ldk", school_code: "LDK", school_name: "Lycée de Kigali", job_title: "Préfet de Discipline" },
+  { email: "librarian.ldk@ishurihub.rw", password: "Staff@2024", role: "LIBRARIAN", first_name: "Jeanne", last_name: "Uwase", school_id: "sch-ldk", school_code: "LDK", school_name: "Lycée de Kigali", job_title: "Bibliothécaire" },
+
+  // ── 6. GS Sainte Famille (GSSF) ──
+  { email: "admin@saintefamille.ishurihub.rw", password: "Admin@2024", role: "ADMIN", first_name: "Director", last_name: "GSSF", school_id: "sch-gssf", school_code: "GSSF", school_name: "GS Sainte Famille", job_title: "Directeur" },
+  { email: "teacher.gssf@ishurihub.rw", password: "Staff@2024", role: "TEACHER", first_name: "Robert", last_name: "Kagabo", school_id: "sch-gssf", school_code: "GSSF", school_name: "GS Sainte Famille", job_title: "Teacher" },
+  { email: "canteen.gssf@ishurihub.rw", password: "Staff@2024", role: "CANTEEN", first_name: "Claire", last_name: "Umutoni", school_id: "sch-gssf", school_code: "GSSF", school_name: "GS Sainte Famille", job_title: "Cantinier" },
+  { email: "bursar.gssf@ishurihub.rw", password: "Staff@2024", role: "BURSAR", first_name: "Paul", last_name: "Nshimiye", school_id: "sch-gssf", school_code: "GSSF", school_name: "GS Sainte Famille", job_title: "Bursar" },
+  { email: "nurse.gssf@ishurihub.rw", password: "Staff@2024", role: "NURSE", first_name: "Diane", last_name: "Mukamana", school_id: "sch-gssf", school_code: "GSSF", school_name: "GS Sainte Famille", job_title: "Nurse" },
+  { email: "discipline.gssf@ishurihub.rw", password: "Staff@2024", role: "DISCIPLINE", first_name: "Victor", last_name: "Rugamba", school_id: "sch-gssf", school_code: "GSSF", school_name: "GS Sainte Famille", job_title: "Discipline Master" },
+  { email: "librarian.gssf@ishurihub.rw", password: "Staff@2024", role: "LIBRARIAN", first_name: "Jeanne", last_name: "Uwase", school_id: "sch-gssf", school_code: "GSSF", school_name: "GS Sainte Famille", job_title: "Librarian" },
+
+  // ── 7. SOS Hermann Gmeiner Technical School (SOST) ──
+  { email: "admin@sos.ishurihub.rw", password: "Admin@2024", role: "ADMIN", first_name: "Principal", last_name: "SOST", school_id: "sch-sost", school_code: "SOST", school_name: "SOS Hermann Gmeiner Technical School", job_title: "Technical Principal" },
+  { email: "teacher.sost@ishurihub.rw", password: "Staff@2024", role: "TEACHER", first_name: "Robert", last_name: "Kagabo", school_id: "sch-sost", school_code: "SOST", school_name: "SOS Hermann Gmeiner Technical School", job_title: "Technical Instructor" },
+  { email: "canteen.sost@ishurihub.rw", password: "Staff@2024", role: "CANTEEN", first_name: "Claire", last_name: "Umutoni", school_id: "sch-sost", school_code: "SOST", school_name: "SOS Hermann Gmeiner Technical School", job_title: "Catering Head" },
+  { email: "bursar.sost@ishurihub.rw", password: "Staff@2024", role: "BURSAR", first_name: "Paul", last_name: "Nshimiye", school_id: "sch-sost", school_code: "SOST", school_name: "SOS Hermann Gmeiner Technical School", job_title: "Accounts Officer" },
+  { email: "nurse.sost@ishurihub.rw", password: "Staff@2024", role: "NURSE", first_name: "Diane", last_name: "Mukamana", school_id: "sch-sost", school_code: "SOST", school_name: "SOS Hermann Gmeiner Technical School", job_title: "Infirmary Officer" },
+  { email: "discipline.sost@ishurihub.rw", password: "Staff@2024", role: "DISCIPLINE", first_name: "Victor", last_name: "Rugamba", school_id: "sch-sost", school_code: "SOST", school_name: "SOS Hermann Gmeiner Technical School", job_title: "Welfare & Discipline" },
+  { email: "librarian.sost@ishurihub.rw", password: "Staff@2024", role: "LIBRARIAN", first_name: "Jeanne", last_name: "Uwase", school_id: "sch-sost", school_code: "SOST", school_name: "SOS Hermann Gmeiner Technical School", job_title: "Technical Librarian" },
 ];
+
+export function getAllDemoAccounts(): DemoAccount[] {
+  if (typeof window === "undefined") return DEMO_ACCOUNTS;
+  try {
+    const customWorkersVal = localStorage.getItem("ishuri_demo_workers");
+    if (customWorkersVal) {
+      const customWorkers = JSON.parse(customWorkersVal);
+      if (Array.isArray(customWorkers)) {
+        const customAccounts: DemoAccount[] = customWorkers.map((w: any) => ({
+          email: w.email,
+          password: "Staff@2024",
+          role: w.role,
+          first_name: w.first_name,
+          last_name: w.last_name,
+          school_id: w.school_id || "demo-school-id",
+          school_code: "CUSTOM",
+          school_name: "IshuriHUB School",
+          job_title: w.job_title || w.role,
+        }));
+        return [...DEMO_ACCOUNTS, ...customAccounts];
+      }
+    }
+  } catch {}
+  return DEMO_ACCOUNTS;
+}
 
 export const DEMO_SCHOOL_ID = "demo-school-id";
 

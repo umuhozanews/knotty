@@ -58,6 +58,8 @@ const defaultOrigins = [
   'http://localhost:3001',
   'http://localhost',
   'https://localhost',
+  'https://knotty-app.pages.dev',
+  'https://ishuri-hub.pages.dev',
   'capacitor://localhost',
 ];
 const envOrigins = (process.env.FRONTEND_URL || '')
@@ -68,7 +70,7 @@ const allowedOrigins = Array.from(new Set([...defaultOrigins, ...envOrigins]));
 
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.pages.dev') || origin.endsWith('.vercel.app')) return cb(null, true);
     // Return false instead of Error so Express doesn't crash with 500
     cb(null, false);
   },

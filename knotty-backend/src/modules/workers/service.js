@@ -145,6 +145,29 @@ async function create(data, schoolId) {
 
     const code = employee_code || `${userRole.slice(0, 3)}-${schoolId.slice(0, 4).toUpperCase()}-${String(Date.now()).slice(-4)}`;
 
+    let campus = await tx.campus.findFirst({ where: { school_id: schoolId } });
+    if (!campus) {
+      campus = await tx.campus.create({
+        data: {
+          school_id: schoolId,
+          name: 'Main Campus',
+          address: 'Main School Grounds',
+        },
+      });
+    }
+
+    await tx.staff.create({
+      data: {
+        school_id: schoolId,
+        user_id: user.id,
+        campus_id: campus.id,
+        staff_number: code,
+        job_title: job_title || (userRole === 'TEACHER' ? 'Instructor / Teacher' : userRole),
+        department: department || (userRole === 'TEACHER' ? 'Academic & Teaching' : 'General Staff'),
+        status: 'ACTIVE',
+      },
+    });
+
     if (userRole === 'TEACHER') {
       await tx.teacher.create({
         data: {
@@ -164,12 +187,14 @@ async function create(data, schoolId) {
       role: user.role,
       first_name: user.first_name,
       last_name: user.last_name,
+      full_name: `${user.first_name} ${user.last_name}`,
       email: user.email,
       phone: user.phone,
       employee_code: code,
       department: department || 'General Staff',
       job_title: job_title || userRole,
       is_active: user.is_active,
+      status: user.is_active ? 'ACTIVE' : 'INACTIVE',
       created_at: user.created_at,
     };
   });
@@ -209,7 +234,7 @@ async function update(id, schoolId, data) {
   return prisma.$transaction(async (tx) => {
     const user = await tx.user.findFirst({
       where: { id, school_id: schoolId },
-      include: { teacher: true },
+      include: { teacher: true, staff: true },
     });
 
     if (!user) throw Object.assign(new Error('Worker not found'), { status: 404 });
@@ -231,6 +256,16 @@ async function update(id, schoolId, data) {
         data: {
           ...(specialization && { specialization }),
           ...(department && { specialization: department }),
+        },
+      });
+    }
+
+    if (user.staff && (department || data.job_title)) {
+      await tx.staff.update({
+        where: { id: user.staff.id },
+        data: {
+          ...(department && { department }),
+          ...(data.job_title && { job_title: data.job_title }),
         },
       });
     }

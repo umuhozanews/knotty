@@ -45,7 +45,10 @@ async function authenticate(req, res, next) {
       return res.status(401).json({ success: false, message: 'User not found or deactivated' });
     }
 
-    req.user = user;
+    req.user = {
+      ...user,
+      school_id: payload.schoolId || user.school_id,
+    };
     next();
   } catch (err) {
     return res.status(401).json({ success: false, message: 'Invalid or expired token' });

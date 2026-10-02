@@ -1,5 +1,23 @@
 const service = require('./service');
 
+async function listAll(req, res, next) {
+  try {
+    const schools = await service.listAllSchools();
+    res.json({ success: true, data: schools });
+  } catch (err) { next(err); }
+}
+
+async function switchSchool(req, res, next) {
+  try {
+    const { school_id } = req.body;
+    if (!school_id) {
+      return res.status(400).json({ success: false, message: 'Target school_id is required' });
+    }
+    const result = await service.switchSchool(req.user.id, school_id);
+    res.json({ success: true, ...result });
+  } catch (err) { next(err); }
+}
+
 async function create(req, res, next) {
   try {
     const school = await service.createSchool(req.body);
@@ -63,4 +81,14 @@ async function getAttendanceSettings(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { create, getOne, update, dashboardStats, attendanceTrend, updateAttendanceSettings, getAttendanceSettings };
+module.exports = {
+  listAll,
+  switchSchool,
+  create,
+  getOne,
+  update,
+  dashboardStats,
+  attendanceTrend,
+  updateAttendanceSettings,
+  getAttendanceSettings,
+};

@@ -5,6 +5,7 @@ import {
   LayoutDashboard, Users, ClipboardCheck, CreditCard, ShoppingCart,
   Banknote, FileText, AlertTriangle, Settings, LogOut, ChevronRight,
   Heart, BookOpen, User, CalendarDays, GraduationCap, Wallet, X, Library, Shield,
+  UserCheck, Building2,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
@@ -23,6 +24,8 @@ const ALL_NAV = [
 
   // ── Admin / Teacher / Staff shared ──
   { icon: Users,           label: "Students",     href: "/students",      roles: ["ADMIN","TEACHER","BURSAR","DISCIPLINE"] },
+  { icon: UserCheck,       label: "Workers",      href: "/workers",       roles: ["ADMIN","BURSAR","DISCIPLINE"] },
+  { icon: Building2,       label: "Schools Hub",  href: "/schools",       roles: ["ADMIN"] },
   { icon: ClipboardCheck,  label: "Attendance",   href: "/attendance",    roles: ["ADMIN","TEACHER","DISCIPLINE"] },
   { icon: GraduationCap,   label: "Academics",    href: "/academics",     roles: ["ADMIN","TEACHER","STUDENT","PARENT"] },
   { icon: Shield,          label: "Gate Access",  href: "/gate-access",   roles: ["ADMIN","DISCIPLINE"] },
@@ -57,7 +60,7 @@ interface SidebarProps {
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
   const router   = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, activeSchool } = useAuth();
 
   const role     = user?.role ?? "STUDENT";
   const navItems = ALL_NAV.filter((n) => n.roles.includes(role));
@@ -108,10 +111,19 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         })}
       </nav>
 
-      {/* Role badge */}
+      {/* Role & Active School badge */}
       <div className="mx-3 mb-3 mt-2 rounded-2xl p-3" style={{ background: "#FFF3EC", border: "1px solid #FFD4B2" }}>
-        <p className="text-xs font-semibold mb-0.5" style={{ color: "#121212" }}>IshuriHUB Smart School</p>
-        <p className="text-xs" style={{ color: "#666666" }}>Card-based management</p>
+        <div className="flex items-center justify-between gap-1 mb-0.5">
+          <p className="text-xs font-bold truncate" style={{ color: "#121212" }}>
+            {activeSchool?.name || "IshuriHUB Model School"}
+          </p>
+          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 shrink-0">
+            {activeSchool?.code || "KMS"}
+          </span>
+        </div>
+        <p className="text-[11px]" style={{ color: "#666666" }}>
+          {activeSchool?.student_count ?? 53} Students • {activeSchool?.worker_count ?? 14} Workers
+        </p>
         {user && (
           <p className="text-xs mt-1 font-semibold" style={{ color: "#FF7A22" }}>{ROLE_LABELS[role] ?? role}</p>
         )}

@@ -2347,6 +2347,401 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
     }
   }
 
+  // Workers & Staff Mock Handler
+  if (path.startsWith("/workers")) {
+    const defaultWorkers: WorkerItem[] = [
+      {
+        id: "w-1",
+        user_id: "u-admin",
+        school_id: "demo-school-id",
+        role: "ADMIN",
+        first_name: "School",
+        last_name: "Admin",
+        full_name: "School Admin",
+        email: "admin@ishurihub.rw",
+        phone: "+250788000001",
+        employee_code: "ADM-KMS-0001",
+        department: "Executive School Administration",
+        job_title: "Head Administrator",
+        is_active: true,
+        status: "ACTIVE",
+        created_at: new Date(Date.now() - 86400000 * 30).toISOString(),
+      },
+      {
+        id: "w-2",
+        user_id: "u-tch-1",
+        school_id: "demo-school-id",
+        role: "TEACHER",
+        first_name: "Robert",
+        last_name: "Kagabo",
+        full_name: "Robert Kagabo",
+        email: "teacher@ishurihub.rw",
+        phone: "+250788100001",
+        employee_code: "TEA-KMS-0002",
+        department: "Sciences & Mathematics",
+        job_title: "Senior Physics & Math Teacher",
+        is_active: true,
+        status: "ACTIVE",
+        created_at: new Date(Date.now() - 86400000 * 25).toISOString(),
+      },
+      {
+        id: "w-3",
+        user_id: "u-tch-2",
+        school_id: "demo-school-id",
+        role: "TEACHER",
+        first_name: "Aline",
+        last_name: "Mutoni",
+        full_name: "Aline Mutoni",
+        email: "aline.mutoni@ishurihub.rw",
+        phone: "+250788100002",
+        employee_code: "TEA-KMS-0003",
+        department: "Languages & Humanities",
+        job_title: "English & Literature Teacher",
+        is_active: true,
+        status: "ACTIVE",
+        created_at: new Date(Date.now() - 86400000 * 20).toISOString(),
+      },
+      {
+        id: "w-4",
+        user_id: "u-cant-1",
+        school_id: "demo-school-id",
+        role: "CANTEEN",
+        first_name: "Claire",
+        last_name: "Umutoni",
+        full_name: "Claire Umutoni",
+        email: "canteen@ishurihub.rw",
+        phone: "+250788100006",
+        employee_code: "CAN-KMS-0004",
+        department: "Canteen & Catering Services",
+        job_title: "Head Cantinier / POS Manager",
+        is_active: true,
+        status: "ACTIVE",
+        created_at: new Date(Date.now() - 86400000 * 18).toISOString(),
+      },
+      {
+        id: "w-5",
+        user_id: "u-bursar-1",
+        school_id: "demo-school-id",
+        role: "BURSAR",
+        first_name: "Paul",
+        last_name: "Nshimiye",
+        full_name: "Paul Nshimiye",
+        email: "bursar@ishurihub.rw",
+        phone: "+250788100003",
+        employee_code: "BUR-KMS-0005",
+        department: "Finance & Accounts",
+        job_title: "Chief Bursar & Accountant",
+        is_active: true,
+        status: "ACTIVE",
+        created_at: new Date(Date.now() - 86400000 * 15).toISOString(),
+      },
+      {
+        id: "w-6",
+        user_id: "u-nurse-1",
+        school_id: "demo-school-id",
+        role: "NURSE",
+        first_name: "Diane",
+        last_name: "Mukamana",
+        full_name: "Diane Mukamana",
+        email: "nurse@ishurihub.rw",
+        phone: "+250788100004",
+        employee_code: "NUR-KMS-0006",
+        department: "Health & Student Infirmary",
+        job_title: "Resident Medical Nurse",
+        is_active: true,
+        status: "ACTIVE",
+        created_at: new Date(Date.now() - 86400000 * 12).toISOString(),
+      },
+      {
+        id: "w-7",
+        user_id: "u-disc-1",
+        school_id: "demo-school-id",
+        role: "DISCIPLINE",
+        first_name: "Victor",
+        last_name: "Rugamba",
+        full_name: "Victor Rugamba",
+        email: "discipline@ishurihub.rw",
+        phone: "+250788100005",
+        employee_code: "DIS-KMS-0007",
+        department: "Discipline & Student Welfare",
+        job_title: "Chief Discipline Master",
+        is_active: true,
+        status: "ACTIVE",
+        created_at: new Date(Date.now() - 86400000 * 10).toISOString(),
+      },
+      {
+        id: "w-8",
+        user_id: "u-lib-1",
+        school_id: "demo-school-id",
+        role: "LIBRARIAN",
+        first_name: "Jeanne",
+        last_name: "Uwase",
+        full_name: "Jeanne Uwase",
+        email: "librarian@ishurihub.rw",
+        phone: "+250788100007",
+        employee_code: "LIB-KMS-0008",
+        department: "Library & Media Center",
+        job_title: "Head Librarian",
+        is_active: true,
+        status: "ACTIVE",
+        created_at: new Date(Date.now() - 86400000 * 8).toISOString(),
+      },
+    ];
+
+    const getWorkersStorage = (): WorkerItem[] => {
+      const val = getDemoStorage("ishuri_demo_workers");
+      if (!val) {
+        setDemoStorage("ishuri_demo_workers", JSON.stringify(defaultWorkers));
+        return defaultWorkers;
+      }
+      try { return JSON.parse(val); } catch { return defaultWorkers; }
+    };
+    const saveWorkersStorage = (data: WorkerItem[]) => setDemoStorage("ishuri_demo_workers", JSON.stringify(data));
+
+    const wList = getWorkersStorage();
+    const parts = path.split("?")[0].split("/");
+    const wId = parts[2];
+
+    if (method === "GET") {
+      if (wId && wId !== "undefined") {
+        const item = wList.find((w) => w.id === wId) || wList[0];
+        return { success: true, data: item } as unknown as T;
+      }
+
+      const urlObj = new URL(path, "http://localhost");
+      const roleFilter = urlObj.searchParams.get("role");
+      const statusFilter = urlObj.searchParams.get("status");
+      const searchQ = urlObj.searchParams.get("search")?.toLowerCase();
+
+      let filtered = wList;
+      if (roleFilter) filtered = filtered.filter((w) => w.role === roleFilter);
+      if (statusFilter) filtered = filtered.filter((w) => w.status === statusFilter);
+      if (searchQ) {
+        filtered = filtered.filter(
+          (w) =>
+            w.full_name.toLowerCase().includes(searchQ) ||
+            w.email.toLowerCase().includes(searchQ) ||
+            w.employee_code.toLowerCase().includes(searchQ) ||
+            (w.department && w.department.toLowerCase().includes(searchQ))
+        );
+      }
+
+      const stats: WorkerStats = {
+        total_workers: wList.length,
+        total_teachers: wList.filter((w) => w.role === "TEACHER").length,
+        total_cantiniers: wList.filter((w) => w.role === "CANTEEN").length,
+        total_support: wList.filter((w) => ["BURSAR", "NURSE", "DISCIPLINE", "LIBRARIAN"].includes(w.role)).length,
+        active_workers: wList.filter((w) => w.is_active).length,
+      };
+
+      return {
+        success: true,
+        data: filtered,
+        total: filtered.length,
+        page: 1,
+        limit: 50,
+        stats,
+      } as unknown as T;
+    }
+
+    if (method === "POST") {
+      const newWorker: WorkerItem = {
+        id: "w-" + Date.now(),
+        user_id: "u-" + Date.now(),
+        school_id: "demo-school-id",
+        role: body.role || "TEACHER",
+        first_name: body.first_name,
+        last_name: body.last_name,
+        full_name: `${body.first_name} ${body.last_name}`,
+        email: body.email,
+        phone: body.phone || null,
+        employee_code: body.employee_code || `${(body.role || "STAFF").slice(0, 3)}-DEMO-${String(Date.now()).slice(-4)}`,
+        department: body.department || "General Staff",
+        job_title: body.job_title || body.role,
+        is_active: true,
+        status: "ACTIVE",
+        created_at: new Date().toISOString(),
+      };
+      wList.unshift(newWorker);
+      saveWorkersStorage(wList);
+      return { success: true, data: newWorker } as unknown as T;
+    }
+
+    if (method === "PUT" && wId) {
+      const idx = wList.findIndex((w) => w.id === wId);
+      if (idx > -1) {
+        wList[idx] = {
+          ...wList[idx],
+          ...body,
+          ...(body.is_active !== undefined ? { status: body.is_active ? "ACTIVE" : "INACTIVE" } : {}),
+        };
+        saveWorkersStorage(wList);
+        return { success: true, data: wList[idx] } as unknown as T;
+      }
+    }
+
+    if (method === "DELETE" && wId) {
+      const idx = wList.findIndex((w) => w.id === wId);
+      if (idx > -1) {
+        wList[idx].is_active = false;
+        wList[idx].status = "INACTIVE";
+        saveWorkersStorage(wList);
+      }
+      return { success: true, message: "Worker deactivated successfully" } as unknown as T;
+    }
+  }
+
+  // Multi-School Architecture Mock Handler
+  if (path.startsWith("/schools")) {
+    const defaultSchools: SchoolItem[] = [
+      {
+        id: "demo-school-id",
+        name: "IshuriHUB Model School",
+        code: "KMS",
+        email: "admin@ishurihub.rw",
+        phone: "+250788000001",
+        address: "KG 12 Ave, Kigali, Rwanda",
+        subscription_plan: "PREMIUM",
+        student_count: 53,
+        worker_count: 14,
+        class_count: 12,
+        canteen_products_count: 6,
+      },
+      {
+        id: "sch-ghia",
+        name: "Green Hills International Academy",
+        code: "GHIA",
+        email: "admin@greenhills.ishurihub.rw",
+        phone: "+250788200001",
+        address: "Nyarutarama Road, Gasabo, Kigali",
+        subscription_plan: "PREMIUM",
+        student_count: 6,
+        worker_count: 7,
+        class_count: 6,
+        canteen_products_count: 6,
+      },
+      {
+        id: "sch-rhs",
+        name: "Riviera High School",
+        code: "RHS",
+        email: "admin@riviera.ishurihub.rw",
+        phone: "+250788300001",
+        address: "Kabuga Hill, Gasabo, Kigali",
+        subscription_plan: "PREMIUM",
+        student_count: 6,
+        worker_count: 7,
+        class_count: 6,
+        canteen_products_count: 6,
+      },
+      {
+        id: "sch-kss",
+        name: "Kagarama Secondary School",
+        code: "KSS",
+        email: "admin@kagarama.ishurihub.rw",
+        phone: "+250788400001",
+        address: "KK 15 Ave, Kicukiro, Kigali",
+        subscription_plan: "BASIC",
+        student_count: 6,
+        worker_count: 7,
+        class_count: 6,
+        canteen_products_count: 6,
+      },
+      {
+        id: "sch-ldk",
+        name: "Lycée de Kigali",
+        code: "LDK",
+        email: "admin@ldk.ishurihub.rw",
+        phone: "+250788500001",
+        address: "KN 3 Rd, Kiyovu, Nyarugenge",
+        subscription_plan: "PREMIUM",
+        student_count: 6,
+        worker_count: 7,
+        class_count: 6,
+        canteen_products_count: 6,
+      },
+      {
+        id: "sch-gssf",
+        name: "GS Sainte Famille",
+        code: "GSSF",
+        email: "admin@saintefamille.ishurihub.rw",
+        phone: "+250788600001",
+        address: "Downtown Kigali, Nyarugenge",
+        subscription_plan: "BASIC",
+        student_count: 6,
+        worker_count: 7,
+        class_count: 6,
+        canteen_products_count: 6,
+      },
+      {
+        id: "sch-sost",
+        name: "SOS Hermann Gmeiner Technical School",
+        code: "SOST",
+        email: "admin@sos.ishurihub.rw",
+        phone: "+250788700001",
+        address: "KG 563 St, Kacyiru, Kigali",
+        subscription_plan: "PREMIUM",
+        student_count: 6,
+        worker_count: 7,
+        class_count: 6,
+        canteen_products_count: 6,
+      },
+    ];
+
+    const getSchoolsStorage = (): SchoolItem[] => {
+      const val = getDemoStorage("ishuri_demo_schools");
+      if (!val) {
+        setDemoStorage("ishuri_demo_schools", JSON.stringify(defaultSchools));
+        return defaultSchools;
+      }
+      try { return JSON.parse(val); } catch { return defaultSchools; }
+    };
+    const saveSchoolsStorage = (data: SchoolItem[]) => setDemoStorage("ishuri_demo_schools", JSON.stringify(data));
+
+    const sList = getSchoolsStorage();
+
+    if (path === "/schools/switch" && method === "POST") {
+      const targetId = body.school_id;
+      const target = sList.find((s) => s.id === targetId) || sList[0];
+      return {
+        success: true,
+        accessToken: "demo-switched-token",
+        refreshToken: "demo-switched-refresh",
+        user: {
+          id: "demo-admin",
+          role: "ADMIN",
+          school_id: target.id,
+          first_name: "School",
+          last_name: "Admin",
+          email: target.email,
+        },
+        school: target,
+      } as unknown as T;
+    }
+
+    if (method === "GET") {
+      return { success: true, data: sList } as unknown as T;
+    }
+
+    if (method === "POST") {
+      const newSchool: SchoolItem = {
+        id: "sch-" + Date.now(),
+        name: body.name,
+        code: body.code || body.name.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 4),
+        email: body.email,
+        phone: body.phone || null,
+        address: body.address || null,
+        subscription_plan: "PREMIUM",
+        student_count: 0,
+        worker_count: 1,
+        class_count: 0,
+        canteen_products_count: 0,
+      };
+      sList.push(newSchool);
+      saveSchoolsStorage(sList);
+      return { success: true, data: newSchool } as unknown as T;
+    }
+  }
+
   // Graceful catch-all fallback for demo mode to prevent hard crashes
   if (method === "GET") {
     return { 
@@ -3584,6 +3979,90 @@ export const academics = {
   approveResult: (resultId: string) =>
     request<{ success: boolean; data: ExamResult; message: string }>(`/academics/exams/results/${resultId}/approve`, { method: "POST" }),
 };
+
+/* ─── Workers & Staff Management ─── */
+export interface WorkerItem {
+  id: string;
+  user_id: string;
+  school_id: string;
+  role: string;
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  email: string;
+  phone?: string | null;
+  employee_code: string;
+  department: string;
+  job_title: string;
+  is_active: boolean;
+  status: "ACTIVE" | "INACTIVE";
+  last_login?: string | null;
+  created_at: string;
+}
+
+export interface WorkerStats {
+  total_workers: number;
+  total_teachers: number;
+  total_cantiniers: number;
+  total_support: number;
+  active_workers: number;
+}
+
+export const workers = {
+  list: (params?: { page?: number; limit?: number; role?: string; search?: string; status?: string }) => {
+    const qs = new URLSearchParams(
+      Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))
+    ).toString();
+    return request<{ success: boolean; data: WorkerItem[]; total: number; page: number; limit: number; stats: WorkerStats }>(
+      `/workers${qs ? `?${qs}` : ""}`
+    );
+  },
+  getOne: (id: string) => request<{ success: boolean; data: WorkerItem }>(`/workers/${id}`),
+  create: (data: {
+    first_name: string;
+    last_name: string;
+    email: string;
+    phone?: string;
+    role: string;
+    department?: string;
+    job_title?: string;
+    employee_code?: string;
+    password?: string;
+  }) => request<{ success: boolean; data: WorkerItem }>("/workers", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: string, data: Partial<WorkerItem>) =>
+    request<{ success: boolean; data: WorkerItem }>(`/workers/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  remove: (id: string) => request<{ success: boolean; message: string }>(`/workers/${id}`, { method: "DELETE" }),
+};
+
+/* ─── Multi-School Architecture ─── */
+export interface SchoolItem {
+  id: string;
+  name: string;
+  code: string;
+  email: string;
+  phone?: string | null;
+  address?: string | null;
+  subscription_plan: string;
+  student_count: number;
+  worker_count: number;
+  class_count: number;
+  canteen_products_count: number;
+}
+
+export const multiSchool = {
+  list: () => request<{ success: boolean; data: SchoolItem[] }>("/schools"),
+  switch: (school_id: string) =>
+    request<{
+      success: boolean;
+      accessToken: string;
+      refreshToken: string;
+      user: { id: string; role: string; school_id: string; first_name: string; last_name: string; email: string; profile_photo?: string | null };
+      school: SchoolItem;
+    }>("/schools/switch", { method: "POST", body: JSON.stringify({ school_id }) }),
+  create: (data: { name: string; code?: string; email: string; phone?: string; address?: string }) =>
+    request<{ success: boolean; data: SchoolItem }>("/schools", { method: "POST", body: JSON.stringify(data) }),
+};
+
 
 
 

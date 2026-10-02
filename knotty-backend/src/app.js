@@ -97,6 +97,7 @@ app.use(`${API}/discipline`, require('./modules/discipline/routes'));
 app.use(`${API}/achievements`, require('./modules/achievements/routes'));
 app.use(`${API}/reports`, require('./modules/reports/routes'));
 app.use(`${API}/teachers`, require('./modules/teachers/routes'));
+app.use(`${API}/workers`, require('./modules/workers/routes'));
 app.use(`${API}/structure`, require('./modules/levels/routes'));
 app.use(`${API}/notifications`, require('./modules/notifications/routes'));
 app.use(`${API}/materials`, require('./modules/materials/routes'));

@@ -1,5 +1,5 @@
 "use client";
-import { Menu, Search, Sun, Moon, Bell, X, User, Wifi } from "lucide-react";
+import { Menu, Search, Sun, Moon, Bell, X, User, Wifi, Building2, ChevronDown, Check, Users, UserCheck } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useRouter, usePathname } from "next/navigation";
@@ -11,6 +11,8 @@ import NFCStudentModal, { NFCMode } from "@/components/NFCStudentModal";
 const PAGE_TITLES: Record<string, string> = {
   "/": "Dashboard",
   "/students": "Students",
+  "/workers": "Workers & Staff",
+  "/schools": "Schools Network",
   "/attendance": "Attendance",
   "/cards": "IshuriHUB Cards",
   "/canteen": "Canteen",
@@ -25,6 +27,7 @@ const NFC_PAGE_MODE: Record<string, NFCMode> = {
   "/":           "report",
   "/reports":    "report",
   "/students":   "report",
+  "/workers":    "report",
   "/academics":  "report",
   "/discipline": "discipline",
   "/health":     "health",
@@ -39,14 +42,16 @@ const NFC_ROLE_MODE: Record<string, NFCMode> = {
 };
 
 export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
-  const { user, logout } = useAuth();
+  const { user, logout, activeSchool, schoolsList, switchSchool } = useAuth();
   const { theme, toggle } = useTheme();
   const router = useRouter();
   const pathname = usePathname();
   const { isSupported: nfcSupported } = useNFC();
   const [nfcModalOpen, setNfcModalOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [schoolDropdownOpen, setSchoolDropdownOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const schoolRef = useRef<HTMLDivElement>(null);
 
   // Resolve NFC mode: page takes priority, then role fallback
   const nfcMode: NFCMode | undefined =
@@ -107,6 +112,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
       }
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false);
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+      if (schoolRef.current && !schoolRef.current.contains(e.target as Node)) setSchoolDropdownOpen(false);
     }
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
@@ -130,17 +136,88 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
       <NFCStudentModal mode={nfcMode} onClose={() => setNfcModalOpen(false)} />
     )}
     <header className="flex items-center justify-between gap-2 mb-2 md:mb-3">
-      {/* Left: hamburger + title */}
-      <div className="flex items-center gap-2 min-w-0">
+      {/* Left: hamburger + title + school switcher + student/worker tabs */}
+      <div className="flex items-center gap-2 md:gap-3 min-w-0">
         {onMenuClick && (
           <button onClick={onMenuClick} className="md:hidden p-2 bg-white rounded-xl text-gray-600 hover:bg-gray-50 transition flex-shrink-0">
             <Menu size={18} />
           </button>
         )}
         <div className="min-w-0">
-          <h1 className="text-base md:text-2xl font-bold text-gray-800 truncate leading-tight">{title}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-base md:text-2xl font-bold text-gray-800 truncate leading-tight">{title}</h1>
+
+            {/* School Switcher Dropdown */}
+            {(user?.role === "ADMIN" || schoolsList.length > 1) && (
+              <div ref={schoolRef} className="relative">
+                <button
+                  onClick={() => setSchoolDropdownOpen((v) => !v)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-xl bg-white border border-gray-200 hover:border-orange-300 text-xs font-semibold text-gray-700 transition shadow-sm"
+                  title="Switch active school"
+                >
+                  <Building2 size={13} className="text-orange-500 shrink-0" />
+                  <span className="max-w-[100px] sm:max-w-[150px] md:max-w-[180px] truncate">{activeSchool?.name || "School"}</span>
+                  <span className="text-[10px] bg-orange-100 text-orange-700 px-1 rounded font-bold shrink-0">{activeSchool?.code || "KMS"}</span>
+                  <ChevronDown size={12} className="text-gray-400 shrink-0" />
+                </button>
+
+                {schoolDropdownOpen && (
+                  <div className="absolute top-full left-0 mt-1.5 w-72 sm:w-80 bg-white rounded-2xl shadow-xl border border-gray-100 p-2 z-50">
+                    <div className="px-2 py-1.5 border-b border-gray-100 mb-1 flex items-center justify-between">
+                      <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Schools Network ({schoolsList.length})</span>
+                      <span className="text-[10px] text-orange-600 font-semibold">Active: {activeSchool?.code}</span>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto space-y-1">
+                      {schoolsList.map((s) => {
+                        const isCurrent = s.id === activeSchool?.id;
+                        return (
+                          <button
+                            key={s.id}
+                            onClick={() => {
+                              setSchoolDropdownOpen(false);
+                              if (!isCurrent) switchSchool(s.id);
+                            }}
+                            className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition ${isCurrent ? "bg-orange-50 text-orange-700 font-semibold" : "hover:bg-gray-50 text-gray-700"}`}
+                          >
+                            <div className="min-w-0 pr-2">
+                              <p className="text-xs font-semibold truncate leading-tight">{s.name}</p>
+                              <p className="text-[10px] text-gray-400 mt-0.5 truncate">{s.address || "Kigali"} • {s.student_count ?? 0} students • {s.worker_count ?? 0} workers</p>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{s.code}</span>
+                              {isCurrent && <Check size={14} className="text-orange-600" />}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           <p className="text-[10px] md:text-sm text-gray-400 hidden sm:block">{today}</p>
         </div>
+
+        {/* Student ↔ Worker Management Switcher Tabs */}
+        {(user?.role === "ADMIN" || user?.role === "BURSAR" || user?.role === "DISCIPLINE") && (
+          <div className="hidden lg:flex items-center bg-gray-200/70 p-0.5 rounded-2xl shrink-0 ml-1">
+            <button
+              onClick={() => router.push("/students")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition ${pathname.startsWith("/students") ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-900"}`}
+            >
+              <Users size={13} className={pathname.startsWith("/students") ? "text-orange-500" : ""} />
+              <span>Students</span>
+            </button>
+            <button
+              onClick={() => router.push("/workers")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition ${pathname.startsWith("/workers") ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-900"}`}
+            >
+              <UserCheck size={13} className={pathname.startsWith("/workers") ? "text-orange-500" : ""} />
+              <span>Workers</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Right: actions */}

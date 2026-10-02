@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, Plus, Loader2, CreditCard, User, Trash2, Edit2,
-  ChevronRight, Users, AlertCircle, X, Eye, EyeOff
+  ChevronRight, Users, UserCheck, AlertCircle, X, Eye, EyeOff
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import { students, structure, cards, health, Level, Class, Student } from "@/lib/api";
@@ -515,6 +515,7 @@ function StudentRow({ s, idx, onEdit, onDelete, onIssue, issuing, isClassTeacher
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function StudentsPage() {
+  const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const { show } = useToast();
   const [levels, setLevels] = useState<Level[]>([]);
@@ -698,6 +699,24 @@ export default function StudentsPage() {
                 </div>
               )}
             </div>
+            {/* Quick Segmented Toggle */}
+            <div className="flex items-center bg-gray-100 dark:bg-gray-800 p-0.5 rounded-xl shrink-0">
+              <button
+                disabled
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-xs"
+              >
+                <Users size={12} className="text-orange-500" />
+                <span className="hidden sm:inline">Students</span>
+              </button>
+              <button
+                onClick={() => router.push("/workers")}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition"
+              >
+                <UserCheck size={12} />
+                <span className="hidden sm:inline">Workers</span>
+              </button>
+            </div>
+
             <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-gray-800 rounded-xl px-2.5 py-1.5 w-28 sm:min-w-40">
               <Search size={13} className="text-gray-400 shrink-0" />
               <input

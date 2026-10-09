@@ -2754,7 +2754,7 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  if (typeof window !== "undefined" && getDemoStorage("ishuri_demo") === "true") {
+  if (process.env.NODE_ENV !== "production" && typeof window !== "undefined" && getDemoStorage("ishuri_demo") === "true") {
     return handleDemoRequest<T>(path, options);
   }
   const token = getToken();
@@ -2828,7 +2828,76 @@ export interface LoginResponse {
     first_name: string;
     last_name: string;
     email: string;
+    phone?: string | null;
     profile_photo: string | null;
+    last_login?: string | null;
+    created_at?: string;
+    school?: {
+      id: string;
+      name: string;
+      code: string;
+      logo?: string | null;
+      email?: string | null;
+      phone?: string | null;
+      address?: string | null;
+      subscription_plan?: string;
+    } | null;
+    student?: {
+      id: string;
+      student_code: string;
+      gender?: string | null;
+      date_of_birth?: string | null;
+      nationality?: string | null;
+      enrollment_date?: string | null;
+      class?: { id: string; name: string; academic_year?: string } | null;
+      level?: { id: string; name: string } | null;
+      card?: {
+        id: string;
+        card_number: string;
+        nfc_uid?: string | null;
+        qr_code?: string | null;
+        wallet_balance: number;
+        daily_limit?: number | null;
+        is_active: boolean;
+        is_frozen: boolean;
+        expires_at?: string | null;
+      } | null;
+      parent?: {
+        id: string;
+        first_name: string;
+        last_name: string;
+        phone?: string | null;
+        email?: string | null;
+      } | null;
+    } | null;
+    teacher?: {
+      id: string;
+      employee_code?: string | null;
+      qualification?: string | null;
+      specialization?: string | null;
+      subjects_taught?: unknown;
+      join_date?: string | null;
+    } | null;
+    parent_of?: Array<{
+      id: string;
+      student_code: string;
+      gender?: string | null;
+      user?: {
+        id: string;
+        first_name: string;
+        last_name: string;
+        profile_photo?: string | null;
+      } | null;
+      class?: { id: string; name: string } | null;
+      level?: { id: string; name: string } | null;
+      card?: {
+        id?: string;
+        card_number: string;
+        wallet_balance: number;
+        is_active: boolean;
+        is_frozen: boolean;
+      } | null;
+    }> | null;
   };
 }
 
@@ -3236,7 +3305,7 @@ export const fees = {
 };
 
 // ─── Canteen ──────────────────────────────────────────────
-export interface CanteenItem { name: string; price: number; quantity: number }
+export interface CanteenItem { id?: string; name: string; price: number; quantity: number }
 export interface CanteenTransaction {
   id: string;
   items_purchased: CanteenItem[];
@@ -3877,6 +3946,24 @@ export interface TimetableEntry {
   teacher?: { id: string; first_name: string; last_name: string };
 }
 
+export interface ScheduleRun {
+  id: string;
+  academic_term_id: string;
+  status: "DRAFT" | "INFEASIBLE" | "PUBLISHED" | "SUPERSEDED";
+  diagnostics: { complete: boolean; requested_lessons: number; placed_lessons: number; unplaced: Array<{ class_section_id: string; subject_id: string; requested: number; placed: number }> } | null;
+  entries: Array<TimetableEntry & { requirement_index: number }>;
+}
+
+export interface TimetablePlanItem {
+  class_section_id: string;
+  subject_id: string;
+  staff_id: string;
+  periods_per_week: number;
+  category: "PRINCIPAL" | "SUBSIDIARY";
+  is_science: boolean;
+  room?: string;
+}
+
 export interface Exam {
   id: string;
   name: string;
@@ -3956,6 +4043,18 @@ export const academics = {
     request<{ success: boolean; data: TimetableEntry }>("/academics/timetable", { method: "POST", body: JSON.stringify(data) }),
   deleteTimetableEntry: (id: string) =>
     request(`/academics/timetable/${id}`, { method: "DELETE" }),
+  generateTimetable: (config: Record<string, unknown>) =>
+    request<{ success: boolean; data: ScheduleRun }>("/academics/timetable/generate", { method: "POST", body: JSON.stringify(config) }),
+  listTimetableRuns: (termId?: string) =>
+    request<{ success: boolean; data: Array<{ id: string; academic_term_id: string; status: ScheduleRun["status"]; created_at: string }> }>(`/academics/timetable/runs${termId ? `?termId=${encodeURIComponent(termId)}` : ""}`),
+  getTimetableRun: (runId: string) =>
+    request<{ success: boolean; data: ScheduleRun }>(`/academics/timetable/runs/${runId}`),
+  publishTimetableRun: (runId: string) =>
+    request<{ success: boolean; data: { id: string; status: ScheduleRun["status"]; published_at: string } }>(`/academics/timetable/runs/${runId}/publish`, { method: "POST" }),
+  timetablePlan: (termId: string) =>
+    request<{ success: boolean; data: { academic_term_id: string; items: TimetablePlanItem[] } }>(`/academics/timetable/plan/${termId}`),
+  saveTimetablePlan: (termId: string, items: TimetablePlanItem[]) =>
+    request<{ success: boolean; data: { academic_term_id: string; items: TimetablePlanItem[]; updated_at: string } }>(`/academics/timetable/plan/${termId}`, { method: "PUT", body: JSON.stringify({ items }) }),
 
   // Exams
   exams: (params?: { academicTermId?: string; subjectId?: string }) => {

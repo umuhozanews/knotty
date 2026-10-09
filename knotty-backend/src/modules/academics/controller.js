@@ -1,4 +1,5 @@
 const service = require('./service');
+const timetableGenerator = require('./timetable-generator');
 
 // Terms
 async function listTerms(req, res, next) {
@@ -119,6 +120,48 @@ async function deleteTimetableEntry(req, res, next) {
   } catch (err) { next(err); }
 }
 
+async function generateTimetable(req, res, next) {
+  try {
+    const run = await timetableGenerator.generate(req.user.school_id, req.user.id, req.body);
+    res.status(201).json({ success: true, data: run });
+  } catch (err) { next(err); }
+}
+
+async function getTimetablePlan(req, res, next) {
+  try {
+    const plan = await timetableGenerator.getPlan(req.user.school_id, req.params.termId);
+    res.json({ success: true, data: plan });
+  } catch (err) { next(err); }
+}
+
+async function saveTimetablePlan(req, res, next) {
+  try {
+    const plan = await timetableGenerator.savePlan(req.user.school_id, req.user.id, req.params.termId, req.body.items);
+    res.json({ success: true, data: { academic_term_id: plan.academic_term_id, items: plan.items, updated_at: plan.updated_at }, message: 'Timetable plan saved' });
+  } catch (err) { next(err); }
+}
+
+async function listTimetableRuns(req, res, next) {
+  try {
+    const runs = await timetableGenerator.listRuns(req.user.school_id, req.query.termId);
+    res.json({ success: true, data: runs });
+  } catch (err) { next(err); }
+}
+
+async function getTimetableRun(req, res, next) {
+  try {
+    const run = await timetableGenerator.getRun(req.user.school_id, req.params.runId);
+    res.json({ success: true, data: run });
+  } catch (err) { next(err); }
+}
+
+async function publishTimetableRun(req, res, next) {
+  try {
+    const run = await timetableGenerator.publish(req.user.school_id, req.params.runId);
+    res.json({ success: true, data: run, message: 'Timetable published' });
+  } catch (err) { next(err); }
+}
+
 // Exams
 async function listExams(req, res, next) {
   try {
@@ -204,6 +247,12 @@ module.exports = {
   listTimetable,
   createTimetableEntry,
   deleteTimetableEntry,
+    generateTimetable,
+    getTimetablePlan,
+    saveTimetablePlan,
+  listTimetableRuns,
+  getTimetableRun,
+  publishTimetableRun,
   listExams,
   createExam,
   deleteExam,

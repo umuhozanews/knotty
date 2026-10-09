@@ -1,4 +1,7 @@
 require('dotenv').config();
+if (process.env.NODE_ENV === 'production') {
+  throw new Error('The demo seed contains public sample accounts and records; it cannot run in production.');
+}
 const { Pool } = require('pg');
 const { PrismaPg } = require('@prisma/adapter-pg');
 const { PrismaClient } = require('@prisma/client');

@@ -31,6 +31,12 @@ router.delete('/enrollments/:enrollmentId', authorize('ADMIN'), ctrl.unenroll);
 
 // Timetable
 router.get('/timetable', authorize('ADMIN', 'TEACHER', 'STUDENT', 'PARENT'), ctrl.listTimetable);
+router.get('/timetable/plan/:termId', authorize('ADMIN'), ctrl.getTimetablePlan);
+router.put('/timetable/plan/:termId', authorize('ADMIN'), ctrl.saveTimetablePlan);
+router.post('/timetable/generate', authorize('ADMIN'), ctrl.generateTimetable);
+router.get('/timetable/runs', authorize('ADMIN'), ctrl.listTimetableRuns);
+router.get('/timetable/runs/:runId', authorize('ADMIN'), ctrl.getTimetableRun);
+router.post('/timetable/runs/:runId/publish', authorize('ADMIN'), ctrl.publishTimetableRun);
 router.post('/timetable', authorize('ADMIN'), ctrl.createTimetableEntry);
 router.delete('/timetable/:id', authorize('ADMIN'), ctrl.deleteTimetableEntry);
 

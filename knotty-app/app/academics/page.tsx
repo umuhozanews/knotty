@@ -2,13 +2,14 @@
 import { useEffect, useState } from "react";
 import { Loader2, Plus, Calendar, Clock, BookOpen, Users, Check, Trash2, Edit, CheckCircle, AlertCircle, FileText, UserCheck, Settings } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
-import { academics, structure, students, StudentBase, ClassSection, TimetableEntry, Exam, AcademicTerm, Program, ExamResult, GradingScale } from "@/lib/api";
+import { academics, structure, students, StudentBase, ClassSection, TimetableEntry, Exam, AcademicTerm, Program, ExamResult, GradingScale, ScheduleRun } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { isManagementRole } from "@/lib/roles";
 
 export default function AcademicsPage() {
   const { user, loading: authLoading } = useAuth();
   const role = user?.role ?? "STUDENT";
-  const isAdmin = role === "ADMIN";
+  const isAdmin = isManagementRole(role);
   const isTeacher = role === "TEACHER";
   const isStaff = isAdmin || isTeacher;
 
@@ -49,6 +50,13 @@ export default function AcademicsPage() {
   const [examResults, setExamResults] = useState<ExamResult[]>([]);
   const [recordScores, setRecordScores] = useState<Record<string, string>>({});
   const [savingResults, setSavingResults] = useState(false);
+  const [generatorTerm, setGeneratorTerm] = useState("");
+  const [generatorRequirements, setGeneratorRequirements] = useState<Array<{ class_section_id: string; subject_id: string; staff_id: string; periods_per_week: string; category: "PRINCIPAL" | "SUBSIDIARY"; is_science: boolean; room: string }>>([]);
+  const [scheduleDraft, setScheduleDraft] = useState<ScheduleRun | null>(null);
+  const [generatingSchedule, setGeneratingSchedule] = useState(false);
+  const [savingSchedulePlan, setSavingSchedulePlan] = useState(false);
+  const [publishingSchedule, setPublishingSchedule] = useState(false);
+  const [generatorError, setGeneratorError] = useState("");
 
   // Form fields
   const [termForm, setTermForm] = useState({ name: "", start_date: "", end_date: "" });
@@ -91,14 +99,22 @@ export default function AcademicsPage() {
           setTeachersList(staffRes.data.filter((s: any) => s.role === "TEACHER" || s.role === "ADMIN"));
         }
       } else if (activeTab === "timetable") {
-        const [rS, rSect, rSub] = await Promise.all([
+        const [rS, rSect, rSub, rTerms] = await Promise.all([
           academics.timetable(),
           academics.sections(),
           academics.subjects(),
+          academics.terms(),
         ]);
         setTimetable(rS.data);
         setSections(rSect.data);
         setSubjects(rSub.data);
+        setTerms(rTerms.data);
+        const selectedTerm = generatorTerm || rTerms.data[0]?.id || "";
+        if (!generatorTerm && selectedTerm) setGeneratorTerm(selectedTerm);
+        if (selectedTerm && isAdmin) {
+          const plan = await academics.timetablePlan(selectedTerm).catch(() => ({ data: { items: [] } }));
+          setGeneratorRequirements(plan.data.items.map((item) => ({ ...item, periods_per_week: String(item.periods_per_week), category: item.category, is_science: item.is_science, room: item.room || "" })));
+        }
         if (isStaff) {
           const rT = await structure.staff().catch(() => ({ data: [] }));
           setTeachersList(rT.data.filter((s: any) => s.role === "TEACHER" || s.role === "ADMIN"));
@@ -168,6 +184,59 @@ export default function AcademicsPage() {
       setShowTimetableModal(false);
       loadData();
     } catch (err) { alert(err instanceof Error ? err.message : "Error"); }
+  }
+
+  async function handleGenerateSchedule() {
+    setGeneratorError("");
+    if (!generatorTerm || !generatorRequirements.length || generatorRequirements.some((r) => !r.class_section_id || !r.subject_id || !r.staff_id)) {
+      setGeneratorError("Choose a term and complete each class, subject, and teacher assignment.");
+      return;
+    }
+    setGeneratingSchedule(true);
+    try {
+      await academics.saveTimetablePlan(generatorTerm, generatorRequirements.map((r) => ({ ...r, periods_per_week: Number(r.periods_per_week) })));
+      const result = await academics.generateTimetable({
+        academic_term_id: generatorTerm,
+      });
+      setScheduleDraft(result.data);
+    } catch (err) { setGeneratorError(err instanceof Error ? err.message : "Could not generate the timetable."); }
+    finally { setGeneratingSchedule(false); }
+  }
+
+  async function handleSaveSchedulePlan() {
+    if (!generatorTerm || generatorRequirements.some((r) => !r.class_section_id || !r.subject_id || !r.staff_id)) {
+      setGeneratorError("Choose a term and complete each class, subject, and teacher assignment before saving.");
+      return;
+    }
+    setSavingSchedulePlan(true);
+    setGeneratorError("");
+    try {
+      await academics.saveTimetablePlan(generatorTerm, generatorRequirements.map((r) => ({ ...r, periods_per_week: Number(r.periods_per_week) })));
+    } catch (err) { setGeneratorError(err instanceof Error ? err.message : "Could not save the class plan."); }
+    finally { setSavingSchedulePlan(false); }
+  }
+
+  async function handleGeneratorTermChange(termId: string) {
+    setGeneratorTerm(termId);
+    setGeneratorError("");
+    setScheduleDraft(null);
+    if (!termId) { setGeneratorRequirements([]); return; }
+    try {
+      const plan = await academics.timetablePlan(termId);
+      setGeneratorRequirements(plan.data.items.map((item) => ({ ...item, periods_per_week: String(item.periods_per_week), room: item.room || "" })));
+    } catch (err) { setGeneratorRequirements([]); setGeneratorError(err instanceof Error ? err.message : "Could not load the saved class plan."); }
+  }
+
+  async function handlePublishSchedule() {
+    if (!scheduleDraft || !confirm("Publish this timetable? This replaces existing timetable entries for every class included in this draft.")) return;
+    setPublishingSchedule(true);
+    setGeneratorError("");
+    try {
+      await academics.publishTimetableRun(scheduleDraft.id);
+      setScheduleDraft(null);
+      await loadData();
+    } catch (err) { setGeneratorError(err instanceof Error ? err.message : "Could not publish this timetable."); }
+    finally { setPublishingSchedule(false); }
   }
 
   async function handleCreateExam(e: React.FormEvent) {
@@ -538,6 +607,43 @@ export default function AcademicsPage() {
                       Live Now classes are highlighted
                     </div>
                   </div>
+
+                  {isAdmin && <section className="rounded-2xl border border-indigo-100 bg-white p-5 space-y-5">
+                    <div>
+                      <h4 className="font-bold text-gray-900">Class curriculum and teacher assignments</h4>
+                      <p className="mt-1 text-sm text-gray-600">Enter each class’s subjects, weekly periods, and assigned teacher. Save the plan, then generate all included classes together.</p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <label className="text-sm font-semibold text-gray-700">Academic term
+                        <select value={generatorTerm} onChange={(e) => handleGeneratorTermChange(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 bg-white p-2.5 text-gray-900">
+                          <option value="">Choose term</option>{terms.map((term) => <option key={term.id} value={term.id}>{term.name}</option>)}
+                        </select>
+                      </label>
+                      <p className="self-end rounded-lg bg-indigo-50 p-3 text-sm font-semibold leading-6 text-indigo-950">Mon–Fri · 08:00–17:00 · 11 × 40-minute lessons/day · 20-minute breaks × 2 · 60-minute lunch · max 9 lessons per teacher/day</p>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2"><div><h5 className="font-semibold text-gray-800">Class subjects and teachers</h5><p className="text-xs text-gray-600">Principal subjects are fixed at 9 periods/week. Subsidiary subjects fill each class to 55 periods/week.</p></div><button type="button" onClick={() => setGeneratorRequirements([...generatorRequirements, { class_section_id: "", subject_id: "", staff_id: "", periods_per_week: "9", category: "PRINCIPAL", is_science: false, room: "" }])} className="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-800">+ Add class subject</button></div>
+                      {generatorRequirements.map((row, index) => <div key={index} className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-2 rounded-xl bg-gray-50 p-3">
+                        <select aria-label="Class" value={row.class_section_id} onChange={(e) => setGeneratorRequirements(generatorRequirements.map((r, i) => i === index ? { ...r, class_section_id: e.target.value } : r))} className="rounded-lg border border-gray-300 bg-white p-2.5 text-sm text-gray-900"><option value="">Choose class</option>{sections.filter((s) => !generatorTerm || s.academic_term_id === generatorTerm).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+                        <select aria-label="Subject" value={row.subject_id} onChange={(e) => setGeneratorRequirements(generatorRequirements.map((r, i) => i === index ? { ...r, subject_id: e.target.value } : r))} className="rounded-lg border border-gray-300 bg-white p-2.5 text-sm text-gray-900"><option value="">Choose subject</option>{subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+                        <select aria-label="Teacher" value={row.staff_id} onChange={(e) => setGeneratorRequirements(generatorRequirements.map((r, i) => i === index ? { ...r, staff_id: e.target.value } : r))} className="rounded-lg border border-gray-300 bg-white p-2.5 text-sm text-gray-900"><option value="">Choose teacher</option>{teachersList.filter((t) => t.role === "TEACHER").map((t) => <option key={t.id} value={t.id}>{t.first_name} {t.last_name}</option>)}</select>
+                        <select aria-label="Subject category" value={row.category} onChange={(e) => setGeneratorRequirements(generatorRequirements.map((r, i) => i === index ? { ...r, category: e.target.value as "PRINCIPAL" | "SUBSIDIARY", periods_per_week: e.target.value === "PRINCIPAL" ? "9" : r.category === "PRINCIPAL" ? "1" : r.periods_per_week } : r))} className="rounded-lg border border-gray-300 bg-white p-2.5 text-sm text-gray-900"><option value="PRINCIPAL">Principal (9/week)</option><option value="SUBSIDIARY">Subsidiary</option></select>
+                        <input aria-label="Lessons per week" type="number" min="1" max="55" disabled={row.category === "PRINCIPAL"} value={row.periods_per_week} onChange={(e) => setGeneratorRequirements(generatorRequirements.map((r, i) => i === index ? { ...r, periods_per_week: e.target.value } : r))} className="rounded-lg border border-gray-300 bg-white p-2.5 text-sm text-gray-900 disabled:bg-gray-100" placeholder="Lessons/week" />
+                        <div className="flex items-center justify-between gap-2 rounded-lg border border-gray-300 bg-white px-3"><label className="flex items-center gap-2 text-sm font-medium text-gray-800"><input type="checkbox" checked={row.is_science} onChange={(e) => setGeneratorRequirements(generatorRequirements.map((r, i) => i === index ? { ...r, is_science: e.target.checked } : r))} />Science (no final 2 periods)</label>{generatorRequirements.length > 1 && <button type="button" aria-label="Remove subject" onClick={() => setGeneratorRequirements(generatorRequirements.filter((_, i) => i !== index))} className="px-1 text-lg font-bold text-red-700">×</button>}</div>
+                      </div>)}
+                    </div>
+                    {generatorRequirements.length > 0 && <div className="flex flex-wrap gap-2">{Array.from(new Set(generatorRequirements.map((row) => row.class_section_id).filter(Boolean))).map((classId) => {
+                      const group = generatorRequirements.filter((row) => row.class_section_id === classId); const total = group.reduce((sum, row) => sum + (Number(row.periods_per_week) || 0), 0); const className = sections.find((s) => s.id === classId)?.name || "Class";
+                      return <span key={classId} className={`rounded-lg px-3 py-2 text-sm font-semibold ${total === 55 ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-950"}`}>{className}: {total}/55 periods</span>;
+                    })}</div>}
+                    {generatorError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm font-medium text-red-800">{generatorError}</p>}
+                    <div className="flex flex-wrap gap-3"><button type="button" disabled={savingSchedulePlan || generatingSchedule} onClick={handleSaveSchedulePlan} className="rounded-xl border border-indigo-700 px-4 py-3 text-sm font-bold text-indigo-800 hover:bg-indigo-50 disabled:opacity-60">{savingSchedulePlan ? "Saving plan…" : "Save class plan"}</button><button type="button" disabled={generatingSchedule || savingSchedulePlan || !generatorRequirements.length} onClick={handleGenerateSchedule} className="inline-flex items-center gap-2 rounded-xl bg-indigo-700 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-800 disabled:opacity-60">{generatingSchedule && <Loader2 size={16} className="animate-spin" />}{generatingSchedule ? "Generating all classes…" : "Generate timetable draft"}</button></div>
+                    {scheduleDraft && <div className="space-y-3 rounded-xl border border-gray-200 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="font-bold text-gray-900">{scheduleDraft.status === "DRAFT" ? "Draft ready to review" : "No complete schedule found"}</p><p className="text-sm text-gray-700">{scheduleDraft.diagnostics?.placed_lessons ?? scheduleDraft.entries.length} of {scheduleDraft.diagnostics?.requested_lessons ?? scheduleDraft.entries.length} lessons placed</p></div>{scheduleDraft.status === "DRAFT" && <button type="button" disabled={publishingSchedule} onClick={handlePublishSchedule} className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-800 disabled:opacity-60">{publishingSchedule ? "Publishing…" : "Publish reviewed draft"}</button>}</div>
+                      <div className="max-h-80 overflow-auto rounded-lg border border-gray-200"><table className="w-full text-left text-sm"><thead className="sticky top-0 bg-gray-100 text-gray-800"><tr><th className="p-2">Day</th><th className="p-2">Time</th><th className="p-2">Class · subject</th><th className="p-2">Teacher</th><th className="p-2">Room</th></tr></thead><tbody>{scheduleDraft.entries.map((entry) => <tr key={entry.id} className="border-t border-gray-200 text-gray-800"><td className="p-2">{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][entry.day_of_week - 1]}</td><td className="p-2">{entry.start_time}–{entry.end_time}</td><td className="p-2">{entry.class_section?.name} · {entry.subject?.name}</td><td className="p-2">{entry.teacher?.first_name} {entry.teacher?.last_name}</td><td className="p-2">{entry.room || "—"}</td></tr>)}</tbody></table></div>
+                      {scheduleDraft.diagnostics?.unplaced?.length ? <p className="text-sm font-medium text-amber-800">Some requested lessons could not be placed. Adjust periods, teachers, rooms, or teaching loads and generate again.</p> : null}
+                    </div>}
+                  </section>}
 
                   {/* Day Headers (Active solid, Inactive ghost-like) */}
                   <div className="grid grid-cols-7 gap-2">

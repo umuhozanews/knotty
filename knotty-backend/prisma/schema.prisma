@@ -19,6 +19,64 @@ enum Role {
   LIBRARIAN
 }
 
+enum MembershipRole {
+  PLATFORM_ADMIN
+  ORGANIZATION_MANAGER
+  SCHOOL_MANAGER
+  ADMIN
+  TEACHER
+  STUDENT
+  PARENT
+  CANTEEN
+  NURSE
+  BURSAR
+  DISCIPLINE
+  LIBRARIAN
+}
+
+enum MembershipStatus {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+enum PaymentProvider {
+  MTN_MOMO
+  AIRTEL_MONEY
+  BANK
+  CASH
+}
+
+enum ExternalPaymentStatus {
+  CREATED
+  PENDING
+  SUCCEEDED
+  FAILED
+  REVERSED
+  RECONCILIATION_REQUIRED
+}
+
+enum FiscalDocumentStatus {
+  DRAFT
+  QUEUED
+  ACCEPTED
+  REJECTED
+  VOIDED
+}
+
+enum FiscalIntegrationMode {
+  NONE
+  VSDC
+  OSDC
+}
+
+enum ScheduleRunStatus {
+  DRAFT
+  INFEASIBLE
+  PUBLISHED
+  SUPERSEDED
+}
+
 enum SubscriptionPlan {
   BASIC
   PREMIUM
@@ -132,8 +190,12 @@ model School {
   school_start_time     String           @default("08:30")
   created_at            DateTime         @default(now())
   updated_at            DateTime         @updatedAt
+  organization_id       String?
+  branch_code           String?
 
   users          User[]
+  memberships    SchoolMembership[]
+  organization   Organization? @relation(fields: [organization_id], references: [id])
   students       Student[]
   cards          KnottyCard[]
   levels         Level[]
@@ -183,6 +245,13 @@ model School {
   invoices              Invoice[]
   payments              Payment[]
   refund_requests       RefundRequest[]
+  external_payments     ExternalPayment[]
+  privacy_requests      PrivacyRequest[]
+  fiscal_documents     FiscalDocument[]
+  payment_integrations PaymentIntegration[]
+  tax_profile          TaxpayerProfile?
+  schedule_runs        ScheduleRun[]
+  timetable_plans      TimetablePlan[]
 }
 
 model User {
@@ -201,6 +270,12 @@ model User {
   updated_at    DateTime  @updatedAt
 
   school     School   @relation(fields: [school_id], references: [id])
+  memberships SchoolMembership[]
+  organization_memberships OrganizationMembership[]
+  platform_membership PlatformMembership?
+  generated_schedule_runs ScheduleRun[]
+  edited_timetable_plans TimetablePlan[]
+  timetable_draft_assignments ScheduleRunEntry[] @relation("ScheduleDraftTeacher")
   student    Student? @relation("StudentUser")
   parent_of  Student[] @relation("StudentParent")
   teacher    Teacher?
@@ -232,6 +307,56 @@ model User {
   @@index([school_id])
   @@index([email])
   @@index([school_id, role, is_active])
+}
+
+model Organization {
+  id         String   @id @default(uuid())
+  name       String
+  slug       String   @unique
+  legal_name String?
+  tin        String?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  schools    School[]
+  memberships OrganizationMembership[]
+}
+
+model OrganizationMembership {
+  id              String           @id @default(uuid())
+  organization_id String
+  user_id         String
+  role            MembershipRole
+  status          MembershipStatus @default(ACTIVE)
+  created_at      DateTime         @default(now())
+  updated_at      DateTime         @updatedAt
+  organization    Organization     @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  user            User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  @@unique([organization_id, user_id])
+  @@index([user_id, status])
+}
+
+model PlatformMembership {
+  id         String           @id @default(uuid())
+  user_id    String           @unique
+  role       MembershipRole   @default(PLATFORM_ADMIN)
+  status     MembershipStatus @default(ACTIVE)
+  created_at DateTime         @default(now())
+  updated_at DateTime         @updatedAt
+  user       User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model SchoolMembership {
+  id         String           @id @default(uuid())
+  user_id    String
+  school_id  String
+  role       MembershipRole
+  status     MembershipStatus @default(ACTIVE)
+  created_at DateTime         @default(now())
+  updated_at DateTime         @updatedAt
+  user       User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  school     School           @relation(fields: [school_id], references: [id], onDelete: Cascade)
+  @@unique([user_id, school_id])
+  @@index([school_id, status, role])
 }
 
 model Student {
@@ -539,6 +664,7 @@ model Subject {
 
   // New relationships added for alignment
   timetable_entries TimetableEntry[]
+  schedule_draft_entries ScheduleRunEntry[]
   exams             Exam[]
 
   @@index([school_id])
@@ -939,6 +1065,8 @@ model AcademicTerm {
   school         School         @relation(fields: [school_id], references: [id])
   class_sections ClassSection[]
   exams          Exam[]
+  schedule_runs  ScheduleRun[]
+  timetable_plans TimetablePlan[]
 
   @@index([school_id])
 }
@@ -974,6 +1102,7 @@ model ClassSection {
   homeroom_teacher  User?            @relation("HomeroomTeacher", fields: [homeroom_staff_id], references: [id])
   enrollments       Enrollment[]
   timetable_entries TimetableEntry[]
+  timetable_draft_entries ScheduleRunEntry[]
 
   @@index([school_id])
   @@index([program_id])
@@ -1010,14 +1139,68 @@ model TimetableEntry {
   room             String?
   created_at       DateTime @default(now())
   updated_at       DateTime @updatedAt
+  schedule_run_id  String?
 
   school        School       @relation(fields: [school_id], references: [id])
   class_section ClassSection @relation(fields: [class_section_id], references: [id])
   subject       Subject      @relation(fields: [subject_id], references: [id])
   teacher       User         @relation("TimetableTeacher", fields: [staff_id], references: [id])
+  schedule_run  ScheduleRun? @relation("PublishedScheduleEntries", fields: [schedule_run_id], references: [id], onDelete: SetNull)
 
   @@index([school_id])
   @@index([class_section_id])
+}
+
+model ScheduleRun {
+  id               String           @id @default(uuid())
+  school_id        String
+  academic_term_id String
+  generated_by     String
+  status           ScheduleRunStatus @default(DRAFT)
+  config           Json
+  diagnostics      Json?
+  score            Int?
+  created_at       DateTime         @default(now())
+  published_at     DateTime?
+  school           School           @relation(fields: [school_id], references: [id])
+  term             AcademicTerm     @relation(fields: [academic_term_id], references: [id])
+  generator        User             @relation(fields: [generated_by], references: [id])
+  entries          ScheduleRunEntry[]
+  published_entries TimetableEntry[] @relation("PublishedScheduleEntries")
+  @@index([school_id, academic_term_id, status, created_at])
+}
+
+model ScheduleRunEntry {
+  id                String       @id @default(uuid())
+  schedule_run_id   String
+  class_section_id  String
+  subject_id        String
+  staff_id          String
+  day_of_week       Int
+  start_time        String
+  end_time          String
+  room              String?
+  requirement_index Int
+  created_at        DateTime     @default(now())
+  run               ScheduleRun  @relation(fields: [schedule_run_id], references: [id], onDelete: Cascade)
+  class_section     ClassSection @relation(fields: [class_section_id], references: [id])
+  subject           Subject      @relation(fields: [subject_id], references: [id])
+  teacher           User         @relation("ScheduleDraftTeacher", fields: [staff_id], references: [id])
+  @@index([schedule_run_id, day_of_week, start_time])
+  @@index([class_section_id])
+}
+
+model TimetablePlan {
+  id               String       @id @default(uuid())
+  school_id        String
+  academic_term_id String
+  items            Json
+  updated_by       String
+  updated_at       DateTime     @updatedAt
+  school           School       @relation(fields: [school_id], references: [id])
+  term             AcademicTerm @relation(fields: [academic_term_id], references: [id])
+  editor           User         @relation(fields: [updated_by], references: [id])
+  @@unique([school_id, academic_term_id])
 }
 
 model Exam {
@@ -1255,4 +1438,98 @@ model RefundRequest {
   approver           User?             @relation("RefundApprover", fields: [approved_by], references: [id])
 
   @@index([school_id])
+}
+
+// A durable provider-neutral payment record. Provider secrets live in a secret
+// manager, never in this table or client-visible school settings.
+model ExternalPayment {
+  id                String                @id @default(uuid())
+  school_id         String
+  provider          PaymentProvider
+  status            ExternalPaymentStatus @default(CREATED)
+  amount            Int
+  currency          String                @default("RWF")
+  merchant_reference String               @unique
+  provider_reference String?
+  idempotency_key   String
+  callback_hash     String?
+  metadata          Json?
+  created_at        DateTime              @default(now())
+  updated_at        DateTime              @updatedAt
+  school            School                @relation(fields: [school_id], references: [id])
+  @@unique([school_id, idempotency_key])
+  @@index([school_id, status, created_at])
+  @@index([provider, provider_reference])
+}
+
+model PrivacyRequest {
+  id            String   @id @default(uuid())
+  school_id     String
+  subject_ref   String
+  request_type  String // ACCESS, RECTIFICATION, ERASURE, PORTABILITY, OBJECTION
+  status        String   @default("RECEIVED")
+  received_at   DateTime @default(now())
+  due_at        DateTime?
+  completed_at  DateTime?
+  notes         String?
+  school        School   @relation(fields: [school_id], references: [id])
+  @@index([school_id, status, received_at])
+}
+
+// Fiscal records are separated from wallet/invoice records so each taxpayer
+// can configure an approved RRA CIS/VSDC or OSDC integration independently.
+model FiscalDocument {
+  id                  String               @id @default(uuid())
+  school_id           String
+  source_reference    String
+  taxpayer_tin        String?
+  branch_code         String?
+  status              FiscalDocumentStatus @default(DRAFT)
+  invoice_number      String?
+  receipt_number      String?
+  receipt_signature   String?
+  internal_data       String?
+  request_payload     Json?
+  response_payload    Json?
+  last_error_code     String?
+  issued_at           DateTime?
+  submitted_at        DateTime?
+  accepted_at         DateTime?
+  created_at          DateTime             @default(now())
+  updated_at          DateTime             @updatedAt
+  school              School               @relation(fields: [school_id], references: [id])
+  @@unique([school_id, source_reference])
+  @@index([school_id, status, created_at])
+  @@index([taxpayer_tin, branch_code])
+}
+
+model PaymentIntegration {
+  id                    String          @id @default(uuid())
+  school_id             String
+  provider              PaymentProvider
+  environment           String          @default("sandbox")
+  merchant_account_ref  String?
+  credentials_secret_ref String
+  webhook_secret_ref    String?
+  enabled               Boolean         @default(false)
+  created_at            DateTime        @default(now())
+  updated_at            DateTime        @updatedAt
+  school                School          @relation(fields: [school_id], references: [id])
+  @@unique([school_id, provider])
+  @@index([provider, enabled])
+}
+
+model TaxpayerProfile {
+  id                    String              @id @default(uuid())
+  school_id             String              @unique
+  tin                   String?
+  branch_code           String?
+  integration_mode      FiscalIntegrationMode @default(NONE)
+  certification_ref     String?
+  credentials_secret_ref String?
+  enabled               Boolean             @default(false)
+  approved_at           DateTime?
+  created_at            DateTime            @default(now())
+  updated_at            DateTime            @updatedAt
+  school                School              @relation(fields: [school_id], references: [id])
 }

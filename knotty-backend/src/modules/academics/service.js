@@ -217,6 +217,8 @@ async function listTimetable(schoolId, { classSectionId, teacherId } = {}, user)
   if (teacherId) where.staff_id = teacherId;
 
   if (user && user.role === 'TEACHER') {
+    // Teacher accounts can only retrieve their own assigned periods.
+    where.staff_id = user.id;
     const sections = await prisma.classSection.findMany({
       where: {
         school_id: schoolId,
@@ -256,22 +258,45 @@ async function listTimetable(schoolId, { classSectionId, teacherId } = {}, user)
 }
 
 async function createTimetableEntry(schoolId, data) {
-  // Check conflicts
+  const day = Number(data.day_of_week);
+  const parseTime = (value) => {
+    const match = /^(?:([01]\d|2[0-3])):([0-5]\d)$/.exec(String(value || ''));
+    return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+  };
+  const start = parseTime(data.start_time);
+  const end = parseTime(data.end_time);
+  if (!Number.isInteger(day) || day < 1 || day > 7 || start === null || end === null || start >= end) {
+    throw Object.assign(new Error('A valid weekday and increasing 24-hour start/end times are required'), { status: 400 });
+  }
+
+  const [section, subject, teacherMembership] = await Promise.all([
+    prisma.classSection.findFirst({ where: { id: data.class_section_id, school_id: schoolId }, select: { id: true } }),
+    prisma.subject.findFirst({ where: { id: data.subject_id, school_id: schoolId }, select: { id: true } }),
+    prisma.schoolMembership.findFirst({
+      where: { user_id: data.staff_id, school_id: schoolId, role: 'TEACHER', status: 'ACTIVE' }, select: { id: true },
+    }),
+  ]);
+  if (!section || !subject || !teacherMembership) {
+    throw Object.assign(new Error('Class, subject, and active teacher must belong to this school'), { status: 400 });
+  }
+
+  // Check class, teacher, and room conflicts using strict interval overlap.
   const conflict = await prisma.timetableEntry.findFirst({
     where: {
       school_id: schoolId,
-      day_of_week: Number(data.day_of_week),
+      day_of_week: day,
       OR: [
         {
           class_section_id: data.class_section_id,
-          start_time: { lte: data.end_time },
-          end_time: { gte: data.start_time },
+          start_time: { lt: data.end_time },
+          end_time: { gt: data.start_time },
         },
         {
           staff_id: data.staff_id,
-          start_time: { lte: data.end_time },
-          end_time: { gte: data.start_time },
+          start_time: { lt: data.end_time },
+          end_time: { gt: data.start_time },
         },
+        ...(data.room ? [{ room: { equals: String(data.room).trim(), mode: 'insensitive' }, start_time: { lt: data.end_time }, end_time: { gt: data.start_time } }] : []),
       ],
     },
   });
@@ -286,7 +311,7 @@ async function createTimetableEntry(schoolId, data) {
       class_section_id: data.class_section_id,
       subject_id: data.subject_id,
       staff_id: data.staff_id,
-      day_of_week: Number(data.day_of_week),
+      day_of_week: day,
       start_time: data.start_time,
       end_time: data.end_time,
       room: data.room || null,

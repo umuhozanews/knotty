@@ -1,4 +1,4 @@
-import { DEMO_STUDENTS } from "./demo";
+import { DEMO_STUDENTS, isDemoMode } from "./demo";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, '') || "/api/v1";
 
@@ -368,6 +368,7 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           description: "Student arrived 20 minutes late without a valid reason.",
           action_taken: "Verbal warning and detention after school.",
           severity: "LOW",
+          marks_deducted: 2,
           status: "RESOLVED",
           parent_notified: true,
           recorded_at: new Date(Date.now() - 3600 * 1000 * 24).toISOString(),
@@ -515,6 +516,33 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
     return JSON.parse(val);
   };
   const saveDemoCanteenTransactions = (data: any[]) => setDemoStorage("ishuri_demo_canteen_transactions", JSON.stringify(data));
+
+  const getDemoCanteenProducts = (): any[] => {
+    const val = getDemoStorage("ishuri_demo_canteen_products");
+    if (!val) {
+      const initial = [
+        { id: "amandazi", name: "Amandazi", price: 200, category: "Snacks", emoji: "food", photo_url: "/canteen/amandazi.png", stock_qty: null, is_active: true },
+        { id: "sambusa", name: "Sambusa", price: 300, category: "Snacks", emoji: "food", photo_url: "/canteen/sambusa.png", stock_qty: null, is_active: true },
+        { id: "egg", name: "Boiled Egg", price: 200, category: "Snacks", emoji: "food", photo_url: "/canteen/egg.png", stock_qty: null, is_active: true },
+        { id: "chapati", name: "Chapati", price: 300, category: "Bread", emoji: "food", photo_url: "/canteen/chapati.png", stock_qty: null, is_active: true },
+        { id: "maria", name: "Maria Biscuit", price: 100, category: "Snacks", emoji: "food", photo_url: "/canteen/maria.png", stock_qty: null, is_active: true },
+        { id: "milk", name: "Inyange Milk", price: 600, category: "Drinks", emoji: "food", photo_url: "/canteen/milk.png", stock_qty: null, is_active: true },
+        { id: "inyange", name: "Inyange Juice", price: 700, category: "Drinks", emoji: "food", photo_url: "/canteen/inyange.png", stock_qty: null, is_active: true },
+        { id: "water", name: "Water 500ml", price: 300, category: "Drinks", emoji: "food", photo_url: "/canteen/water.png", stock_qty: null, is_active: true },
+        { id: "fanta", name: "Fanta Orange", price: 500, category: "Drinks", emoji: "food", photo_url: "/canteen/fanta.png", stock_qty: null, is_active: true },
+        { id: "porridge", name: "Porridge (Igikoma)", price: 300, category: "Drinks", emoji: "food", photo_url: "/canteen/porridge.png", stock_qty: null, is_active: true },
+        { id: "rice_beans", name: "Rice + Beans", price: 1000, category: "Meals", emoji: "food", photo_url: "/canteen/rice_beans.png", stock_qty: null, is_active: true },
+        { id: "rice_meat", name: "Rice + Meat", price: 1500, category: "Meals", photo_url: "/canteen/rice_meat.png", stock_qty: null, is_active: true },
+        { id: "avocado", name: "Fresh Avocado", price: 200, category: "Fruits", emoji: "food", photo_url: "/canteen/avocado.png", stock_qty: null, is_active: true },
+        { id: "banana", name: "Banana", price: 150, category: "Fruits", emoji: "food", photo_url: "/canteen/banana.png", stock_qty: null, is_active: true },
+        { id: "embe", name: "Mango", price: 300, category: "Fruits", emoji: "food", photo_url: "/canteen/embe.png", stock_qty: null, is_active: true },
+      ];
+      setDemoStorage("ishuri_demo_canteen_products", JSON.stringify(initial));
+      return initial;
+    }
+    return JSON.parse(val);
+  };
+  const saveDemoCanteenProducts = (data: any[]) => setDemoStorage("ishuri_demo_canteen_products", JSON.stringify(data));
 
   const getDemoFeeStructures = (): any[] => {
     const val = getDemoStorage("ishuri_demo_fee_structures");
@@ -854,8 +882,36 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
         return { success: true, data: [] } as unknown as T;
       }
       if (path.includes("/full-profile")) {
-        const student = studentsList.find((s: any) => s.id === studentId);
-        return { success: true, data: { ...student, parent: null, attendances: [], reports: [], health: [], discipline: [], achievements: [] } } as unknown as T;
+        let student = studentsList.find((s: any) => s.id === studentId || s.student_code === studentId);
+        if (!student && studentsList.length > 0) {
+          const idx = parseInt(studentId, 10);
+          if (!isNaN(idx) && idx > 0 && idx <= studentsList.length) {
+            student = studentsList[idx - 1];
+          }
+        }
+        if (!student) {
+          return { success: false, message: "Student not found" } as unknown as T;
+        }
+        const studentDiscipline = getDemoDiscipline()
+          .filter((d: any) => d.student_id === student.id)
+          .map((d: any) => ({
+            ...d,
+            marks_deducted: d.marks_deducted !== undefined ? Number(d.marks_deducted) : (d.severity === "SERIOUS" ? 5 : d.severity === "MODERATE" ? 3 : 1)
+          }));
+        return {
+          success: true,
+          data: {
+            ...student,
+            user: student.user || { first_name: "Student", last_name: student.student_code || studentId, email: "" },
+            parent: student.parent || null,
+            attendances: student.attendances || [],
+            reports: student.reports || [],
+            health: student.health || [],
+            discipline: studentDiscipline,
+            achievements: student.achievements || [],
+            card: student.card || null
+          }
+        } as unknown as T;
       }
 
       const studentIndex = studentsList.findIndex((s: any) => s.id === studentId);
@@ -1013,6 +1069,51 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
   }
 
   // Canteen dynamic handlers
+  if (path.startsWith("/canteen/products")) {
+    let prods = getDemoCanteenProducts();
+    const parts = path.split("?")[0].split("/");
+    const prodId = parts[3];
+
+    if (method === "GET") {
+      return { success: true, data: prods } as unknown as T;
+    }
+
+    if (method === "POST") {
+      const newP = {
+        id: "prod-" + Date.now(),
+        name: body.name,
+        price: Number(body.price),
+        category: body.category || "Snacks",
+        emoji: body.emoji || "food",
+        photo_url: body.photo_url || null,
+        stock_qty: body.stock_qty !== undefined && body.stock_qty !== null ? Number(body.stock_qty) : null,
+        is_active: true,
+      };
+      prods.push(newP);
+      saveDemoCanteenProducts(prods);
+      return { success: true, data: newP } as unknown as T;
+    }
+
+    if (method === "DELETE" && prodId) {
+      prods = prods.filter((p: any) => p.id !== prodId);
+      saveDemoCanteenProducts(prods);
+      return { success: true } as unknown as T;
+    }
+
+    if (method === "PATCH" && prodId) {
+      const idx = prods.findIndex((p: any) => p.id === prodId);
+      if (idx > -1) {
+        if (path.includes("/restock")) {
+          prods[idx].stock_qty = (prods[idx].stock_qty || 0) + Number(body.quantity || 0);
+        } else {
+          Object.assign(prods[idx], body);
+        }
+        saveDemoCanteenProducts(prods);
+        return { success: true, data: prods[idx] } as unknown as T;
+      }
+    }
+  }
+
   if (path.startsWith("/canteen/report")) {
     const txs = getDemoCanteenTransactions();
     const total = txs.reduce((sum: number, t: any) => sum + t.total_amount, 0);
@@ -1353,13 +1454,21 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
 
   // Discipline dynamic handlers
   if (path.startsWith("/discipline/school")) {
-    const list = getDemoDiscipline();
+    const list = getDemoDiscipline().map((d: any) => ({
+      ...d,
+      marks_deducted: d.marks_deducted !== undefined ? Number(d.marks_deducted) : (d.severity === "SERIOUS" ? 5 : d.severity === "MODERATE" ? 3 : 1)
+    }));
     return { success: true, data: list, pagination: { total: list.length, page: 1, limit: 100, pages: 1 } } as unknown as T;
   }
 
   if (path.startsWith("/discipline/student/")) {
     const studentId = path.split("/")[3].split("?")[0];
-    const list = getDemoDiscipline().filter((d: any) => d.student_id === studentId);
+    const list = getDemoDiscipline()
+      .filter((d: any) => d.student_id === studentId)
+      .map((d: any) => ({
+        ...d,
+        marks_deducted: d.marks_deducted !== undefined ? Number(d.marks_deducted) : (d.severity === "SERIOUS" ? 5 : d.severity === "MODERATE" ? 3 : 1)
+      }));
     return { success: true, data: list, pagination: { total: list.length, page: 1, limit: 100, pages: 1 } } as unknown as T;
   }
 
@@ -1371,19 +1480,23 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
     if (method === "POST") {
       const students = getStudents();
       const std = students.find((s: any) => s.id === body.student_id) || students[0];
+      const marksDeducted = body.marks_deducted !== undefined && body.marks_deducted !== null
+        ? Number(body.marks_deducted)
+        : (body.severity === "SERIOUS" ? 5 : body.severity === "MODERATE" ? 3 : 1);
       const newRec = {
         id: "disp-" + Date.now(),
         type: body.type,
         title: body.title,
         description: body.description || null,
         action_taken: body.action_taken || null,
-        severity: body.severity || "LOW",
+        severity: body.severity || "MINOR",
+        marks_deducted: marksDeducted,
         status: "PENDING",
         parent_notified: false,
         recorded_at: new Date().toISOString(),
         created_at: new Date().toISOString(),
-        student: { user: { first_name: std.user.first_name, last_name: std.user.last_name } },
-        student_id: std.id,
+        student: { id: std?.id, user: { first_name: std?.user?.first_name ?? "Student", last_name: std?.user?.last_name ?? "" } },
+        student_id: std?.id,
         recorder: { first_name: "Rugamba", last_name: "Victor", role: "DISCIPLINE" }
       };
       list.unshift(newRec);
@@ -3341,6 +3454,12 @@ export const canteen = {
   listProducts: () =>
     request<{ success: boolean; data: CanteenProduct[] }>("/canteen/products"),
   createProduct: async (data: { name: string; price: number; category?: string; emoji?: string; photo?: File | null; photo_url?: string; stock_qty?: number | null }): Promise<{ success: boolean; data: CanteenProduct }> => {
+    if (isDemoMode() || !BASE) {
+      return request<{ success: boolean; data: CanteenProduct }>("/canteen/products", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    }
     const token = getToken();
     const form = new FormData();
     form.append("name", data.name);
@@ -3352,14 +3471,21 @@ export const canteen = {
     if (data.stock_qty !== undefined && data.stock_qty !== null) {
       form.append("stock_qty", String(data.stock_qty));
     }
-    const res = await fetch(`${BASE}/canteen/products`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body: form,
-    });
-    const json = await safeJson(res) as { success: boolean; data: CanteenProduct };
-    if (!res.ok) throw new Error((json as any).message || "Failed to create product");
-    return json;
+    try {
+      const res = await fetch(`${BASE}/canteen/products`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      const json = await safeJson(res) as { success: boolean; data: CanteenProduct };
+      if (!res.ok) throw new Error((json as any).message || "Failed to create product");
+      return json;
+    } catch {
+      return request<{ success: boolean; data: CanteenProduct }>("/canteen/products", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    }
   },
   updateProduct: (id: string, data: Partial<CanteenProduct>) =>
     request<{ success: boolean; data: CanteenProduct }>(`/canteen/products/${id}`, {

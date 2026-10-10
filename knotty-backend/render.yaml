@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: ishurihub-backend
+    env: node
+    plan: starter
+    region: frankfurt
+    buildCommand: npm install && npx prisma generate
+    startCommand: node src/app.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NO_REDIS
+        value: "true"
+      - key: PORT
+        value: "10000"

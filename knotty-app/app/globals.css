@@ -8,10 +8,10 @@
   --font-sans: 'Plus Jakarta Sans', sans-serif;
 
   /* Brand colors */
-  --color-brand:        #FF7A22;
-  --color-brand-light:  #FFF3EC;
-  --color-brand-dark:   #E06615;
-  --color-gold:         #FFB800;
+  --color-brand:        #C2410C;
+  --color-brand-light:  #FFF7ED;
+  --color-brand-dark:   #9A3412;
+  --color-gold:         #B45309;
 
   /* Standardised corner radii */
   --radius-sm:  4px;
@@ -24,45 +24,92 @@
 
 /* ── Design tokens ───────────────────────────────── */
 :root {
-  --bg:             #F5F5F5;
+  color-scheme: light;
+  --bg:             #F7F7F8;
   --card:           #ffffff;
-  --border:         #e5e5e5;
-  --text-primary:   #121212;
-  --text-secondary: #666666;
-  --text-muted:     #999999;
-  --accent:         #FF7A22;
-  --accent-light:   #FFF3EC;
-  --gold:           #FFB800;
+  --border:         #D6D3D1;
+  --text-primary:   #1C1917;
+  --text-secondary: #57534E;
+  --text-muted:     #78716C;
+  --accent:         #C2410C;
+  --accent-light:   #FFF7ED;
+  --gold:           #B45309;
+}
+
+.dark {
+  color-scheme: dark;
+  --bg:             #111315;
+  --card:           #1B1E21;
+  --border:         #383D42;
+  --text-primary:   #F5F5F4;
+  --text-secondary: #D6D3D1;
+  --text-muted:     #A8A29E;
+  --accent:         #FB923C;
+  --accent-light:   #431B0B;
+  --gold:           #FBBF24;
+  --color-brand:        #FB923C;
+  --color-brand-light:  #431B0B;
+  --color-brand-dark:   #FDBA74;
+  --color-gold:         #FBBF24;
+}
+
+:root { --text-readable: #44403C; --text-subtle: #57534E; }
+.dark { --text-readable: #F5F5F4; --text-subtle: #D6D3D1; }
+:root {
+  --surface-muted: #F1F0EF;
+  --severity-minor-bg: #FEF3C7;
+  --severity-minor-text: #713F12;
+  --severity-moderate-bg: #FFEDD5;
+  --severity-moderate-text: #9A3412;
+  --severity-serious-bg: #FEE2E2;
+  --severity-serious-text: #991B1B;
+}
+.dark {
+  --surface-muted: #272A2E;
+  --severity-minor-bg: #422006;
+  --severity-minor-text: #FDE68A;
+  --severity-moderate-bg: #431B0B;
+  --severity-moderate-text: #FDBA74;
+  --severity-serious-bg: #450A0A;
+  --severity-serious-text: #FCA5A5;
 }
 
 /* ── Base ────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 
 html, body {
-  background-color: #F5F5F5 !important;
-  color:            #121212 !important;
+  background-color: var(--bg) !important;
+  color:            var(--text-primary) !important;
   font-family:      'Plus Jakarta Sans', sans-serif !important;
 }
 
+.dark body { background-color: var(--bg) !important; color: var(--text-primary) !important; }
+
 /* ── Brand accent — remap blue to orange throughout ─ */
-.bg-blue-50   { background-color: #FFF3EC !important; }
-.bg-blue-100  { background-color: #FFE4CC !important; }
-.bg-blue-400  { background-color: #FF7A22 !important; }
-.bg-blue-500  { background-color: #FF7A22 !important; }
-.bg-blue-600  { background-color: #FF7A22 !important; }
-.bg-blue-700  { background-color: #E06615 !important; }
-.text-blue-400 { color: #FF7A22 !important; }
-.text-blue-500 { color: #FF7A22 !important; }
-.text-blue-600 { color: #FF7A22 !important; }
-.text-blue-700 { color: #E06615 !important; }
-.border-blue-500 { border-color: #FF7A22 !important; }
-.border-blue-600 { border-color: #FF7A22 !important; }
-.ring-blue-500   { --tw-ring-color: #FF7A22 !important; }
-.hover\:bg-blue-50:hover  { background-color: #FFF3EC !important; }
-.hover\:bg-blue-600:hover { background-color: #E06615 !important; }
-.focus\:ring-blue-500:focus { --tw-ring-color: #FF7A22 !important; }
-.from-blue-400  { --tw-gradient-from: #FF7A22 !important; }
-.to-blue-600    { --tw-gradient-to:   #E06615 !important; }
+.bg-blue-50   { background-color: var(--accent-light) !important; }
+.bg-blue-100  { background-color: color-mix(in srgb, var(--accent) 18%, var(--card)) !important; }
+.bg-blue-400, .bg-blue-500, .bg-blue-600 { background-color: var(--accent) !important; }
+.bg-blue-700  { background-color: var(--color-brand-dark) !important; }
+.text-blue-400, .text-blue-500, .text-blue-600 { color: var(--accent) !important; }
+.text-blue-700 { color: var(--color-brand-dark) !important; }
+.border-blue-500, .border-blue-600 { border-color: var(--accent) !important; }
+.ring-blue-500 { --tw-ring-color: var(--accent) !important; }
+.from-blue-400 { --tw-gradient-from: var(--accent) !important; }
+.to-blue-600 { --tw-gradient-to: var(--color-brand-dark) !important; }
+
+/* Keep the existing orange utility classes in the same accessible brand palette. */
+.bg-orange-50 { background-color: var(--accent-light) !important; }
+.bg-orange-100 { background-color: color-mix(in srgb, var(--accent) 14%, var(--card)) !important; }
+.bg-orange-500, .bg-orange-600 { background-color: var(--accent) !important; }
+.text-orange-400, .text-orange-500, .text-orange-600 { color: var(--accent) !important; }
+.text-orange-700 { color: var(--color-brand-dark) !important; }
+.border-orange-200, .border-orange-300, .border-orange-400, .border-orange-500 { border-color: var(--accent) !important; }
+
+/* Keep secondary copy readable, including legacy small labels. */
+.text-gray-400, .text-gray-500, .text-stone-400, .text-stone-500, .text-neutral-400, .text-neutral-500 { color: var(--text-readable) !important; }
+.dark .text-gray-400, .dark .text-gray-500, .dark .text-stone-400, .dark .text-stone-500, .dark .text-neutral-400, .dark .text-neutral-500 { color: var(--text-readable) !important; }
+[class~="text-[8px]"], [class~="text-[9px]"], [class~="text-[10px]"], [class~="text-[11px]"] { font-size: 12px !important; line-height: 1.4 !important; }
+.text-xs { font-size: 13px !important; line-height: 1.45 !important; }
 
 /* Gold accent */
 .text-yellow-400, .text-yellow-500 { color: #FFB800 !important; }
@@ -74,7 +121,7 @@ html, body {
 
 /* ── Card containers (div only, not img/span/input) ─ */
 div.bg-white {
-  border:     1px solid #e5e5e5;
+  border:     1px solid var(--border);
   box-shadow: none !important;
 }
 
@@ -109,37 +156,57 @@ select,
 textarea {
   border:           1px solid #e5e5e5 !important;
   border-radius:    8px !important;
-  background-color: #ffffff !important;
-  color:            #121212 !important;
+  background-color: var(--card) !important;
+  color:            var(--text-primary) !important;
   outline:          none !important;
   box-shadow:       none !important;
 }
 input:focus, select:focus, textarea:focus {
-  border-color: #FF7A22 !important;
+  border-color: var(--accent) !important;
 }
 
 /* ── Tables ──────────────────────────────────────── */
 table { border-collapse: collapse !important; }
 th {
-  background-color: #f9f9f9 !important;
-  color:            #121212 !important;
+  background-color: var(--bg) !important;
+  color:            var(--text-primary) !important;
   font-weight:      700 !important;
   border-bottom:    1px solid #e5e5e5 !important;
 }
-td { border-bottom: 1px solid #e5e5e5 !important; }
+td { border-bottom: 1px solid var(--border) !important; }
+
+/* Honor the selected theme across legacy utility and hard-coded surfaces. */
+.dark div.bg-white, .dark .bg-white { background-color: var(--card) !important; border-color: var(--border) !important; }
+.dark [class*="bg-gray-50"], .dark [class*="bg-gray-100"], .dark [class*="bg-[#F5F5F5]"], .dark [class*="bg-[#fcf9f8]"] { background-color: var(--bg) !important; }
+.dark [class*="border-gray-100"], .dark [class*="border-gray-200"], .dark [class*="border-gray-300"] { border-color: var(--border) !important; }
+.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), .dark select, .dark textarea { background-color: var(--card) !important; color: var(--text-primary) !important; border-color: var(--border) !important; }
+.dark th { background-color: var(--bg) !important; color: var(--text-primary) !important; border-color: var(--border) !important; }
+.dark td { border-color: var(--border) !important; }
+.dark nav a.bg-blue-50.text-blue-700 { background-color: var(--accent-light) !important; color: var(--accent) !important; border-color: var(--border) !important; }
+
+/* These two legacy screens use fixed palette classes in their markup. */
+.materials-page { background-color: var(--bg) !important; color: var(--text-primary) !important; }
+.materials-page [class*="bg-[#ffffff]"] { background-color: var(--card) !important; }
+.materials-page [class*="bg-[#fcf9f8]"] { background-color: var(--surface-muted) !important; }
+.materials-page [class*="text-[#121212]"] { color: var(--text-primary) !important; }
+.materials-page [class*="border-[#dcd9d9]"] { border-color: var(--border) !important; }
+.materials-page [class*="text-gray-200"], .materials-page [class*="text-gray-300"] { color: var(--text-subtle) !important; }
+.materials-action { background-color: var(--accent) !important; border: 1px solid var(--accent) !important; color: var(--bg) !important; }
+.materials-action:hover { background-color: var(--color-brand-dark) !important; color: var(--bg) !important; }
+.materials-action:disabled { opacity: .55; }
 
 /* ── Sidebar active-link override ────────────────── */
 nav a.bg-blue-50.text-blue-700 {
-  background-color: #FFF3EC !important;
-  color:            #FF7A22 !important;
-  border:           1px solid #FFD4B2 !important;
+  background-color: var(--accent-light) !important;
+  color:            var(--accent) !important;
+  border:           1px solid var(--border) !important;
 }
-nav a.bg-blue-50.text-blue-700 * { color: #FF7A22 !important; }
+nav a.bg-blue-50.text-blue-700 * { color: var(--accent) !important; }
 
 /* Sidebar role-badge */
 .from-blue-50.to-green-50 {
-  background: #FFF3EC !important;
-  border: 1px solid #FFD4B2 !important;
+  background: var(--accent-light) !important;
+  border: 1px solid var(--border) !important;
 }
 
 /* ── Scrollbars ──────────────────────────────────── */
@@ -148,4 +215,4 @@ nav a.bg-blue-50.text-blue-700 * { color: #FF7A22 !important; }
 ::-webkit-scrollbar-thumb { background: #ddd; border-radius: 4px; }
 
 /* ── Loader ──────────────────────────────────────── */
-.animate-spin { color: #FF7A22 !important; }
+.animate-spin { color: var(--accent) !important; }

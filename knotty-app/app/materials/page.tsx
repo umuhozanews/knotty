@@ -93,7 +93,7 @@ export default function MaterialsPage() {
 
   return (
     <DashboardShell>
-      <div className="p-4 sm:p-6 space-y-6 max-w-5xl mx-auto bg-[#fcf9f8] min-h-screen text-[#121212]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      <div className="materials-page p-4 sm:p-6 space-y-6 max-w-5xl mx-auto bg-[#fcf9f8] min-h-screen text-[#121212]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -102,7 +102,7 @@ export default function MaterialsPage() {
           </div>
           {CAN_UPLOAD.includes(role) && (
             <button onClick={() => setShowUpload(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#121212] hover:bg-[#dcd9d9] hover:text-[#121212] text-white rounded-lg text-xs font-bold transition duration-200 border border-[#121212]">
+              className="materials-action flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition duration-200">
               <Plus size={16} />Upload Material
             </button>
           )}
@@ -237,7 +237,7 @@ export default function MaterialsPage() {
                   </div>
                 </div>
                 <button type="submit" disabled={uploading || !file || !form.title}
-                  className="w-full py-3 bg-[#121212] text-white font-bold text-sm hover:bg-[#dcd9d9] hover:text-[#121212] rounded-lg transition border border-[#121212] flex items-center justify-center gap-2 disabled:opacity-50">
+                  className="materials-action w-full py-3 font-bold text-sm rounded-lg transition flex items-center justify-center gap-2 disabled:opacity-50">
                   {uploading ? <><Loader2 size={15} className="animate-spin" />Uploading...</> : <><Upload size={15} />Upload Material</>}
                 </button>
               </form>

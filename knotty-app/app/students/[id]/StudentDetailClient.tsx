@@ -15,6 +15,7 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
+import { isManagementRole } from "@/lib/roles";
 
 type Tab = "overview" | "attendance" | "wallet" | "reports" | "health" | "discipline" | "fees" | "canteen" | "consent";
 
@@ -104,13 +105,34 @@ function AddHealthModal({ studentId, onClose, onSuccess }: { studentId: string; 
 
 // ─── Add Discipline Modal ─────────────────────────────────────────────────────
 function AddDisciplineModal({ studentId, onClose, onSuccess }: { studentId: string; onClose: () => void; onSuccess: () => void }) {
-  const [form, setForm] = useState({ type: "WARNING", title: "", description: "", action_taken: "", severity: "MINOR" });
+  const [form, setForm] = useState({
+    type: "WARNING",
+    title: "",
+    description: "",
+    action_taken: "",
+    severity: "MINOR",
+    marks_deducted: 1
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  function onSeverityChange(sev: string) {
+    const defaultDeduction = sev === "SERIOUS" ? 5 : sev === "MODERATE" ? 3 : 1;
+    setForm(f => ({ ...f, severity: sev, marks_deducted: defaultDeduction }));
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    try { await discipline.create({ ...form, student_id: studentId }); onSuccess(); onClose(); }
+    try {
+      await discipline.create({
+        ...form,
+        marks_deducted: Number(form.marks_deducted) || 1,
+        student_id: studentId
+      });
+      onSuccess();
+      onClose();
+    }
     catch (err) { setError(err instanceof Error ? err.message : "Error"); }
     finally { setLoading(false); }
   }
@@ -118,7 +140,7 @@ function AddDisciplineModal({ studentId, onClose, onSuccess }: { studentId: stri
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-800">
-          <h3 className="font-bold text-gray-800 dark:text-gray-100">New Discipline Record</h3>
+          <h3 className="font-bold text-gray-800 dark:text-gray-100">Record Discipline Infraction</h3>
           <button onClick={onClose}><X size={16} className="text-gray-400" /></button>
         </div>
         <form onSubmit={submit} className="p-5 space-y-3">
@@ -131,14 +153,29 @@ function AddDisciplineModal({ studentId, onClose, onSuccess }: { studentId: stri
             </div>
             <div>
               <label className="text-xs text-gray-500 mb-1 block">Severity</label>
-              <select value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })} className={inp}>
+              <select value={form.severity} onChange={(e) => onSeverityChange(e.target.value)} className={inp}>
                 {["MINOR", "MODERATE", "SERIOUS"].map((s) => <option key={s}>{s}</option>)}
               </select>
             </div>
           </div>
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">Title *</label>
-            <input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className={inp} />
+            <label className="text-xs text-gray-500 mb-1 block flex justify-between">
+              <span>Marks To Deduct (out of 40)</span>
+              <span className="text-red-500 font-bold">-{form.marks_deducted} marks</span>
+            </label>
+            <input
+              type="number"
+              min="1"
+              max="40"
+              required
+              value={form.marks_deducted}
+              onChange={(e) => setForm({ ...form, marks_deducted: Math.min(40, Math.max(1, Number(e.target.value))) })}
+              className={inp}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">Offense Title *</label>
+            <input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className={inp} placeholder="e.g. Unexcused lateness / disruption" />
           </div>
           <div>
             <label className="text-xs text-gray-500 mb-1 block">Description</label>
@@ -1061,22 +1098,29 @@ export default function StudentProfilePage() {
       </DashboardShell>
     );
   }
-  if (!profile) {
+  if (!profile || !profile.user) {
     return (
       <DashboardShell>
-        <div className="p-8 text-center text-gray-400">Student not found.</div>
+        <div className="p-8 text-center text-gray-400">
+          <p className="font-semibold text-gray-600 dark:text-gray-300">Student not found</p>
+          <p className="text-xs text-gray-400 mt-1">The requested student ID is not registered or unavailable.</p>
+          <button onClick={() => router.push('/students')} className="mt-4 px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-semibold">
+            Return to Students Directory
+          </button>
+        </div>
       </DashboardShell>
     );
   }
 
-  const name = `${profile.user.first_name} ${profile.user.last_name}`;
-  const initials = `${profile.user.first_name[0]}${profile.user.last_name[0]}`;
-  const attSummary = profile.attendances.reduce(
+  const name = `${profile.user.first_name || ""} ${profile.user.last_name || ""}`.trim() || "Student";
+  const initials = `${profile.user.first_name?.[0] || "S"}${profile.user.last_name?.[0] || ""}`;
+  const attendances = profile.attendances || [];
+  const attSummary = attendances.reduce(
     (acc, r) => { acc[r.status] = (acc[r.status] || 0) + 1; return acc; },
     { PRESENT: 0, ABSENT: 0, LATE: 0, EXCUSED: 0 } as Record<string, number>
   );
-  const attRate = profile.attendances.length > 0
-    ? Math.round(((attSummary.PRESENT + attSummary.LATE) / profile.attendances.length) * 100)
+  const attRate = attendances.length > 0
+    ? Math.round(((attSummary.PRESENT + attSummary.LATE) / attendances.length) * 100)
     : 0;
   const dob = profile.date_of_birth ? new Date(profile.date_of_birth) : null;
   const age = dob ? Math.floor((Date.now() - dob.getTime()) / (365.25 * 24 * 3600 * 1000)) : null;
@@ -1271,7 +1315,7 @@ export default function StudentProfilePage() {
                           }
                         </div>
                       )}
-                      {user?.role === "ADMIN" && (
+                      {isManagementRole(user?.role) && (
                         <div className="pt-2">
                           <button
                             onClick={assignNFC}
@@ -1293,7 +1337,7 @@ export default function StudentProfilePage() {
                     <div className="text-center py-4">
                       <CreditCard size={28} className="text-gray-200 mx-auto mb-2" />
                       <p className="text-sm text-gray-400 mb-3">No card issued yet</p>
-                      {user?.role === "ADMIN" && (
+                      {isManagementRole(user?.role) && (
                         <div className="flex flex-col gap-2 items-center">
                           <button
                             onClick={assignNFC}
@@ -1555,30 +1599,71 @@ export default function StudentProfilePage() {
           {/* DISCIPLINE */}
           {tab === "discipline" && (
             <div>
+              {(() => {
+                const discList = profile.discipline || [];
+                const totalDeducted = discList.reduce((s, r) => s + (r.marks_deducted !== undefined ? Number(r.marks_deducted) : (r.severity === "SERIOUS" ? 5 : r.severity === "MODERATE" ? 3 : 1)), 0);
+                const currentMarks = Math.max(0, 40 - totalDeducted);
+                const marksColor = currentMarks >= 30 ? "text-green-600 dark:text-green-400" : currentMarks >= 20 ? "text-amber-500" : "text-red-600";
+                const marksPct = (currentMarks / 40) * 100;
+                return (
+                  <div className="bg-gray-50 dark:bg-gray-800/80 rounded-2xl p-4 mb-4 border border-gray-100 dark:border-gray-700">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Conduct / Discipline Marks</span>
+                        <p className="text-xs text-gray-400">Baseline 40 marks per academic term</p>
+                      </div>
+                      <div className="text-right">
+                        <span className={`text-2xl font-black ${marksColor}`}>{currentMarks}</span>
+                        <span className="text-xs text-gray-400 font-medium"> / 40</span>
+                      </div>
+                    </div>
+                    <div className="w-full h-2.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden mb-2">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${marksPct}%`,
+                          background: currentMarks >= 30 ? "#16a34a" : currentMarks >= 20 ? "#d97706" : "#dc2626"
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400 font-medium">
+                      <span>{discList.length} infraction{discList.length !== 1 ? "s" : ""} on record</span>
+                      <span className="text-red-500 font-bold">-{totalDeducted} marks deducted</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-gray-700 dark:text-gray-200">Discipline Records</h3>
                 <button onClick={() => setModal("discipline")} className="flex items-center gap-1.5 text-sm text-blue-600 border border-blue-500 rounded-xl px-3 py-1.5 hover:bg-blue-50 transition">
-                  <Plus size={14} /> Add Record
+                  <Plus size={14} /> Record Infraction
                 </button>
               </div>
-              {profile.discipline.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-10">No discipline records — great student!</p>
+              {(profile.discipline || []).length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-10">No discipline records — full 40/40 conduct marks intact!</p>
               ) : (
                 <div className="space-y-2">
-                  {profile.discipline.map((d) => (
-                    <div key={d.id} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
-                      <div className="flex items-start justify-between mb-1">
-                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{d.title}</p>
-                        <div className="flex gap-1.5 flex-shrink-0 ml-2">
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${d.severity === "SERIOUS" ? "bg-red-100 text-red-600" : d.severity === "MODERATE" ? "bg-orange-100 text-orange-600" : "bg-yellow-100 text-yellow-700"}`}>{d.severity}</span>
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500">{d.type}</span>
+                  {(profile.discipline || []).map((d) => {
+                    const marks = d.marks_deducted !== undefined ? d.marks_deducted : (d.severity === "SERIOUS" ? 5 : d.severity === "MODERATE" ? 3 : 1);
+                    return (
+                      <div key={d.id} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
+                        <div className="flex items-start justify-between mb-1">
+                          <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{d.title}</p>
+                          <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                            <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
+                              -{marks} marks
+                            </span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${d.severity === "SERIOUS" ? "bg-red-100 text-red-600" : d.severity === "MODERATE" ? "bg-orange-100 text-orange-600" : "bg-yellow-100 text-yellow-700"}`}>{d.severity}</span>
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500">{d.type}</span>
+                          </div>
                         </div>
+                        {d.description && <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{d.description}</p>}
+                        {d.action_taken && <p className="text-xs text-blue-500">Action: {d.action_taken}</p>}
+                        <p className="text-xs text-gray-400 mt-2">{new Date(d.recorded_at).toLocaleDateString("en-GB")}</p>
                       </div>
-                      {d.description && <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{d.description}</p>}
-                      {d.action_taken && <p className="text-xs text-blue-500">Action: {d.action_taken}</p>}
-                      <p className="text-xs text-gray-400 mt-2">{new Date(d.recorded_at).toLocaleDateString("en-GB")}</p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1661,7 +1746,7 @@ export default function StudentProfilePage() {
             <div>
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-semibold text-gray-700 dark:text-gray-200">Guardian Consent Registry</h3>
-                {(role === "ADMIN" || role === "PARENT") && (
+                {(isManagementRole(role) || role === "PARENT") && (
                   <button onClick={() => setShowRecordConsentModal(true)} className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded-xl font-medium transition flex items-center gap-1">
                     <Plus size={12} /> Record Consent
                   </button>

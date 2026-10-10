@@ -9,6 +9,7 @@ import BursarDashboard from "@/components/dashboards/BursarDashboard";
 import CanteenDashboard from "@/components/dashboards/CanteenDashboard";
 import StudentDashboard from "@/components/dashboards/StudentDashboard";
 import ParentDashboard from "@/components/dashboards/ParentDashboard";
+import { isManagementRole } from "@/lib/roles";
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -26,7 +27,7 @@ export default function DashboardPage() {
 
   return (
     <DashboardShell>
-      {role === "ADMIN"      && <AdminDashboard />}
+      {isManagementRole(role) && <AdminDashboard />}
       {role === "TEACHER"    && <TeacherDashboard />}
       {role === "NURSE"      && <NurseDashboard />}
       {role === "DISCIPLINE" && <DisciplineDashboard />}

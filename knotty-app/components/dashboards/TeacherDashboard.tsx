@@ -1,19 +1,20 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { structure, Class } from "@/lib/api";
+import { structure, Class, academics, TimetableEntry } from "@/lib/api";
 import { Loader2, Users, BookOpen, FileText, AlertTriangle, ChevronRight } from "lucide-react";
 import Link from "next/link";
 
 export default function TeacherDashboard() {
   const { user, loading: authLoading } = useAuth();
   const [classes, setClasses] = useState<Class[]>([]);
+  const [timetable, setTimetable] = useState<TimetableEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (authLoading) return;
-    structure.classes()
-      .then((r) => setClasses(r.data))
+    Promise.all([structure.classes(), academics.timetable()])
+      .then(([classResult, timetableResult]) => { setClasses(classResult.data); setTimetable(timetableResult.data); })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [authLoading]);
@@ -28,6 +29,28 @@ export default function TeacherDashboard() {
           <h1 className="text-xl font-bold text-gray-800">Welcome, {user?.first_name}</h1>
           <p className="text-sm text-gray-400">Teacher Dashboard · {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</p>
         </div>
+
+        <section className="rounded-2xl bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-gray-800">Your teaching timetable</h2>
+              <p className="text-xs text-gray-500">Only lessons assigned to your account are shown.</p>
+            </div>
+            <a href="/academics?tab=timetable" className="text-xs font-semibold text-indigo-700 hover:underline">Full timetable</a>
+          </div>
+          {loading ? <div className="flex justify-center py-5"><Loader2 className="animate-spin text-indigo-500" size={18} /></div> : timetable.length === 0 ? (
+            <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-600">No teaching periods are assigned to your account yet.</p>
+          ) : <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">{["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map((day, index) => {
+            const lessons = timetable.filter((entry) => entry.day_of_week === index + 1);
+            return <div key={day} className="rounded-xl border border-gray-200 p-3">
+              <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-700">{day}</h3>
+              {lessons.length ? <div className="space-y-2">{lessons.map((lesson) => <div key={lesson.id} className="rounded-lg bg-indigo-50 p-2.5">
+                <p className="text-xs font-bold text-indigo-950">{lesson.start_time}–{lesson.end_time} · {lesson.subject?.name}</p>
+                <p className="mt-0.5 text-xs text-gray-700">{lesson.class_section?.name}{lesson.room ? ` · ${lesson.room}` : ""}</p>
+              </div>)}</div> : <p className="text-xs text-gray-500">No lessons</p>}
+            </div>;
+          })}</div>}
+        </section>
 
         {/* Quick stats */}
         <div className="grid grid-cols-3 gap-3">

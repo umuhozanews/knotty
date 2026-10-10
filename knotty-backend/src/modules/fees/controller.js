@@ -11,7 +11,7 @@ async function pay(req, res, next) {
 
 async function verify(req, res, next) {
   try {
-    const payment = await service.verifyMomoPayment(req.params.momoReference);
+    const payment = await service.verifyMomoPayment(req.params.momoReference, req.user.school_id);
     res.json({ success: true, data: payment });
   } catch (err) { next(err); }
 }

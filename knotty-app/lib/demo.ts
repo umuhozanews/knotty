@@ -20,8 +20,9 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
   { email: "bursar@ishurihub.rw",       password: "Staff@2024",   role: "BURSAR",     first_name: "Paul",    last_name: "Nshimiye", school_id: "demo-school-id", school_code: "KMS", school_name: "IshuriHUB Model School", job_title: "Chief Bursar & Accountant" },
   { email: "nurse@ishurihub.rw",        password: "Staff@2024",   role: "NURSE",      first_name: "Diane",   last_name: "Mukamana", school_id: "demo-school-id", school_code: "KMS", school_name: "IshuriHUB Model School", job_title: "Resident Medical Nurse" },
   { email: "discipline@ishurihub.rw",   password: "Staff@2024",   role: "DISCIPLINE", first_name: "Victor",  last_name: "Rugamba", school_id: "demo-school-id", school_code: "KMS", school_name: "IshuriHUB Model School", job_title: "Chief Discipline Master" },
-  { email: "librarian@ishurihub.rw",    password: "Staff@2024",   role: "LIBRARIAN",  first_name: "Jeanne",  last_name: "Uwase", school_id: "demo-school-id", school_code: "KMS", school_name: "IshuriHUB Model School", job_title: "Head Librarian" },
   { email: "hirwa.jean@ishurihub.rw",   password: "Student@2024", role: "STUDENT",    first_name: "Hirwa",    last_name: "Jean", school_id: "demo-school-id", school_code: "KMS", school_name: "IshuriHUB Model School", job_title: "Student" },
+  { email: "nkurunziza.eric@ishurihub.rw", password: "Admin@2024", role: "STUDENT", first_name: "Nkurunziza", last_name: "Eric", school_id: "demo-school-id", school_code: "KMS", school_name: "IshuriHUB Model School", job_title: "Student (S5-B)" },
+  { email: "parent.habimanakms260025@parent.ishurihub.rw", password: "Admin@2024", role: "PARENT", first_name: "Agnès", last_name: "Habimana", school_id: "demo-school-id", school_code: "KMS", school_name: "IshuriHUB Model School", job_title: "Parent / Guardian" },
 
   // ── 2. Green Hills International Academy (GHIA) ──
   { email: "admin@greenhills.ishurihub.rw", password: "Admin@2024", role: "ADMIN", first_name: "Director", last_name: "GHIA", school_id: "sch-ghia", school_code: "GHIA", school_name: "Green Hills International Academy", job_title: "School Principal" },
@@ -106,6 +107,7 @@ export function getAllDemoAccounts(): DemoAccount[] {
 export const DEMO_SCHOOL_ID = "demo-school-id";
 
 export function isDemoMode(): boolean {
+  if (process.env.NODE_ENV === "production") return false;
   if (typeof window === "undefined") return false;
   return localStorage.getItem("ishuri_demo") === "true" || localStorage.getItem("knotty_demo") === "true";
 }

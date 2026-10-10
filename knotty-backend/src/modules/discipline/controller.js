@@ -14,14 +14,14 @@ async function list(req, res, next) {
     const prisma = require('../../config/database');
 
     if (req.user.role === 'STUDENT') {
-      const student = await prisma.student.findFirst({ where: { id: studentId, user_id: req.user.id } });
+      const student = await prisma.student.findFirst({ where: { id: studentId, user_id: req.user.id, school_id: req.user.school_id } });
       if (!student) return res.status(403).json({ success: false, message: 'Access denied' });
     } else if (req.user.role === 'PARENT') {
       const student = await prisma.student.findFirst({ where: { id: studentId, school_id: req.user.school_id, parent_id: req.user.id } });
       if (!student) return res.status(403).json({ success: false, message: 'Access denied: not your child' });
     }
 
-    const result = await service.list(studentId, { page, limit });
+    const result = await service.list(studentId, req.user.school_id, { page, limit });
     res.json({ success: true, ...result });
   } catch (err) { next(err); }
 }

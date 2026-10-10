@@ -142,12 +142,12 @@ export default function LoginPage() {
         </div>
 
         {/* ── Multi-School & Worker Account Quick-Select Panel ── */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+        {process.env.NODE_ENV !== "production" && <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
           <div className="flex items-center justify-between mb-2.5">
             <div className="flex items-center gap-1.5">
               <Building2 size={15} style={{ color: "#FF7A22" }} />
               <span className="text-xs font-bold text-gray-800">
-                School Management & Worker Accounts
+                Local demo accounts · sample data only
               </span>
             </div>
             <button
@@ -228,7 +228,7 @@ export default function LoginPage() {
               </div>
             </div>
           )}
-        </div>
+        </div>}
       </div>
     </div>
   );

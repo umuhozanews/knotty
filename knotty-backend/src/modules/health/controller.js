@@ -15,14 +15,14 @@ async function list(req, res, next) {
     const prisma = require('../../config/database');
 
     if (req.user.role === 'STUDENT') {
-      const student = await prisma.student.findFirst({ where: { id: studentId, user_id: req.user.id } });
+      const student = await prisma.student.findFirst({ where: { id: studentId, user_id: req.user.id, school_id: req.user.school_id } });
       if (!student) return res.status(403).json({ success: false, message: 'Access denied' });
     } else if (req.user.role === 'PARENT') {
       const student = await prisma.student.findFirst({ where: { id: studentId, school_id: req.user.school_id, parent_id: req.user.id } });
       if (!student) return res.status(403).json({ success: false, message: 'Access denied: not your child' });
     }
 
-    const result = await service.list(studentId, { page, limit });
+    const result = await service.list(studentId, req.user.school_id, { page, limit });
     res.json({ success: true, ...result });
   } catch (err) { next(err); }
 }
@@ -56,7 +56,7 @@ async function getMedicalProfile(req, res, next) {
     const prisma = require('../../config/database');
 
     if (req.user.role === 'STUDENT') {
-      const student = await prisma.student.findFirst({ where: { id: studentId, user_id: req.user.id } });
+      const student = await prisma.student.findFirst({ where: { id: studentId, user_id: req.user.id, school_id: req.user.school_id } });
       if (!student) return res.status(403).json({ success: false, message: 'Access denied' });
     } else if (req.user.role === 'PARENT') {
       const student = await prisma.student.findFirst({ where: { id: studentId, school_id: req.user.school_id, parent_id: req.user.id } });
@@ -78,7 +78,7 @@ async function upsertMedicalProfile(req, res, next) {
 // ─── Immunization Records ───
 async function addImmunizationRecord(req, res, next) {
   try {
-    const result = await service.addImmunizationRecord(req.params.studentId, req.body);
+    const result = await service.addImmunizationRecord(req.params.studentId, req.user.school_id, req.body);
     res.status(201).json({ success: true, data: result });
   } catch (err) { next(err); }
 }
@@ -89,14 +89,14 @@ async function listImmunizations(req, res, next) {
     const prisma = require('../../config/database');
 
     if (req.user.role === 'STUDENT') {
-      const student = await prisma.student.findFirst({ where: { id: studentId, user_id: req.user.id } });
+      const student = await prisma.student.findFirst({ where: { id: studentId, user_id: req.user.id, school_id: req.user.school_id } });
       if (!student) return res.status(403).json({ success: false, message: 'Access denied' });
     } else if (req.user.role === 'PARENT') {
       const student = await prisma.student.findFirst({ where: { id: studentId, school_id: req.user.school_id, parent_id: req.user.id } });
       if (!student) return res.status(403).json({ success: false, message: 'Access denied: not your child' });
     }
 
-    const result = await service.listImmunizations(studentId);
+    const result = await service.listImmunizations(studentId, req.user.school_id);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }
@@ -123,7 +123,7 @@ async function listClinicVisits(req, res, next) {
     const prisma = require('../../config/database');
 
     if (req.user.role === 'STUDENT') {
-      const student = await prisma.student.findFirst({ where: { id: studentId, user_id: req.user.id } });
+      const student = await prisma.student.findFirst({ where: { id: studentId, user_id: req.user.id, school_id: req.user.school_id } });
       if (!student) return res.status(403).json({ success: false, message: 'Access denied' });
     } else if (req.user.role === 'PARENT') {
       const student = await prisma.student.findFirst({ where: { id: studentId, school_id: req.user.school_id, parent_id: req.user.id } });

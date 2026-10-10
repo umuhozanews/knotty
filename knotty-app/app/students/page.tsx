@@ -10,6 +10,7 @@ import { students, structure, cards, health, Level, Class, Student } from "@/lib
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 import { isDemoMode, DEMO_STUDENTS } from "@/lib/demo";
+import { isManagementRole } from "@/lib/roles";
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 function Avatar({ name, photo, size = 9 }: { name: string; photo?: string | null; size?: number }) {
@@ -62,10 +63,11 @@ function StudentModal({
   defaultLevelId?: string;
   defaultClassId?: string;
 }) {
+  const router = useRouter();
   const { user } = useAuth();
   const { show } = useToast();
   const isEdit = !!existing;
-  const [createdCredentials, setCreatedCredentials] = useState<{ name: string; email: string; password: string } | null>(null);
+  const [createdCredentials, setCreatedCredentials] = useState<{ id?: string; name: string; email: string; password: string } | null>(null);
 
   const [form, setForm] = useState<StudentForm>(() => {
     if (existing) {
@@ -177,15 +179,20 @@ function StudentModal({
           // Card may already exist
         }
 
-        // Save medical notes
+        // Save medical notes safely
         if (form.medical_notes.trim()) {
-          await health.create({
-            student_id: studentId, type: "ILLNESS", severity: "LOW",
-            title: "Medical Notes (Initial)", description: form.medical_notes,
-          });
+          try {
+            await health.create({
+              student_id: studentId, type: "ILLNESS", severity: "LOW",
+              title: "Medical Notes (Initial)", description: form.medical_notes,
+            });
+          } catch (e) {
+            console.warn("Medical notes creation skipped or failed:", e);
+          }
         }
 
         setCreatedCredentials({
+          id: studentId,
           name: `${form.first_name} ${form.last_name}`,
           email: form.email,
           password: form.password || "Ishuri@2024",
@@ -223,9 +230,30 @@ function StudentModal({
             </div>
           </div>
           <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mb-5">Share these credentials with the student. They can change their password after first login.</p>
-          <button onClick={onClose} className="w-full py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition">
-            Done
-          </button>
+          <div className="flex flex-col gap-2">
+            {createdCredentials.id && (
+              <button
+                onClick={() => {
+                  onClose();
+                  router.push(`/students/${createdCredentials.id}`);
+                }}
+                className="w-full py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition flex items-center justify-center gap-1.5 shadow-sm"
+              >
+                <span>View Student Profile</span>
+                <ChevronRight size={16} />
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className={`w-full py-2.5 rounded-xl text-sm font-medium transition ${
+                createdCredentials.id
+                  ? "bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200"
+                  : "bg-blue-600 text-white hover:bg-blue-700"
+              }`}
+            >
+              Done
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -310,7 +338,19 @@ function StudentModal({
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Level" required>
-                    <select value={form.level_id} onChange={(e) => setForm((f) => ({ ...f, level_id: e.target.value, class_id: "" }))} className={inp}>
+                    <select
+                      value={form.level_id}
+                      onChange={(e) => {
+                        const lvlId = e.target.value;
+                        const matching = classes.filter((c) => c.level.id === lvlId);
+                        setForm((f) => ({
+                          ...f,
+                          level_id: lvlId,
+                          class_id: matching.length > 0 ? matching[0].id : "",
+                        }));
+                      }}
+                      className={inp}
+                    >
                       <option value="">Select level</option>
                       {levels.sort((a,b)=>(a.name>b.name?1:-1)).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                     </select>
@@ -494,12 +534,12 @@ function StudentRow({ s, idx, onEdit, onDelete, onIssue, issuing, isClassTeacher
             {issuing ? <Loader2 size={11} className="animate-spin" /> : <CreditCard size={11} />}
           </button>
         )}
-        {(user?.role === "ADMIN" || (user?.role === "TEACHER" && isClassTeacher)) && (
+        {(isManagementRole(user?.role) || (user?.role === "TEACHER" && isClassTeacher)) && (
           <button onClick={onEdit} title="Edit" className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 transition">
             <Edit2 size={12} />
           </button>
         )}
-        {(user?.role === "ADMIN" || (user?.role === "TEACHER" && isClassTeacher)) && (
+        {(isManagementRole(user?.role) || (user?.role === "TEACHER" && isClassTeacher)) && (
           <button onClick={onDelete} title="Remove" className="p-1.5 rounded-lg border border-red-200 text-red-400 hover:bg-red-50 transition">
             <Trash2 size={12} />
           </button>
@@ -593,7 +633,7 @@ export default function StudentsPage() {
   const currentLevelClasses = selectedLevel ? classes.filter((c) => c.level.id === selectedLevel) : [];
   const selectedClassObj = classes.find((c) => c.id === selectedClass);
   // Admins can always manage; teachers can manage when a class is selected (backend enforces fine-grained permission)
-  const canManageStudents = !!selectedClassObj && (user?.role === 'ADMIN' || user?.role === 'TEACHER');
+  const canManageStudents = !!selectedClassObj && (isManagementRole(user?.role) || user?.role === 'TEACHER');
   const isClassTeacher = canManageStudents; // kept for prop compatibility
   const totalSelected = classes.reduce((acc, c) => {
     const n = studentsByClass[c.id]?.length ?? (c._count?.students ?? 0);
@@ -797,8 +837,8 @@ export default function StudentsPage() {
           classes={classes}
           onClose={() => { setShowModal(false); setEditStudent(null); }}
           onSuccess={() => loadStudents(selectedClass)}
-          defaultLevelId={!editStudent ? selectedLevel ?? undefined : undefined}
-          defaultClassId={!editStudent ? selectedClass ?? undefined : undefined}
+          defaultLevelId={!editStudent ? (selectedLevel ?? levels[0]?.id) : undefined}
+          defaultClassId={!editStudent ? (selectedClass ?? (selectedLevel ? classes.find(c => c.level.id === selectedLevel)?.id : classes[0]?.id)) : undefined}
         />
       )}
       {deleteTarget && (

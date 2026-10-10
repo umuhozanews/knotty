@@ -3,9 +3,23 @@ const { logAction } = require('../../utils/audit');
 const { sendSMS } = require('../../integrations/africas-talking');
 const { paginate, paginatedResponse } = require('../../utils/helpers');
 
+async function requireStudentInSchool(studentId, schoolId) {
+  const student = await prisma.student.findFirst({ where: { id: studentId, school_id: schoolId }, select: { id: true } });
+  if (!student) throw Object.assign(new Error('Student not found'), { status: 404 });
+}
+
 async function create(data, recordedBy, schoolId) {
+  await requireStudentInSchool(data.student_id, schoolId);
+  const marks_deducted = data.marks_deducted !== undefined && data.marks_deducted !== null
+    ? Number(data.marks_deducted)
+    : (data.severity === 'SERIOUS' ? 5 : data.severity === 'MODERATE' ? 3 : 1);
   const record = await prisma.disciplineRecord.create({
-    data: { ...data, recorded_by: recordedBy, school_id: schoolId },
+    data: {
+      ...data,
+      marks_deducted,
+      recorded_by: recordedBy,
+      school_id: schoolId,
+    },
     include: {
       student: {
         include: {
@@ -40,17 +54,17 @@ async function create(data, recordedBy, schoolId) {
   return record;
 }
 
-async function list(studentId, { page, limit }) {
+async function list(studentId, schoolId, { page, limit }) {
   const { skip, take } = paginate(null, page, limit);
   const [data, total] = await Promise.all([
     prisma.disciplineRecord.findMany({
-      where: { student_id: studentId },
+      where: { student_id: studentId, school_id: schoolId },
       skip,
       take,
       orderBy: { recorded_at: 'desc' },
       include: { recorder: { select: { first_name: true, last_name: true, role: true } } },
     }),
-    prisma.disciplineRecord.count({ where: { student_id: studentId } }),
+    prisma.disciplineRecord.count({ where: { student_id: studentId, school_id: schoolId } }),
   ]);
   return paginatedResponse(data, total, page, limit);
 }

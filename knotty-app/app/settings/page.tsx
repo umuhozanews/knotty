@@ -4,6 +4,7 @@ import { Plus, Trash2, Loader2, Users, Layers, BookOpen, ToggleLeft, ToggleRight
 import DashboardShell from "@/components/DashboardShell";
 import { structure, Level, Class, StaffMember, Teacher, teachers } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { isManagementRole } from "@/lib/roles";
 
 type SettingsTab = "levels" | "classes" | "staff" | "teachers";
 
@@ -286,8 +287,8 @@ export default function SettingsPage() {
       const [l, c, s, tList] = await Promise.all([
         structure.levels(),
         structure.classes(),
-        user?.role === "ADMIN" ? structure.staff() : Promise.resolve({ success: true, data: [] as StaffMember[] }),
-        user?.role === "ADMIN" ? teachers.list() : Promise.resolve({ success: true, data: [] as Teacher[] }),
+        isManagementRole(user?.role) ? structure.staff() : Promise.resolve({ success: true, data: [] as StaffMember[] }),
+        isManagementRole(user?.role) ? teachers.list() : Promise.resolve({ success: true, data: [] as Teacher[] }),
       ]);
       setLevels(l.data);
       setClasses(c.data);
@@ -331,7 +332,7 @@ export default function SettingsPage() {
   const TABS: { key: SettingsTab; label: string; icon: React.ElementType }[] = [
     { key: "levels", label: "Levels", icon: Layers },
     { key: "classes", label: "Classes", icon: BookOpen },
-    ...(user?.role === "ADMIN" ? [
+    ...(isManagementRole(user?.role) ? [
       { key: "staff" as SettingsTab, label: "Staff & Roles", icon: Users },
       { key: "teachers" as SettingsTab, label: "Teacher Assignments", icon: Users }
     ] : []),

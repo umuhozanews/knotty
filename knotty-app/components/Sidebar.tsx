@@ -8,6 +8,7 @@ import {
   UserCheck, Building2,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { isManagementRole } from "@/lib/roles";
 
 // Every nav item and which roles can see it
 const ALL_NAV = [
@@ -63,7 +64,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { user, logout, activeSchool } = useAuth();
 
   const role     = user?.role ?? "STUDENT";
-  const navItems = ALL_NAV.filter((n) => n.roles.includes(role));
+  const navItems = ALL_NAV.filter((n) => n.roles.includes(role) || (isManagementRole(role) && n.roles.includes("ADMIN")));
 
   const isActive = (href: string) => href === "/" ? pathname === "/" : pathname.startsWith(href);
 
@@ -132,7 +133,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       {/* Bottom actions */}
       <div className="border-t border-gray-100 px-3 py-3 space-y-0.5">
-        {role === "ADMIN" && (
+        {isManagementRole(role) && (
           <Link href="/settings"
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-medium transition
               ${isActive("/settings") ? "" : "text-gray-500 hover:bg-gray-50"}`}

@@ -27,6 +27,9 @@ function validateEnv() {
   if (missing.length > 0 && process.env.NODE_ENV !== 'production') {
     console.warn('[STARTUP] Missing required environment variables:', missing.join(', '));
   }
+  if (missing.length > 0 && process.env.NODE_ENV === 'production') {
+    throw new Error(`[STARTUP] Missing required production environment variables: ${missing.join(', ')}`);
+  }
 
   const missingRecommended = RECOMMENDED.filter((k) => !process.env[k]);
   if (missingRecommended.length > 0) {
@@ -36,16 +39,19 @@ function validateEnv() {
   const encKey = process.env.ENCRYPTION_KEY || '';
   if (encKey && !/^[0-9a-fA-F]{64}$/.test(encKey)) {
     console.warn('[STARTUP] ENCRYPTION_KEY must be 64 hex characters');
+    if (process.env.NODE_ENV === 'production') throw new Error('[STARTUP] ENCRYPTION_KEY must be 64 hex characters');
   }
 
   const jwtSec = process.env.JWT_SECRET || '';
   if (jwtSec && jwtSec.length < 32) {
     console.warn('[STARTUP] JWT_SECRET must be at least 32 characters');
+    if (process.env.NODE_ENV === 'production') throw new Error('[STARTUP] JWT_SECRET must be at least 32 characters');
   }
 
   const jwtRefSec = process.env.JWT_REFRESH_SECRET || '';
   if (jwtRefSec && jwtRefSec.length < 32) {
     console.warn('[STARTUP] JWT_REFRESH_SECRET must be at least 32 characters');
+    if (process.env.NODE_ENV === 'production') throw new Error('[STARTUP] JWT_REFRESH_SECRET must be at least 32 characters');
   }
 
   if (!process.env.SENTRY_DSN && process.env.NODE_ENV === 'production') {

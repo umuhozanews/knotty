@@ -11,6 +11,8 @@ import { canteen, cards, CardScanResult, CanteenItem, CanteenTransaction, Cantee
 import { useNFC } from "@/hooks/useNFC";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
+import { isDemoMode } from "@/lib/demo";
+import { isManagementRole } from "@/lib/roles";
 
 function playAudioTone(type: "success" | "error") {
   if (typeof window === "undefined") return;
@@ -111,7 +113,7 @@ function resolveImgUrl(url: string | null | undefined): string | null {
   return url;
 }
 
-const MENU_ITEMS: MenuItem[] = [
+const DEFAULT_MENU_ITEMS: MenuItem[] = [
   { id: "amandazi",    name: "Amandazi",      price: 200,  img: "/canteen/amandazi.png",   cat: "Snacks", stock_qty: null },
   { id: "sambusa",     name: "Sambusa",        price: 300,  img: "/canteen/sambusa.png",    cat: "Snacks", stock_qty: null },
   { id: "egg",         name: "Boiled Egg",     price: 200,  img: "/canteen/egg.png",        cat: "Snacks", stock_qty: null },
@@ -399,7 +401,9 @@ export default function CanteenPage() {
   const [activeCategory, setActiveCategory] = useState("All");
   const [search, setSearch] = useState("");
 
-  const allMenu: MenuItem[] = [...MENU_ITEMS, ...apiProducts];
+  const allMenu: MenuItem[] = apiProducts.length > 0
+    ? [...apiProducts, ...DEFAULT_MENU_ITEMS.filter((d) => !apiProducts.some((p) => p.name.toLowerCase() === d.name.toLowerCase()))]
+    : DEFAULT_MENU_ITEMS;
 
   const visible = allMenu.filter((m) => {
     const matchCat = activeCategory === "All" || m.cat === activeCategory;
@@ -446,16 +450,17 @@ export default function CanteenPage() {
   async function executePurchase(cardNumber: string, studentInfo: CardScanResult["student"]) {
     setSubmittingPayment(true);
     try {
-      const items: CanteenItem[] = cartItems.map(({ name, price, quantity }) => ({ name, price, quantity }));
+      const items: CanteenItem[] = cartItems.map(({ id, name, price, quantity }) => ({ id, name, price, quantity }));
       const res = await canteen.purchase(cardNumber, items);
       playAudioTone("success");
       setPayPhotoError(false);
-      setPayResult({ student: studentInfo, total, new_balance: res.new_balance });
+      const paidTotal = (res as any).total_amount ?? res.transaction?.total_amount ?? total;
+      setPayResult({ student: studentInfo, total: paidTotal, new_balance: res.new_balance });
       setScannedCard(null);
       setCart({});
       setPaying(false);
       loadReport();
-      toast(`Paid ${total.toLocaleString()} RWF · Balance: ${res.new_balance.toLocaleString()} RWF`, "success");
+      toast(`Paid ${res.transaction.total_amount.toLocaleString()} RWF · Balance: ${res.new_balance.toLocaleString()} RWF`, "success");
     } catch (err) {
       playAudioTone("error");
       toast(err instanceof Error ? err.message : "Payment failed", "error");
@@ -678,7 +683,7 @@ export default function CanteenPage() {
             <span>{fastMode ? "Fast Tap" : "Verify Photo"}</span>
           </button>
 
-          {(user?.role === "ADMIN" || user?.role === "CANTEEN") && (
+          {(isManagementRole(user?.role) || user?.role === "CANTEEN") && (
             <button
               onClick={() => setShowAddProduct(true)}
               className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white"
@@ -738,6 +743,7 @@ export default function CanteenPage() {
 
             {/* Menu grid */}
             <div className="flex-1 overflow-y-auto">
+
               {visible.length === 0 && search && (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                   <p className="font-semibold text-gray-400 text-sm">No items match &quot;{search}&quot;</p>
@@ -746,7 +752,7 @@ export default function CanteenPage() {
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-4 gap-2.5">
                 {visible.map((item) => {
                   const qty = cart[item.id] ?? 0;
-                  const isAdmin = user?.role === "ADMIN" || user?.role === "CANTEEN";
+                  const isAdmin = isManagementRole(user?.role) || user?.role === "CANTEEN";
                   return (
                     <div
                       key={item.id}
@@ -831,7 +837,7 @@ export default function CanteenPage() {
                 })}
 
                 {/* Add product card (admin/canteen only) */}
-                {(user?.role === "ADMIN" || user?.role === "CANTEEN") && (
+                {(isManagementRole(user?.role) || user?.role === "CANTEEN") && (
                   <button
                     onClick={() => setShowAddProduct(true)}
                     className="bg-white rounded-2xl p-3 flex flex-col items-center justify-center gap-2 border-2 border-dashed hover:border-orange-300 transition min-h-[120px]"

@@ -7,6 +7,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { students, notifications as notifApi, Student, Notification } from "@/lib/api";
 import { useNFC } from "@/hooks/useNFC";
 import NFCStudentModal, { NFCMode } from "@/components/NFCStudentModal";
+import { isManagementRole } from "@/lib/roles";
 
 const PAGE_TITLES: Record<string, string> = {
   "/": "Dashboard",
@@ -148,7 +149,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             <h1 className="text-base md:text-2xl font-bold text-gray-800 truncate leading-tight">{title}</h1>
 
             {/* School Switcher Dropdown */}
-            {(user?.role === "ADMIN" || schoolsList.length > 1) && (
+            {(isManagementRole(user?.role) || schoolsList.length > 1) && (
               <div ref={schoolRef} className="relative">
                 <button
                   onClick={() => setSchoolDropdownOpen((v) => !v)}
@@ -382,7 +383,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
                 <p className="text-xs text-gray-400">Signed in as</p>
                 <p className="text-xs font-medium text-gray-600 truncate">{user?.email}</p>
               </div>
-              {user?.role === "ADMIN" && (
+              {isManagementRole(user?.role) && (
                 <button onClick={() => { router.push("/settings"); setMenuOpen(false); }}
                   className="w-full flex items-center gap-2 text-left px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 transition">
                   <User size={14} /> Settings

@@ -31,7 +31,7 @@ export default function VirtualCardTap({ onTap, busy }: Props) {
     setLoading(true);
     try {
       const res = await cards.list({ limit: 50 });
-      setList(res.data.filter((c) => c.is_active && !c.is_frozen));
+      setList(((res?.data as KnottyCard[]) || []).filter((c) => c.is_active && !c.is_frozen));
     } catch { /* ignore */ }
     finally { setLoading(false); }
   }

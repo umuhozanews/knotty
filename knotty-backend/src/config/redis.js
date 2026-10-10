@@ -47,18 +47,19 @@ const mockRedis = {
   on: () => {},
 };
 
-if (process.env.NO_REDIS === 'true' || process.env.NODE_ENV === 'production' || typeof globalThis.navigator !== 'undefined') {
+if (process.env.NODE_ENV === 'production' && !process.env.REDIS_URL) {
+  throw new Error('REDIS_URL is required in production; in-memory token and lockout state is not supported');
+}
+
+if (process.env.NODE_ENV !== 'production' && (process.env.NO_REDIS === 'true' || typeof globalThis.navigator !== 'undefined')) {
   console.log('Redis: Using in-memory fallback');
   redis = mockRedis;
 } else {
   redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
     retryStrategy: (times) => {
-      if (times > 3) {
-        if (!isFallback) {
-          isFallback = true;
-          console.log('Redis: connection failed — using in-memory fallback (no persistence)');
-          Object.assign(redis, mockRedis);
-        }
+      if (times > 5) {
+        if (!isFallback) console.error('Redis: connection unavailable; protected requests will fail closed');
+        isFallback = true;
         return null;
       }
       return Math.min(times * 100, 1000);

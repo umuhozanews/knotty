@@ -36,14 +36,8 @@ async function logout(req, res, next) {
 
 async function me(req, res, next) {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: {
-        id: true, role: true, school_id: true,
-        first_name: true, last_name: true, email: true,
-        phone: true, profile_photo: true, last_login: true,
-      },
-    });
+    const user = await authService.getUserContextProfile(req.user.id, req.user.school_id, req.user.role);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
     res.json({ success: true, user });
   } catch (err) {
     next(err);

@@ -38,8 +38,8 @@ async function initiatePayment({ student_id, school_id, amount, payment_type, pa
   return { payment, message: 'Payment initiated' };
 }
 
-async function verifyMomoPayment(momoReference) {
-  const payment = await prisma.feePayment.findFirst({ where: { momo_transaction_id: momoReference } });
+async function verifyMomoPayment(momoReference, schoolId) {
+  const payment = await prisma.feePayment.findFirst({ where: { momo_transaction_id: momoReference, school_id: schoolId } });
   if (payment) {
     const status = await momoService.getTransactionStatus(momoReference);
     if (status.status === 'SUCCESSFUL') {
@@ -56,7 +56,7 @@ async function verifyMomoPayment(momoReference) {
 
   // Also check new Invoice payments
   const invoicePayment = await prisma.payment.findFirst({
-    where: { id: momoReference },
+    where: { id: momoReference, invoice: { school_id: schoolId } },
     include: { invoice: true },
   });
   if (invoicePayment) {

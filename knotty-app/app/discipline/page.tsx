@@ -14,9 +14,9 @@ import { useAuth } from "@/context/AuthContext";
 const TOTAL_MARKS = 40;
 
 const SEV_STYLE: Record<string, { bg: string; text: string }> = {
-  MINOR:    { bg: "#FFF9C4", text: "#856404" },
-  MODERATE: { bg: "#FFF3E0", text: "#E65100" },
-  SERIOUS:  { bg: "#FFEBEE", text: "#C62828" },
+  MINOR:    { bg: "var(--severity-minor-bg)", text: "var(--severity-minor-text)" },
+  MODERATE: { bg: "var(--severity-moderate-bg)", text: "var(--severity-moderate-text)" },
+  SERIOUS:  { bg: "var(--severity-serious-bg)", text: "var(--severity-serious-text)" },
 };
 const TYPE_LABEL: Record<string, string> = {
   WARNING:       "Warning",
@@ -89,7 +89,7 @@ function OffenseModal({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div>
-            <p className="font-bold text-sm" style={{ color: "#121212" }}>Record Offense</p>
+            <p className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>Record Offense</p>
             <p className="text-xs text-gray-400">{student.name} · {student.class}</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center text-gray-500">
@@ -100,7 +100,7 @@ function OffenseModal({
         <form onSubmit={submit} className="p-5 space-y-4">
           {/* Type */}
           <div>
-            <p className="text-xs font-semibold mb-2" style={{ color: "#666" }}>TYPE</p>
+            <p className="text-xs font-semibold mb-2" style={{ color: "var(--text-secondary)" }}>TYPE</p>
             <div className="grid grid-cols-3 gap-1.5">
               {["WARNING", "MISCONDUCT", "RULE_VIOLATION", "SUSPENSION", "OTHER"].map((t) => (
                 <button
@@ -110,7 +110,7 @@ function OffenseModal({
                   className="py-1.5 px-2 rounded-xl text-xs font-medium border transition"
                   style={form.type === t
                     ? { background: "#121212", color: "#fff", borderColor: "#121212" }
-                    : { background: "#fff", color: "#666", borderColor: "#e5e5e5" }}
+                    : { background: "var(--card)", color: "var(--text-secondary)", borderColor: "var(--border)" }}
                 >
                   {TYPE_LABEL[t]}
                 </button>
@@ -120,7 +120,7 @@ function OffenseModal({
 
           {/* Severity */}
           <div>
-            <p className="text-xs font-semibold mb-2" style={{ color: "#666" }}>SEVERITY</p>
+            <p className="text-xs font-semibold mb-2" style={{ color: "var(--text-secondary)" }}>SEVERITY</p>
             <div className="grid grid-cols-3 gap-1.5">
               {(["MINOR", "MODERATE", "SERIOUS"] as const).map((s) => (
                 <button
@@ -130,7 +130,7 @@ function OffenseModal({
                   className="py-1.5 rounded-xl text-xs font-semibold border transition"
                   style={form.severity === s
                     ? { background: SEV_STYLE[s].bg, color: SEV_STYLE[s].text, borderColor: SEV_STYLE[s].text }
-                    : { background: "#fff", color: "#999", borderColor: "#e5e5e5" }}
+                    : { background: "var(--card)", color: "var(--text-secondary)", borderColor: "var(--border)" }}
                 >
                   {s}
                 </button>
@@ -141,7 +141,7 @@ function OffenseModal({
           {/* Marks deducted */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold" style={{ color: "#666" }}>MARKS TO DEDUCT</p>
+              <p className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>MARKS TO DEDUCT</p>
               <span className="text-xs font-bold text-red-500">-{form.marks_deducted} / {TOTAL_MARKS}</span>
             </div>
             <div className="flex items-center gap-3">
@@ -167,7 +167,7 @@ function OffenseModal({
 
           {/* Title */}
           <div>
-            <p className="text-xs font-semibold mb-1.5" style={{ color: "#666" }}>OFFENSE TITLE *</p>
+            <p className="text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>OFFENSE TITLE *</p>
             <input
               required
               value={form.title}
@@ -179,7 +179,7 @@ function OffenseModal({
 
           {/* Description */}
           <div>
-            <p className="text-xs font-semibold mb-1.5" style={{ color: "#666" }}>DESCRIPTION (optional)</p>
+            <p className="text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>DESCRIPTION (optional)</p>
             <textarea
               value={form.description}
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
@@ -191,7 +191,7 @@ function OffenseModal({
 
           {/* Action taken */}
           <div>
-            <p className="text-xs font-semibold mb-1.5" style={{ color: "#666" }}>ACTION TAKEN (optional)</p>
+            <p className="text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>ACTION TAKEN (optional)</p>
             <input
               value={form.action_taken}
               onChange={(e) => setForm((f) => ({ ...f, action_taken: e.target.value }))}
@@ -205,7 +205,7 @@ function OffenseModal({
               type="button"
               onClick={onClose}
               className="flex-1 py-3 rounded-2xl text-sm font-medium"
-              style={{ background: "#F5F5F5", color: "#666" }}
+              style={{ background: "var(--surface-muted)", color: "var(--text-secondary)" }}
             >
               Cancel
             </button>
@@ -317,7 +317,7 @@ export default function DisciplinePage() {
   }, [schoolSearch]);
 
   /* ── Computed marks ────────────────────────────────────────── */
-  const totalDeducted = records.reduce((s, r) => s + (r.marks_deducted ?? 0), 0);
+  const totalDeducted = records.reduce((s, r) => s + (r.marks_deducted !== undefined ? Number(r.marks_deducted) : (r.severity === "SERIOUS" ? 5 : r.severity === "MODERATE" ? 3 : 1)), 0);
   const currentMarks  = Math.max(0, TOTAL_MARKS - totalDeducted);
   const marksPct      = (currentMarks / TOTAL_MARKS) * 100;
   const marksColor    = currentMarks >= 30 ? "#16a34a" : currentMarks >= 20 ? "#d97706" : "#dc2626";
@@ -342,8 +342,8 @@ export default function DisciplinePage() {
         {/* ── Top bar ──────────────────────────────────────────── */}
         <div className="flex items-center gap-3 px-3 md:px-4 pt-1 pb-3 flex-shrink-0">
           <div>
-            <h1 className="text-lg font-bold" style={{ color: "#121212" }}>Discipline</h1>
-            <p className="text-xs" style={{ color: "#666" }}>Tap student card to view records</p>
+            <h1 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>Discipline</h1>
+            <p className="text-xs" style={{ color: "var(--text-secondary)" }}>Tap student card to view records</p>
           </div>
         </div>
 
@@ -356,15 +356,15 @@ export default function DisciplinePage() {
             <div className="bg-white rounded-3xl p-5 flex flex-col items-center gap-3">
               <div
                 className="w-20 h-20 rounded-full flex items-center justify-center"
-                style={{ background: listening ? "#FEE2E2" : "#F5F5F5" }}
+                style={{ background: listening ? "var(--severity-serious-bg)" : "var(--surface-muted)" }}
               >
                 {scanning
                   ? <Loader2 size={32} className="animate-spin" style={{ color: "#C62828" }} />
                   : listening
                   ? <Shield size={32} className="animate-pulse" style={{ color: "#C62828" }} />
-                  : <WifiOff size={32} style={{ color: "#ccc" }} />}
+                  : <WifiOff size={32} style={{ color: "var(--text-secondary)" }} />}
               </div>
-              <p className="text-sm font-bold text-center" style={{ color: "#121212" }}>
+              <p className="text-sm font-bold text-center" style={{ color: "var(--text-primary)" }}>
                 {scanning ? "Reading card…" : listening ? "Waiting for card tap…" : "NFC not available"}
               </p>
               <p className="text-xs text-center text-gray-400">
@@ -385,8 +385,8 @@ export default function DisciplinePage() {
                 <button
                   onClick={() => handleCardScan(cardInput)}
                   disabled={scanning || !cardInput.trim()}
-                  className="px-3 py-2 rounded-xl text-white text-xs font-bold disabled:opacity-50"
-                  style={{ background: "#121212" }}
+                  className="px-3 py-2 rounded-xl text-xs font-bold disabled:opacity-50"
+                  style={{ background: "var(--accent)", color: "var(--bg)" }}
                 >
                   {scanning ? <Loader2 size={12} className="animate-spin" /> : <CreditCard size={13} />}
                 </button>
@@ -403,21 +403,21 @@ export default function DisciplinePage() {
                     ? <img src={student.photo} alt={student.name} className="w-12 h-12 rounded-2xl object-cover flex-shrink-0" />
                     : (
                       <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 text-lg font-bold"
-                        style={{ background: "#F5F5F5", color: "#121212" }}>
+                        style={{ background: "var(--surface-muted)", color: "var(--text-primary)" }}>
                         {student.name.charAt(0)}
                       </div>
                     )}
                   <div className="min-w-0">
-                    <p className="font-bold text-sm truncate" style={{ color: "#121212" }}>{student.name}</p>
+                    <p className="font-bold text-sm truncate" style={{ color: "var(--text-primary)" }}>{student.name}</p>
                     <p className="text-xs text-gray-400">{student.class}</p>
                     <p className="text-xs text-gray-400">{student.student_code}</p>
                   </div>
                 </div>
 
                 {/* Marks score */}
-                <div className="rounded-2xl p-3 mb-3" style={{ background: "#F5F5F5" }}>
+                <div className="rounded-2xl p-3 mb-3" style={{ background: "var(--surface-muted)" }}>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-semibold" style={{ color: "#666" }}>DISCIPLINE MARKS</span>
+                    <span className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>DISCIPLINE MARKS</span>
                     <span className="text-lg font-bold" style={{ color: marksColor }}>{currentMarks}<span className="text-xs font-normal text-gray-400">/{TOTAL_MARKS}</span></span>
                   </div>
                   <div className="w-full h-2 rounded-full bg-gray-200 overflow-hidden">
@@ -450,12 +450,12 @@ export default function DisciplinePage() {
                     ? <img src={student.photo} alt={student.name} className="w-11 h-11 rounded-2xl object-cover flex-shrink-0" />
                     : (
                       <div className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 font-bold"
-                        style={{ background: "#F5F5F5", color: "#121212" }}>
+                        style={{ background: "var(--surface-muted)", color: "var(--text-primary)" }}>
                         {student.name.charAt(0)}
                       </div>
                     )}
                   <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm truncate" style={{ color: "#121212" }}>{student.name}</p>
+                    <p className="font-bold text-sm truncate" style={{ color: "var(--text-primary)" }}>{student.name}</p>
                     <p className="text-xs text-gray-400">{student.class} · {student.student_code}</p>
                   </div>
                   <div className="text-right flex-shrink-0">
@@ -480,7 +480,7 @@ export default function DisciplinePage() {
             {student ? (
               <div className="bg-white rounded-3xl flex-1 overflow-hidden flex flex-col">
                 <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0">
-                  <p className="text-sm font-bold" style={{ color: "#121212" }}>Offense History</p>
+                  <p className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Offense History</p>
                   <p className="text-xs text-gray-400">{records.length} record{records.length !== 1 ? "s" : ""}</p>
                 </div>
                 <div className="flex-1 overflow-y-auto px-4 py-3">
@@ -497,7 +497,7 @@ export default function DisciplinePage() {
                       {records.map((r) => {
                         const sev = SEV_STYLE[r.severity] ?? SEV_STYLE.MINOR;
                         return (
-                          <div key={r.id} className="rounded-2xl p-3" style={{ background: "#F9F9F9" }}>
+                          <div key={r.id} className="rounded-2xl p-3" style={{ background: "var(--surface-muted)" }}>
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1.5 flex-wrap mb-1">
@@ -506,9 +506,9 @@ export default function DisciplinePage() {
                                   </span>
                                   <span className="text-xs text-gray-400">{TYPE_LABEL[r.type] ?? r.type}</span>
                                 </div>
-                                <p className="text-sm font-semibold" style={{ color: "#121212" }}>{r.title}</p>
+                                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{r.title}</p>
                                 {r.description && <p className="text-xs text-gray-500 mt-0.5">{r.description}</p>}
-                                {r.action_taken && <p className="text-xs mt-0.5" style={{ color: "#666" }}>→ {r.action_taken}</p>}
+                                {r.action_taken && <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>→ {r.action_taken}</p>}
                                 <p className="text-xs text-gray-400 mt-1">
                                   {new Date(r.recorded_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
                                   {r.recorder && ` · ${r.recorder.first_name} ${r.recorder.last_name}`}
@@ -533,11 +533,11 @@ export default function DisciplinePage() {
               <div className="bg-white rounded-3xl flex-1 overflow-hidden flex flex-col">
                 <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0 flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-bold" style={{ color: "#121212" }}>All Records</p>
+                    <p className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>All Records</p>
                     <p className="text-xs text-gray-400">{schoolTotal} total</p>
                   </div>
                   <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-2.5 py-1.5">
-                    <Search size={12} style={{ color: "#999" }} />
+                        <Search size={12} style={{ color: "var(--text-secondary)" }} />
                     <input
                       value={schoolSearch}
                       onChange={(e) => setSchoolSearch(e.target.value)}
@@ -560,7 +560,7 @@ export default function DisciplinePage() {
                       {schoolRecords.map((r) => {
                         const sev = SEV_STYLE[r.severity] ?? SEV_STYLE.MINOR;
                         return (
-                          <div key={r.id} className="rounded-2xl p-3" style={{ background: "#F9F9F9" }}>
+                          <div key={r.id} className="rounded-2xl p-3" style={{ background: "var(--surface-muted)" }}>
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1.5 flex-wrap mb-1">
@@ -568,12 +568,12 @@ export default function DisciplinePage() {
                                     {r.severity}
                                   </span>
                                   {r.student && (
-                                    <span className="text-xs font-semibold" style={{ color: "#121212" }}>
+                                    <span className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
                                       {r.student.user.first_name} {r.student.user.last_name}
                                     </span>
                                   )}
                                 </div>
-                                <p className="text-sm font-medium" style={{ color: "#444" }}>{r.title}</p>
+                                <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{r.title}</p>
                                 <p className="text-xs text-gray-400 mt-0.5">
                                   {new Date(r.recorded_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
                                   {r.recorder && ` · ${r.recorder.first_name} ${r.recorder.last_name}`}

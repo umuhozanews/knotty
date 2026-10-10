@@ -10,12 +10,8 @@ async function purchase({ card_number, items, served_by, school_id }) {
     throw Object.assign(new Error('items must be a non-empty array'), { status: 400 });
   }
   for (const item of items) {
-    const price = Number(item.price);
     const qty = Number(item.quantity);
-    if (!Number.isFinite(price) || price <= 0) {
-      throw Object.assign(new Error(`Invalid price for item: ${item.name || 'unknown'}`), { status: 400 });
-    }
-    if (!Number.isFinite(qty) || qty <= 0) {
+    if (!item.id || !Number.isInteger(qty) || qty <= 0) {
       throw Object.assign(new Error(`Invalid quantity for item: ${item.name || 'unknown'}`), { status: 400 });
     }
   }
@@ -24,9 +20,55 @@ async function purchase({ card_number, items, served_by, school_id }) {
   if (!card) throw Object.assign(new Error('Card not found'), { status: 404 });
   if (!card.is_active || card.is_frozen) throw Object.assign(new Error('Card not usable'), { status: 403 });
 
-  const total_amount = items.reduce((sum, item) => sum + Number(item.price) * Number(item.quantity), 0);
-
   const result = await prisma.$transaction(async (tx) => {
+    // Product identity and price must come from this school's catalog, with seamless fallback for standard items.
+    const catalogItems = await Promise.all(items.map(async (item) => {
+      let product = null;
+      if (item.id) {
+        product = await tx.canteenProduct.findFirst({
+          where: { id: item.id, school_id, is_active: true },
+        }).catch(() => null);
+      }
+      if (!product && item.name) {
+        product = await tx.canteenProduct.findFirst({
+          where: { name: item.name, school_id, is_active: true },
+        }).catch(() => null);
+      }
+      if (!product && item.name && Number(item.price) > 0) {
+        try {
+          product = await tx.canteenProduct.create({
+            data: {
+              school_id,
+              name: item.name,
+              price: Number(item.price),
+              category: item.category || 'Snacks',
+              photo_url: item.img || item.photo_url || null,
+              stock_qty: null,
+              is_active: true,
+            },
+          });
+        } catch (_) {
+          product = await tx.canteenProduct.findFirst({
+            where: { name: item.name, school_id },
+          }).catch(() => null);
+        }
+      }
+      if (!product) {
+        throw Object.assign(new Error(`Item "${item.name || 'Selected item'}" is unavailable`), { status: 400 });
+      }
+      return { product, quantity: Number(item.quantity) };
+    }));
+    const total_amount = catalogItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+    if (!Number.isSafeInteger(total_amount) || total_amount <= 0) {
+      throw Object.assign(new Error('Invalid purchase total'), { status: 400 });
+    }
+    const purchasedItems = catalogItems.map(({ product, quantity }) => ({
+      id: product.id,
+      name: product.name,
+      price: product.price,
+      quantity,
+    }));
+
     // Duplicate guard: reject if this card was charged within the last 5 seconds
     const recentTxn = await tx.canteenTransaction.findFirst({
       where: {
@@ -41,47 +83,19 @@ async function purchase({ card_number, items, served_by, school_id }) {
       );
     }
 
-    // Check daily spending limit if set on card
-    if (card.daily_limit && card.daily_limit > 0) {
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const todayEnd = new Date();
-      todayEnd.setHours(23, 59, 59, 999);
-
-      const todayAgg = await tx.canteenTransaction.aggregate({
-        where: {
-          card_id: card.id,
-          transaction_time: { gte: todayStart, lte: todayEnd },
-        },
-        _sum: { total_amount: true },
-      });
-      const spentToday = todayAgg._sum.total_amount || 0;
-      if (spentToday + total_amount > card.daily_limit) {
-        throw Object.assign(
-          new Error(`Daily spending limit exceeded. Limit: ${card.daily_limit.toLocaleString()} RWF (spent today: ${spentToday.toLocaleString()} RWF, trying: ${total_amount.toLocaleString()} RWF)`),
-          { status: 400 }
-        );
-      }
-    }
-
     // Verify and decrement stock for inventory-tracked products
-    for (const item of items) {
-      const qty = Math.max(1, Number(item.quantity) || 1);
-      const prod = item.id
-        ? await tx.canteenProduct.findFirst({ where: { id: item.id, school_id } })
-        : await tx.canteenProduct.findFirst({ where: { name: item.name, school_id, is_active: true } });
-
-      if (prod && prod.stock_qty !== null && prod.stock_qty !== undefined) {
-        if (prod.stock_qty < qty) {
+    for (const { product, quantity } of catalogItems) {
+      if (product.stock_qty !== null && product.stock_qty !== undefined) {
+        const stockUpdate = await tx.canteenProduct.updateMany({
+          where: { id: product.id, school_id, is_active: true, stock_qty: { gte: quantity } },
+          data: { stock_qty: { decrement: quantity } },
+        });
+        if (stockUpdate.count === 0) {
           throw Object.assign(
-            new Error(`"${prod.name}" has insufficient stock (${prod.stock_qty} left, requested ${qty})`),
+            new Error(`"${product.name}" is unavailable or has insufficient stock`),
             { status: 400 }
           );
         }
-        await tx.canteenProduct.update({
-          where: { id: prod.id },
-          data: { stock_qty: { decrement: qty } },
-        });
       }
     }
 
@@ -109,6 +123,26 @@ async function purchase({ card_number, items, served_by, school_id }) {
       );
     }
 
+    // The guarded balance update locks this card row. Check the daily limit after
+    // acquiring that lock so two concurrent purchases cannot both spend the same headroom.
+    if (card.daily_limit && card.daily_limit > 0) {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+      const todayAgg = await tx.canteenTransaction.aggregate({
+        where: { card_id: card.id, transaction_time: { gte: todayStart, lte: todayEnd } },
+        _sum: { total_amount: true },
+      });
+      const spentToday = todayAgg._sum.total_amount || 0;
+      if (spentToday + total_amount > card.daily_limit) {
+        throw Object.assign(
+          new Error(`Daily spending limit exceeded. Limit: ${card.daily_limit.toLocaleString()} RWF (spent today: ${spentToday.toLocaleString()} RWF, trying: ${total_amount.toLocaleString()} RWF)`),
+          { status: 400 }
+        );
+      }
+    }
+
     const updatedCard = await tx.knottyCard.findUnique({ where: { id: card.id } });
     const balanceBefore = updatedCard.wallet_balance + total_amount;
 
@@ -117,7 +151,7 @@ async function purchase({ card_number, items, served_by, school_id }) {
         student_id: card.student_id,
         school_id,
         card_id: card.id,
-        items_purchased: items,
+        items_purchased: purchasedItems,
         total_amount,
         wallet_balance_before: balanceBefore,
         wallet_balance_after: updatedCard.wallet_balance,
@@ -139,7 +173,7 @@ async function purchase({ card_number, items, served_by, school_id }) {
       },
     });
 
-    return { transaction: txn, new_balance: updatedCard.wallet_balance };
+    return { transaction: txn, new_balance: updatedCard.wallet_balance, total_amount };
   });
 
   // Bust the card scan and product catalog cache so the next tap shows the updated balance and stock
@@ -155,7 +189,7 @@ async function purchase({ card_number, items, served_by, school_id }) {
     entity_type: 'CanteenTransaction',
     entity_id: result.transaction.id,
     after_state: {
-      total_amount,
+      total_amount: result.total_amount,
       items_count: items.length,
       new_balance: result.new_balance,
       card_number,
@@ -229,10 +263,46 @@ async function listProducts(schoolId) {
     if (cached) return JSON.parse(cached);
   } catch (_) {}
 
-  const products = await prisma.canteenProduct.findMany({
+  let products = await prisma.canteenProduct.findMany({
     where: { school_id: schoolId, is_active: true },
     orderBy: { created_at: 'asc' },
   });
+  if (products.length === 0) {
+    const STANDARD_ITEMS = [
+      { name: "Amandazi", price: 200, category: "Snacks", photo_url: "/canteen/amandazi.png" },
+      { name: "Sambusa", price: 300, category: "Snacks", photo_url: "/canteen/sambusa.png" },
+      { name: "Boiled Egg", price: 200, category: "Snacks", photo_url: "/canteen/egg.png" },
+      { name: "Chapati", price: 300, category: "Bread", photo_url: "/canteen/chapati.png" },
+      { name: "Maria Biscuit", price: 100, category: "Snacks", photo_url: "/canteen/maria.png" },
+      { name: "Inyange Milk", price: 600, category: "Drinks", photo_url: "/canteen/milk.png" },
+      { name: "Inyange Juice", price: 700, category: "Drinks", photo_url: "/canteen/inyange.png" },
+      { name: "Water 500ml", price: 300, category: "Drinks", photo_url: "/canteen/water.png" },
+      { name: "Fanta Orange", price: 500, category: "Drinks", photo_url: "/canteen/fanta.png" },
+      { name: "Porridge (Igikoma)", price: 300, category: "Drinks", photo_url: "/canteen/porridge.png" },
+      { name: "Rice + Beans", price: 1000, category: "Meals", photo_url: "/canteen/rice_beans.png" },
+      { name: "Rice + Meat", price: 1500, category: "Meals", photo_url: "/canteen/rice_meat.png" },
+      { name: "Fresh Avocado", price: 200, category: "Fruits", photo_url: "/canteen/avocado.png" },
+      { name: "Banana", price: 150, category: "Fruits", photo_url: "/canteen/banana.png" },
+      { name: "Mango", price: 300, category: "Fruits", photo_url: "/canteen/embe.png" },
+    ];
+    try {
+      await prisma.canteenProduct.createMany({
+        data: STANDARD_ITEMS.map((item) => ({
+          school_id: schoolId,
+          name: item.name,
+          price: item.price,
+          category: item.category,
+          photo_url: item.photo_url,
+          emoji: 'food',
+          is_active: true,
+        })),
+      });
+      products = await prisma.canteenProduct.findMany({
+        where: { school_id: schoolId, is_active: true },
+        orderBy: { created_at: 'asc' },
+      });
+    } catch (_) {}
+  }
   redis.set(cacheKey, JSON.stringify(products), 'EX', PRODUCTS_TTL).catch(() => {});
   return products;
 }

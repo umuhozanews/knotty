@@ -4,6 +4,12 @@ const { paginate, paginatedResponse } = require('../../utils/helpers');
 const { sendSMS } = require('../../integrations/africas-talking');
 const { encrypt, decrypt } = require('../../utils/encryption');
 
+async function requireStudentInSchool(studentId, schoolId, db = prisma) {
+  const student = await db.student.findFirst({ where: { id: studentId, school_id: schoolId }, select: { id: true } });
+  if (!student) throw Object.assign(new Error('Student not found'), { status: 404 });
+  return student;
+}
+
 // ─── Field-level encrypt/decrypt helpers ───
 function encryptHealthRecord(data) {
   const out = { ...data };
@@ -64,6 +70,7 @@ function decryptMedication(r) {
 
 // ─── Existing Health Incident Records (Legacy/Direct Incident Logs) ───
 async function create(data, recordedBy, schoolId) {
+  await requireStudentInSchool(data.student_id, schoolId);
   const record = await prisma.healthRecord.create({
     data: { ...encryptHealthRecord(data), recorded_by: recordedBy, school_id: schoolId },
   });
@@ -78,17 +85,17 @@ async function create(data, recordedBy, schoolId) {
   return decryptHealthRecord(record);
 }
 
-async function list(studentId, { page, limit }) {
+async function list(studentId, schoolId, { page, limit }) {
   const { skip, take } = paginate(null, page, limit);
   const [data, total] = await Promise.all([
     prisma.healthRecord.findMany({
-      where: { student_id: studentId },
+      where: { student_id: studentId, school_id: schoolId },
       skip,
       take,
       orderBy: { recorded_at: 'desc' },
       include: { recorder: { select: { first_name: true, last_name: true, role: true } } },
     }),
-    prisma.healthRecord.count({ where: { student_id: studentId } }),
+    prisma.healthRecord.count({ where: { student_id: studentId, school_id: schoolId } }),
   ]);
   return paginatedResponse(data.map(decryptHealthRecord), total, page, limit);
 }
@@ -168,6 +175,7 @@ async function getMedicalProfile(studentId, schoolId) {
 }
 
 async function upsertMedicalProfile(studentId, schoolId, data, actorId) {
+  await requireStudentInSchool(studentId, schoolId);
   const { blood_type, allergies, chronic_conditions, emergency_contact_phone } = data;
 
   const existing = await prisma.medicalProfile.findFirst({
@@ -199,7 +207,8 @@ async function upsertMedicalProfile(studentId, schoolId, data, actorId) {
 }
 
 // ─── New Immunization Records ───
-async function addImmunizationRecord(studentId, data) {
+async function addImmunizationRecord(studentId, schoolId, data) {
+  await requireStudentInSchool(studentId, schoolId);
   const { vaccine_name, date_administered } = data;
   const record = await prisma.immunizationRecord.create({
     data: {
@@ -211,9 +220,9 @@ async function addImmunizationRecord(studentId, data) {
   return { ...record, vaccine_name: decrypt(record.vaccine_name) };
 }
 
-async function listImmunizations(studentId) {
+async function listImmunizations(studentId, schoolId) {
   const records = await prisma.immunizationRecord.findMany({
-    where: { student_id: studentId },
+    where: { student_id: studentId, student: { school_id: schoolId } },
     orderBy: { date_administered: 'desc' },
   });
   return records.map((r) => ({ ...r, vaccine_name: decrypt(r.vaccine_name) }));
@@ -242,6 +251,9 @@ async function createClinicVisit(studentId, schoolId, data, recorderId) {
         parent: { select: { id: true, phone: true } },
       },
     });
+    if (!student || student.school_id !== schoolId) {
+      throw Object.assign(new Error('Student not found'), { status: 404 });
+    }
 
     const visit = await tx.clinicVisit.create({
       data: {

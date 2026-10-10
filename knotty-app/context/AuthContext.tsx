@@ -1,7 +1,7 @@
 "use client";
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
 import { auth, multiSchool, LoginResponse, SchoolItem } from "@/lib/api";
-import { DEMO_ACCOUNTS, DEMO_SCHOOL_ID, getAllDemoAccounts } from "@/lib/demo";
+import { DEMO_ACCOUNTS, DEMO_SCHOOL_ID, getAllDemoAccounts, isDemoMode } from "@/lib/demo";
 
 type User = LoginResponse["user"];
 
@@ -34,7 +34,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setActiveSchool(matched);
       }
     } catch (_) {
-      // Fallback default school if API offline
+      if (!isDemoMode()) {
+        setSchoolsList([]);
+        setActiveSchool(null);
+        return;
+      }
+      // Sample school is only shown in explicit local demo mode.
       const fallbackSchool: SchoolItem = {
         id: currentSchoolId || DEMO_SCHOOL_ID,
         name: "IshuriHUB Model School",
@@ -55,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Restore demo session without hitting the backend
-    if (localStorage.getItem("ishuri_demo") === "true" || localStorage.getItem("knotty_demo") === "true") {
+    if (isDemoMode()) {
       const saved = localStorage.getItem("ishuri_demo_user") || localStorage.getItem("knotty_demo_user");
       if (saved) {
         const u = JSON.parse(saved) as User;
@@ -106,7 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const allDemo = getAllDemoAccounts();
       const demo = allDemo.find((a) => a.email.toLowerCase() === email.trim().toLowerCase());
 
-      if (demo && (isConnectionError || msg.includes("Server returned"))) {
+      if (process.env.NODE_ENV !== "production" && demo && (isConnectionError || msg.includes("Server returned"))) {
         console.log("Backend offline or unreachable. Scoping session to:", demo.school_name, demo.school_id);
         const targetSchoolId = demo.school_id || DEMO_SCHOOL_ID;
         const demoUser: User = {

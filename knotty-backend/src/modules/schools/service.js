@@ -1,6 +1,7 @@
 const prisma = require('../../config/database');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const redis = require('../../config/redis');
 
 async function createSchool(data) {
   const code = (data.code || data.name
@@ -20,23 +21,61 @@ async function createSchool(data) {
     },
   });
 
-  // Automatically create standard levels (S1 - S6) for the new school
-  const levels = ['Senior 1', 'Senior 2', 'Senior 3', 'Senior 4', 'Senior 5', 'Senior 6'];
-  for (let i = 0; i < levels.length; i++) {
-    const level = await prisma.level.create({
-      data: { school_id: school.id, name: levels[i], order_index: i + 1 },
-    });
-    // Add default section A
-    await prisma.class.create({
-      data: { school_id: school.id, level_id: level.id, name: 'A', academic_year: '2025-2026' },
-    });
-  }
-
+  // Classes, levels, terms, and timetables are explicitly configured per school
+  // after onboarding; do not create stale demo-year academic records here.
   return school;
 }
 
-async function listAllSchools() {
+async function createOrganization({ name, slug, legal_name, tin }) {
+  if (!name || !slug) throw Object.assign(new Error('Organization name and slug are required'), { status: 400 });
+  return prisma.organization.create({
+    data: { name: String(name).trim(), slug: String(slug).trim().toLowerCase(), legal_name: legal_name || null, tin: tin || null },
+  });
+}
+
+async function setOrganizationManager(organizationId, userId, role = 'ORGANIZATION_MANAGER') {
+  if (!['ORGANIZATION_MANAGER'].includes(role)) throw Object.assign(new Error('Invalid organization role'), { status: 400 });
+  const [organization, user] = await Promise.all([
+    prisma.organization.findUnique({ where: { id: organizationId }, select: { id: true } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { id: true, is_active: true } }),
+  ]);
+  if (!organization || !user || !user.is_active) throw Object.assign(new Error('Active organization and user are required'), { status: 404 });
+  return prisma.organizationMembership.upsert({
+    where: { organization_id_user_id: { organization_id: organizationId, user_id: userId } },
+    create: { organization_id: organizationId, user_id: userId, role, status: 'ACTIVE' },
+    update: { role, status: 'ACTIVE' },
+  });
+}
+
+async function attachSchoolToOrganization(organizationId, schoolId, branchCode = null) {
+  const organization = await prisma.organization.findUnique({ where: { id: organizationId }, select: { id: true } });
+  if (!organization) throw Object.assign(new Error('Organization not found'), { status: 404 });
+  try {
+    return await prisma.school.update({
+      where: { id: schoolId },
+      data: { organization_id: organizationId, branch_code: branchCode ? String(branchCode).trim() : null },
+    });
+  } catch (error) {
+    if (error.code === 'P2025') throw Object.assign(new Error('School not found'), { status: 404 });
+    throw error;
+  }
+}
+
+async function listAllSchools(userId) {
+  const [memberships, orgMemberships, platformMembership] = await Promise.all([prisma.schoolMembership.findMany({
+    where: { user_id: userId, status: 'ACTIVE' }, select: { school_id: true },
+  }), prisma.organizationMembership.findMany({
+    where: { user_id: userId, status: 'ACTIVE', role: 'ORGANIZATION_MANAGER' },
+    select: { role: true, organization_id: true },
+  }), prisma.platformMembership.findFirst({ where: { user_id: userId, status: 'ACTIVE' } })]);
+  const isPlatformAdmin = !!platformMembership;
   const schools = await prisma.school.findMany({
+    where: isPlatformAdmin ? {} : {
+      OR: [
+        { id: { in: memberships.map((m) => m.school_id) } },
+        { organization_id: { in: orgMemberships.map((m) => m.organization_id) } },
+      ],
+    },
     orderBy: { created_at: 'asc' },
   });
 
@@ -68,29 +107,44 @@ async function listAllSchools() {
   return enriched;
 }
 
-async function switchSchool(userId, targetSchoolId) {
+async function switchSchool(userId, targetSchoolId, sessionId) {
+  if (!sessionId) throw Object.assign(new Error('A valid login session is required'), { status: 401 });
   const school = await prisma.school.findUnique({ where: { id: targetSchoolId } });
   if (!school) throw Object.assign(new Error('Target school not found'), { status: 404 });
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw Object.assign(new Error('User not found'), { status: 404 });
 
+  const [membership, orgMembership, platformMembership] = await Promise.all([
+    prisma.schoolMembership.findFirst({ where: { user_id: userId, school_id: school.id, status: 'ACTIVE' } }),
+    school.organization_id ? prisma.organizationMembership.findFirst({
+      where: { user_id: userId, organization_id: school.organization_id, status: 'ACTIVE' },
+    }) : null,
+    prisma.platformMembership.findFirst({ where: { user_id: userId, status: 'ACTIVE' } }),
+  ]);
+  const effectiveRole = platformMembership?.role || (
+    orgMembership?.role === 'ORGANIZATION_MANAGER' ? orgMembership.role : membership?.role
+  );
+  if (!effectiveRole) throw Object.assign(new Error('You do not have active access to this school'), { status: 403 });
+
   // Generate new tokens scoped to targetSchoolId
   const jti = crypto.randomUUID();
-  const payload = { userId: user.id, role: user.role, schoolId: school.id, jti };
+  const payload = { userId: user.id, role: effectiveRole, schoolId: school.id, sid: sessionId, jti };
   const accessToken = jwt.sign(payload, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '15m',
   });
-  const refreshToken = jwt.sign({ userId: user.id, role: user.role, schoolId: school.id }, process.env.JWT_REFRESH_SECRET, {
+  const refreshToken = jwt.sign({ userId: user.id, role: effectiveRole, schoolId: school.id, sid: sessionId }, process.env.JWT_REFRESH_SECRET, {
     expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
   });
+  await redis.set(`refresh:${sessionId}`, refreshToken, 'EX', 7 * 24 * 3600);
+  await redis.set(`session:${sessionId}`, user.id, 'EX', 7 * 24 * 3600);
 
   return {
     accessToken,
     refreshToken,
     user: {
       id: user.id,
-      role: user.role,
+      role: effectiveRole,
       school_id: school.id,
       first_name: user.first_name,
       last_name: user.last_name,
@@ -107,6 +161,60 @@ async function switchSchool(userId, targetSchoolId) {
       subscription_plan: school.subscription_plan,
     },
   };
+}
+
+async function canAccessSchool(userId, schoolId) {
+  const platformMembership = await prisma.platformMembership.findFirst({ where: { user_id: userId, status: 'ACTIVE' }, select: { id: true } });
+  if (platformMembership) return !!(await prisma.school.findUnique({ where: { id: schoolId }, select: { id: true } }));
+  const school = await prisma.school.findUnique({ where: { id: schoolId }, select: { id: true, organization_id: true } });
+  if (!school) return false;
+  const membership = await prisma.schoolMembership.findFirst({
+    where: { user_id: userId, school_id: schoolId, status: 'ACTIVE' }, select: { id: true },
+  });
+  if (membership) return true;
+  if (!school.organization_id) return false;
+  const orgMembership = await prisma.organizationMembership.findFirst({
+    where: { user_id: userId, organization_id: school.organization_id, status: 'ACTIVE', role: 'ORGANIZATION_MANAGER' },
+    select: { id: true },
+  });
+  return !!orgMembership;
+}
+
+async function listMemberships(schoolId) {
+  return prisma.schoolMembership.findMany({
+    where: { school_id: schoolId },
+    select: {
+      id: true, role: true, status: true, created_at: true,
+      user: { select: { id: true, first_name: true, last_name: true, email: true, is_active: true } },
+    },
+    orderBy: { created_at: 'asc' },
+  });
+}
+
+async function addMembership(schoolId, userId, role) {
+  const allowed = ['SCHOOL_MANAGER', 'ADMIN', 'TEACHER', 'STUDENT', 'PARENT', 'CANTEEN', 'NURSE', 'BURSAR', 'DISCIPLINE', 'LIBRARIAN'];
+  if (!allowed.includes(role)) throw Object.assign(new Error('Invalid school role'), { status: 400 });
+  const [school, user] = await Promise.all([
+    prisma.school.findUnique({ where: { id: schoolId }, select: { id: true } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { id: true, is_active: true } }),
+  ]);
+  if (!school || !user || !user.is_active) throw Object.assign(new Error('Active school and user are required'), { status: 404 });
+  return prisma.schoolMembership.upsert({
+    where: { user_id_school_id: { user_id: userId, school_id: schoolId } },
+    create: { user_id: userId, school_id: schoolId, role, status: 'ACTIVE' },
+    update: { role, status: 'ACTIVE' },
+    select: { id: true, role: true, status: true, school_id: true, user_id: true },
+  });
+}
+
+async function revokeMembership(schoolId, membershipId, actorId) {
+  const membership = await prisma.schoolMembership.findFirst({ where: { id: membershipId, school_id: schoolId } });
+  if (!membership) throw Object.assign(new Error('Membership not found'), { status: 404 });
+  if (membership.user_id === actorId) throw Object.assign(new Error('You cannot revoke your own membership'), { status: 400 });
+  return prisma.schoolMembership.update({
+    where: { id: membership.id }, data: { status: 'REVOKED' },
+    select: { id: true, user_id: true, school_id: true, role: true, status: true },
+  });
 }
 
 async function getSchool(id) {
@@ -197,8 +305,15 @@ async function getAttendanceTrend(schoolId, days = 9) {
 
 module.exports = {
   createSchool,
+  createOrganization,
+  setOrganizationManager,
+  attachSchoolToOrganization,
   listAllSchools,
   switchSchool,
+  canAccessSchool,
+  listMemberships,
+  addMembership,
+  revokeMembership,
   getSchool,
   updateSchool,
   getDashboardStats,

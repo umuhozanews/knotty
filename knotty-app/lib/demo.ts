@@ -107,9 +107,20 @@ export function getAllDemoAccounts(): DemoAccount[] {
 export const DEMO_SCHOOL_ID = "demo-school-id";
 
 export function isDemoMode(): boolean {
-  if (process.env.NODE_ENV === "production") return false;
   if (typeof window === "undefined") return false;
   return localStorage.getItem("ishuri_demo") === "true" || localStorage.getItem("knotty_demo") === "true";
+}
+
+export function getStoredStudents(): Student[] {
+  if (typeof window === "undefined") return DEMO_STUDENTS;
+  try {
+    const val = localStorage.getItem("ishuri_demo_students") || localStorage.getItem("knotty_demo_students");
+    if (val) {
+      const parsed = JSON.parse(val);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return DEMO_STUDENTS;
 }
 
 export const DEMO_STATS: DashboardStats = {

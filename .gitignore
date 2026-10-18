@@ -28,4 +28,9 @@ postgres_log.txt
 !knotty-app/public/**/*.jpeg
 !knotty-app/public/**/*.webp
 !knotty-app/public/**/*.svg
+!public/**/*.png
+!public/**/*.jpg
+!public/**/*.jpeg
+!public/**/*.webp
+!public/**/*.svg
 uploads/

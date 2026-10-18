@@ -36,7 +36,6 @@ export default function TeacherDashboard() {
               <h2 className="text-sm font-bold text-gray-800">Your teaching timetable</h2>
               <p className="text-xs text-gray-500">Only lessons assigned to your account are shown.</p>
             </div>
-            <a href="/academics?tab=timetable" className="text-xs font-semibold text-indigo-700 hover:underline">Full timetable</a>
           </div>
           {loading ? <div className="flex justify-center py-5"><Loader2 className="animate-spin text-indigo-500" size={18} /></div> : timetable.length === 0 ? (
             <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-600">No teaching periods are assigned to your account yet.</p>

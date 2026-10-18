@@ -19,10 +19,34 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [activeSchool, setActiveSchool] = useState<SchoolItem | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const savedDemo = localStorage.getItem("ishuri_demo_user") || localStorage.getItem("knotty_demo_user");
+      if (savedDemo) return JSON.parse(savedDemo);
+      const savedUser = localStorage.getItem("ishuri_user");
+      if (savedUser) return JSON.parse(savedUser);
+    } catch {}
+    return null;
+  });
+
+  const [activeSchool, setActiveSchool] = useState<SchoolItem | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const savedSchool = localStorage.getItem("ishuri_active_school");
+      if (savedSchool) return JSON.parse(savedSchool);
+    } catch {}
+    return null;
+  });
+
   const [schoolsList, setSchoolsList] = useState<SchoolItem[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  const [loading, setLoading] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    const token = localStorage.getItem("ishuri_token") || localStorage.getItem("knotty_token");
+    const isDemo = localStorage.getItem("ishuri_demo") === "true" || localStorage.getItem("knotty_demo") === "true";
+    return !!(token || isDemo);
+  });
 
   const fetchSchools = useCallback(async (currentSchoolId?: string) => {
     try {
@@ -32,6 +56,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const targetId = currentSchoolId || user?.school_id;
         const matched = res.data.find((s) => s.id === targetId) || res.data[0];
         setActiveSchool(matched);
+        try {
+          localStorage.setItem("ishuri_active_school", JSON.stringify(matched));
+        } catch {}
       }
     } catch (_) {
       if (!isDemoMode()) {
@@ -55,6 +82,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
       setSchoolsList([fallbackSchool]);
       setActiveSchool(fallbackSchool);
+      try {
+        localStorage.setItem("ishuri_active_school", JSON.stringify(fallbackSchool));
+      } catch {}
     }
   }, [user?.school_id]);
 
@@ -76,20 +106,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!token && !refreshToken) { setLoading(false); return; }
 
     const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("timeout")), 5000)
+      setTimeout(() => reject(new Error("timeout")), 3000)
     );
 
     Promise.race([auth.me(), timeout])
       .then((res) => {
         const u = (res as Awaited<ReturnType<typeof auth.me>>).user;
         setUser(u);
+        try {
+          localStorage.setItem("ishuri_user", JSON.stringify(u));
+        } catch {}
         fetchSchools(u.school_id);
       })
-      .catch(() => {
-        localStorage.removeItem("ishuri_token");
-        localStorage.removeItem("ishuri_refresh");
-        localStorage.removeItem("knotty_token");
-        localStorage.removeItem("knotty_refresh");
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : "";
+        if (msg.includes("401") || msg.includes("Session expired") || msg.includes("unauthorized") || msg.includes("No token")) {
+          localStorage.removeItem("ishuri_token");
+          localStorage.removeItem("ishuri_refresh");
+          localStorage.removeItem("ishuri_user");
+          localStorage.removeItem("knotty_token");
+          localStorage.removeItem("knotty_refresh");
+          setUser(null);
+        }
       })
       .finally(() => setLoading(false));
   }, [fetchSchools]);
@@ -103,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem("knotty_demo_user");
       localStorage.setItem("ishuri_token", res.accessToken);
       localStorage.setItem("ishuri_refresh", res.refreshToken);
+      localStorage.setItem("ishuri_user", JSON.stringify(res.user));
       setUser(res.user);
       fetchSchools(res.user.school_id);
     } catch (err) {
@@ -138,8 +177,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await multiSchool.switch(schoolId);
       localStorage.setItem("ishuri_token", res.accessToken);
       localStorage.setItem("ishuri_refresh", res.refreshToken);
-      setUser({ ...res.user, profile_photo: res.user.profile_photo ?? null });
+      const updatedUser = { ...res.user, profile_photo: res.user.profile_photo ?? null };
+      localStorage.setItem("ishuri_user", JSON.stringify(updatedUser));
+      setUser(updatedUser);
       setActiveSchool(res.school);
+      localStorage.setItem("ishuri_active_school", JSON.stringify(res.school));
       // Reload page to re-fetch all datasets under new school
       window.location.reload();
     } catch (err) {
@@ -161,6 +203,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     auth.logout().catch(() => {});
     localStorage.removeItem("ishuri_token");
     localStorage.removeItem("ishuri_refresh");
+    localStorage.removeItem("ishuri_user");
+    localStorage.removeItem("ishuri_active_school");
     localStorage.removeItem("ishuri_demo");
     localStorage.removeItem("ishuri_demo_user");
     localStorage.removeItem("knotty_token");

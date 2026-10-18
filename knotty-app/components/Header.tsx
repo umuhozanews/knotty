@@ -29,7 +29,6 @@ const NFC_PAGE_MODE: Record<string, NFCMode> = {
   "/reports":    "report",
   "/students":   "report",
   "/workers":    "report",
-  "/academics":  "report",
   "/discipline": "discipline",
   "/health":     "health",
 };

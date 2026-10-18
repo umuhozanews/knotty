@@ -9,7 +9,7 @@ import DashboardShell from "@/components/DashboardShell";
 import { students, structure, cards, health, Level, Class, Student } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
-import { isDemoMode, DEMO_STUDENTS } from "@/lib/demo";
+import { isDemoMode, getStoredStudents } from "@/lib/demo";
 import { isManagementRole } from "@/lib/roles";
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
@@ -613,8 +613,8 @@ export default function StudentsPage() {
       setStudentsByClass((prev) => ({ ...prev, [classId]: res.data }));
     } catch (err) {
       if (isDemoMode()) {
-        const filtered = DEMO_STUDENTS.filter((s) => {
-          const matchClass = s.class?.id === classId;
+        const filtered = getStoredStudents().filter((s) => {
+          const matchClass = !classId || s.class?.id === classId || (s as any).class_id === classId;
           const matchSearch = !search || `${s.user.first_name} ${s.user.last_name}`.toLowerCase().includes(search.toLowerCase());
           return matchClass && matchSearch;
         });

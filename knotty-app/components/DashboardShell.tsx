@@ -10,17 +10,19 @@ import { isDemoMode } from "@/lib/demo";
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
-  // Fallback: read demo user directly from localStorage so the dashboard
-  // works even when AuthContext hasn't re-hydrated yet after a hard reload.
-  const [demoUser, setDemoUser] = useState<{ role: string } | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  useEffect(() => {
-    if (isDemoMode()) {
-      const saved = localStorage.getItem("ishuri_demo_user") || localStorage.getItem("knotty_demo_user");
-      if (saved) setDemoUser(JSON.parse(saved));
-    }
-  }, []);
+  const [demoUser] = useState<{ role: string } | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      if (isDemoMode()) {
+        const saved = localStorage.getItem("ishuri_demo_user") || localStorage.getItem("knotty_demo_user");
+        return saved ? JSON.parse(saved) : null;
+      }
+    } catch {}
+    return null;
+  });
+
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const resolvedUser = user ?? demoUser;
 

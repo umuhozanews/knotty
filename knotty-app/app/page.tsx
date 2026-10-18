@@ -1,18 +1,28 @@
 "use client";
 import { useAuth } from "@/context/AuthContext";
 import DashboardShell from "@/components/DashboardShell";
-import AdminDashboard from "@/components/dashboards/AdminDashboard";
-import TeacherDashboard from "@/components/dashboards/TeacherDashboard";
-import NurseDashboard from "@/components/dashboards/NurseDashboard";
-import DisciplineDashboard from "@/components/dashboards/DisciplineDashboard";
-import BursarDashboard from "@/components/dashboards/BursarDashboard";
-import CanteenDashboard from "@/components/dashboards/CanteenDashboard";
-import StudentDashboard from "@/components/dashboards/StudentDashboard";
-import ParentDashboard from "@/components/dashboards/ParentDashboard";
+import dynamic from "next/dynamic";
 import { isManagementRole } from "@/lib/roles";
-
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
+
+function DashboardLoader() {
+  return (
+    <div className="flex items-center justify-center py-20 min-h-[300px]">
+      <Loader2 className="animate-spin text-orange-500" size={28} />
+    </div>
+  );
+}
+
+const AdminDashboard = dynamic(() => import("@/components/dashboards/AdminDashboard"), { loading: DashboardLoader });
+const TeacherDashboard = dynamic(() => import("@/components/dashboards/TeacherDashboard"), { loading: DashboardLoader });
+const NurseDashboard = dynamic(() => import("@/components/dashboards/NurseDashboard"), { loading: DashboardLoader });
+const DisciplineDashboard = dynamic(() => import("@/components/dashboards/DisciplineDashboard"), { loading: DashboardLoader });
+const BursarDashboard = dynamic(() => import("@/components/dashboards/BursarDashboard"), { loading: DashboardLoader });
+const CanteenDashboard = dynamic(() => import("@/components/dashboards/CanteenDashboard"), { loading: DashboardLoader });
+const StudentDashboard = dynamic(() => import("@/components/dashboards/StudentDashboard"), { loading: DashboardLoader });
+const ParentDashboard = dynamic(() => import("@/components/dashboards/ParentDashboard"), { loading: DashboardLoader });
 
 export default function DashboardPage() {
   const { user } = useAuth();

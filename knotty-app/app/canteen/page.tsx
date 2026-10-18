@@ -3,7 +3,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import {
   Plus, Minus, ShoppingCart, CreditCard, Trash2,
   Wifi, WifiOff, CheckCircle, Loader2, X, Search, ReceiptText, Upload,
-  ShieldCheck, Zap, AlertTriangle, UserCheck, PackagePlus,
+  ShieldCheck, Zap, AlertTriangle, UserCheck, PackagePlus, Utensils,
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import VirtualCardTap from "@/components/VirtualCardTap";
@@ -400,6 +400,7 @@ export default function CanteenPage() {
   /* ── Category + search ─────────────────────────────────────── */
   const [activeCategory, setActiveCategory] = useState("All");
   const [search, setSearch] = useState("");
+  const [failedImgs, setFailedImgs] = useState<Record<string, boolean>>({});
 
   const allMenu: MenuItem[] = apiProducts.length > 0
     ? [...apiProducts, ...DEFAULT_MENU_ITEMS.filter((d) => !apiProducts.some((p) => p.name.toLowerCase() === d.name.toLowerCase()))]
@@ -781,22 +782,34 @@ export default function CanteenPage() {
                       )}
                       {/* Item image hero */}
                       <div
-                        className="w-full aspect-square rounded-xl flex items-center justify-center overflow-hidden relative bg-gray-100 group"
+                        className="w-full aspect-square rounded-xl flex items-center justify-center overflow-hidden relative group"
                         style={{ background: qty > 0 ? "#FFF3EC" : "#F5F5F5" }}
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={item.img || getRealFoodPhoto(item.name, item.cat)}
-                          alt={item.name}
-                          className="w-full h-full object-cover rounded-xl transition duration-200 group-hover:scale-105"
-                          draggable={false}
-                          onError={(e) => {
-                            const fallback = getRealFoodPhoto(item.name, item.cat);
-                            if (e.currentTarget.src !== fallback) {
-                              e.currentTarget.src = fallback;
-                            }
-                          }}
-                        />
+                        {failedImgs[item.id] ? (
+                          <div className="w-full h-full flex flex-col items-center justify-center p-2 text-center select-none">
+                            <div className="w-10 h-10 rounded-full flex items-center justify-center mb-1" style={{ background: qty > 0 ? "#FFE3D1" : "#EBEBEB" }}>
+                              <Utensils size={18} style={{ color: "#FF7A22" }} />
+                            </div>
+                            <span className="text-[11px] font-bold text-gray-800 leading-tight line-clamp-1">{item.name}</span>
+                            <span className="text-[9px] font-medium text-gray-400 mt-0.5">{item.cat}</span>
+                          </div>
+                        ) : (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img
+                            src={item.img || getRealFoodPhoto(item.name, item.cat)}
+                            alt={item.name}
+                            className="w-full h-full object-cover rounded-xl transition duration-200 group-hover:scale-105"
+                            draggable={false}
+                            onError={(e) => {
+                              const fallback = getRealFoodPhoto(item.name, item.cat);
+                              if (e.currentTarget.src !== fallback && !e.currentTarget.src.endsWith(fallback)) {
+                                e.currentTarget.src = fallback;
+                              } else {
+                                setFailedImgs((prev) => ({ ...prev, [item.id]: true }));
+                              }
+                            }}
+                          />
+                        )}
                       </div>
                       <div>
                         <p className="text-sm font-semibold leading-tight" style={{ color: "#121212" }}>{item.name}</p>

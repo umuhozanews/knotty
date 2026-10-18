@@ -1,6 +1,17 @@
 import { DEMO_STUDENTS, isDemoMode } from "./demo";
 
-const BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, '') || "/api/v1";
+const getBaseUrl = (): string => {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, '');
+  if (typeof window !== "undefined") {
+    const isLocalhostHost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+    if (!isLocalhostHost && envUrl && (envUrl.includes("localhost") || envUrl.includes("127.0.0.1"))) {
+      return "/api/v1";
+    }
+  }
+  return envUrl || "/api/v1";
+};
+
+const BASE = getBaseUrl();
 
 function getDemoStorage(key: string): string | null {
   if (typeof window === "undefined") return null;

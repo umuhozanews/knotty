@@ -146,12 +146,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       fetchSchools(res.user.school_id);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
-      const isConnectionError = msg.includes("non-JSON") || msg.includes("fetch") || msg.includes("Failed to fetch") || msg.includes("NetworkError") || msg.includes("404") || msg.includes("connection");
+      const isConnectionError =
+        msg.includes("non-JSON") ||
+        msg.includes("fetch") ||
+        msg.includes("Failed to fetch") ||
+        msg.includes("NetworkError") ||
+        msg.includes("404") ||
+        msg.includes("503") ||
+        msg.includes("500") ||
+        msg.includes("Server returned") ||
+        msg.includes("connection");
       const allDemo = getAllDemoAccounts();
       const demo = allDemo.find((a) => a.email.toLowerCase() === email.trim().toLowerCase());
 
-      if (process.env.NODE_ENV !== "production" && demo && (isConnectionError || msg.includes("Server returned"))) {
-        console.log("Backend offline or unreachable. Scoping session to:", demo.school_name, demo.school_id);
+      if (demo && isConnectionError) {
+        console.log("Backend offline or returning error. Scoping session to:", demo.school_name, demo.school_id);
         const targetSchoolId = demo.school_id || DEMO_SCHOOL_ID;
         const demoUser: User = {
           id: `demo-${demo.role.toLowerCase()}-${demo.school_code?.toLowerCase() || 'kms'}`,

@@ -210,7 +210,10 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
 
   const saveLevels = (data: any[]) => setDemoStorage("ishuri_demo_levels", JSON.stringify(data));
   const saveClasses = (data: any[]) => setDemoStorage("ishuri_demo_classes", JSON.stringify(data));
-  const saveStudents = (data: any[]) => setDemoStorage("ishuri_demo_students", JSON.stringify(data));
+  const saveStudents = (data: any[]) => {
+    setDemoStorage("ishuri_demo_students", JSON.stringify(data));
+    setDemoStorage("knotty_demo_students", JSON.stringify(data));
+  };
   const saveDemoHealthProfiles = (data: any[]) => setDemoStorage("ishuri_demo_health_profiles", JSON.stringify(data));
   const saveDemoImmunizations = (data: any[]) => setDemoStorage("ishuri_demo_health_immunizations", JSON.stringify(data));
   const saveDemoClinicVisits = (data: any[]) => setDemoStorage("ishuri_demo_health_visits", JSON.stringify(data));
@@ -1002,14 +1005,14 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
       const searchVal = urlObj.searchParams.get("search");
 
       let filtered = studentsList;
-      if (classId) filtered = filtered.filter((s: any) => s.class?.id === classId);
-      if (levelId) filtered = filtered.filter((s: any) => s.level?.id === levelId);
+      if (classId) filtered = filtered.filter((s: any) => s.class?.id === classId || s.class_id === classId || (s.class && typeof s.class === "object" && s.class.id === classId));
+      if (levelId) filtered = filtered.filter((s: any) => s.level?.id === levelId || s.level_id === levelId || (s.level && typeof s.level === "object" && s.level.id === levelId));
       if (searchVal) {
         const q = searchVal.toLowerCase();
         filtered = filtered.filter((s: any) => 
-          `${s.user.first_name} ${s.user.last_name}`.toLowerCase().includes(q) ||
-          s.student_code.toLowerCase().includes(q) ||
-          s.user.email.toLowerCase().includes(q)
+          `${s.user?.first_name || ""} ${s.user?.last_name || ""}`.toLowerCase().includes(q) ||
+          (s.student_code && s.student_code.toLowerCase().includes(q)) ||
+          (s.user?.email && s.user.email.toLowerCase().includes(q))
         );
       }
 
@@ -1021,8 +1024,8 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
     }
 
     if (method === "POST") {
-      const levelObj = levels.find((l: any) => l.id === body.level_id) || (body.level_id ? { id: body.level_id, name: body.level_name || "Senior 5" } : null);
-      const classObj = classes.find((c: any) => c.id === body.class_id) || (body.class_id ? { id: body.class_id, name: body.class_name || "A", level: levelObj } : null);
+      const levelObj = levels.find((l: any) => l.id === body.level_id) || (body.level_id ? { id: body.level_id, name: body.level_name || "Senior 5" } : { id: "l1", name: "Senior 5" });
+      const classObj = classes.find((c: any) => c.id === body.class_id) || (body.class_id ? { id: body.class_id, name: body.class_name || "A", level: levelObj } : { id: "c1", name: "A", level: levelObj });
       const newStudent = {
         id: "std-" + Date.now(),
         student_code: "KMS26" + String(studentsList.length + 1).padStart(4, "0"),
@@ -1036,6 +1039,8 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           phone: body.phone || null,
           profile_photo: body.profile_photo || null
         },
+        level_id: levelObj?.id || "l1",
+        class_id: classObj?.id || "c1",
         level: levelObj,
         class: classObj,
         card: null,

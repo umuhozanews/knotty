@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Search, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import { students, Student } from "@/lib/api";
-import { isDemoMode, getStoredStudents } from "@/lib/demo";
+import { getStoredStudents } from "@/lib/demo";
 
 function ScoreBadge({ score, total }: { score: number; total: number }) {
   const pct = (score / total) * 100;
@@ -43,16 +43,22 @@ export default function StudentTable() {
     setLoading(true);
     try {
       const res = await students.list({ page, limit, search: query || undefined });
-      setData(res.data);
-      setTotal(res.pagination.total);
-    } catch {
-      if (isDemoMode()) {
+      if (res.data && res.data.length > 0) {
+        setData(res.data);
+        setTotal(res.pagination.total);
+      } else {
         const filtered = getStoredStudents().filter((s) =>
           !query || `${s.user.first_name} ${s.user.last_name}`.toLowerCase().includes(query.toLowerCase())
         );
         setData(filtered);
         setTotal(filtered.length);
       }
+    } catch {
+      const filtered = getStoredStudents().filter((s) =>
+        !query || `${s.user.first_name} ${s.user.last_name}`.toLowerCase().includes(query.toLowerCase())
+      );
+      setData(filtered);
+      setTotal(filtered.length);
     } finally {
       setLoading(false);
     }

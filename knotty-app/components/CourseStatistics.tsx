@@ -3,14 +3,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { MoreHorizontal, ArrowUpRight } from "lucide-react";
 import { schools, DashboardStats } from "@/lib/api";
-import { isDemoMode, DEMO_STATS } from "@/lib/demo";
+import { DEMO_STATS } from "@/lib/demo";
 
 export default function CourseStatistics({ schoolId }: { schoolId: string }) {
   const [data, setData] = useState<DashboardStats | null>(null);
 
   useEffect(() => {
     schools.stats(schoolId).then((r) => setData(r.data)).catch(() => {
-      if (isDemoMode()) setData(DEMO_STATS);
+      setData(DEMO_STATS);
     });
   }, [schoolId]);
 

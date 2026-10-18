@@ -119,8 +119,19 @@ export function getStoredStudents(): Student[] {
       const parsed = JSON.parse(val);
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
+    // Initialize storage if empty
+    localStorage.setItem("ishuri_demo_students", JSON.stringify(DEMO_STUDENTS));
+    localStorage.setItem("knotty_demo_students", JSON.stringify(DEMO_STUDENTS));
   } catch {}
   return DEMO_STUDENTS;
+}
+
+export function saveStoredStudents(students: Student[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem("ishuri_demo_students", JSON.stringify(students));
+    localStorage.setItem("knotty_demo_students", JSON.stringify(students));
+  } catch {}
 }
 
 export const DEMO_STATS: DashboardStats = {

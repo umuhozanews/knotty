@@ -11,7 +11,6 @@ import { canteen, cards, CardScanResult, CanteenItem, CanteenTransaction, Cantee
 import { useNFC } from "@/hooks/useNFC";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
-import { isDemoMode } from "@/lib/demo";
 import { isManagementRole } from "@/lib/roles";
 
 function playAudioTone(type: "success" | "error") {

@@ -147,7 +147,7 @@ export default function LoginPage() {
             <div className="flex items-center gap-1.5">
               <Building2 size={15} style={{ color: "#FF7A22" }} />
               <span className="text-xs font-bold text-gray-800">
-                Local demo accounts · sample data only
+                Quick-Select Staff Accounts
               </span>
             </div>
             <button

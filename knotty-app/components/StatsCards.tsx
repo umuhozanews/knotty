@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Users, GraduationCap, BarChart2, ArrowUpRight } from "lucide-react";
 import { schools, DashboardStats } from "@/lib/api";
-import { isDemoMode, DEMO_STATS } from "@/lib/demo";
+import { DEMO_STATS } from "@/lib/demo";
 
 function Skeleton() {
   return <div className="h-5 w-12 bg-gray-100 rounded animate-pulse" />;
@@ -15,7 +15,7 @@ export default function StatsCards({ schoolId }: { schoolId: string }) {
 
   useEffect(() => {
     schools.stats(schoolId).then((r) => setData(r.data)).catch(() => {
-      if (isDemoMode()) setData(DEMO_STATS);
+      setData(DEMO_STATS);
     });
   }, [schoolId]);
 

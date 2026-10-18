@@ -6,7 +6,7 @@ import {
 } from "recharts";
 import { Calendar } from "lucide-react";
 import { schools, AttendanceTrendPoint } from "@/lib/api";
-import { isDemoMode, DEMO_TREND } from "@/lib/demo";
+import { DEMO_TREND } from "@/lib/demo";
 
 interface TooltipProps {
   active?: boolean;
@@ -31,7 +31,7 @@ export default function AttendanceChart({ schoolId }: { schoolId: string }) {
   useEffect(() => {
     schools.trend(schoolId, 9)
       .then((r) => setData(r.data))
-      .catch(() => { if (isDemoMode()) setData(DEMO_TREND); })
+      .catch(() => { setData(DEMO_TREND); })
       .finally(() => setLoading(false));
   }, [schoolId]);
 

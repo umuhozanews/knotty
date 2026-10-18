@@ -9,7 +9,7 @@ import DashboardShell from "@/components/DashboardShell";
 import { students, structure, cards, health, Level, Class, Student } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
-import { isDemoMode, getStoredStudents } from "@/lib/demo";
+import { getStoredStudents } from "@/lib/demo";
 import { isManagementRole } from "@/lib/roles";
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
@@ -576,31 +576,40 @@ export default function StudentsPage() {
   useEffect(() => {
     if (authLoading || !user) return;
     Promise.all([structure.levels(), structure.classes()]).then(([lvls, clss]) => {
-      const sorted = [...lvls.data].sort((a, b) => a.name.localeCompare(b.name));
-      setLevels(sorted);
-      setClasses(clss.data);
-      if (sorted.length > 0) {
-        setSelectedLevel(sorted[0].id);
-        const firstClass = clss.data.find((c) => c.level.id === sorted[0].id);
-        if (firstClass) setSelectedClass(firstClass.id);
-      }
-    }).catch((err) => {
-      console.error(err);
-      if (isDemoMode()) {
-        const demoLevels = [
+      let sorted = [...lvls.data].sort((a, b) => a.name.localeCompare(b.name));
+      if (sorted.length === 0) {
+        sorted = [
           { id: "l1", name: "Senior 5", description: "Senior 5 level" },
           { id: "l2", name: "Senior 6", description: "Senior 6 level" },
         ];
-        const demoClasses = [
+        clss.data = [
           { id: "c1", name: "A", level: { id: "l1", name: "Senior 5" }, class_teacher_id: "demo-teacher" },
           { id: "c2", name: "B", level: { id: "l1", name: "Senior 5" }, class_teacher_id: "demo-teacher" },
           { id: "c3", name: "Science", level: { id: "l2", name: "Senior 6" }, class_teacher_id: "demo-teacher" },
         ];
-        setLevels(demoLevels);
-        setClasses(demoClasses);
-        setSelectedLevel("l1");
-        setSelectedClass("c1");
       }
+      setLevels(sorted);
+      setClasses(clss.data);
+      if (sorted.length > 0) {
+        setSelectedLevel(sorted[0].id);
+        const firstClass = clss.data.find((c) => c.level.id === sorted[0].id) || clss.data[0];
+        if (firstClass) setSelectedClass(firstClass.id);
+      }
+    }).catch((err) => {
+      console.error(err);
+      const demoLevels = [
+        { id: "l1", name: "Senior 5", description: "Senior 5 level" },
+        { id: "l2", name: "Senior 6", description: "Senior 6 level" },
+      ];
+      const demoClasses = [
+        { id: "c1", name: "A", level: { id: "l1", name: "Senior 5" }, class_teacher_id: "demo-teacher" },
+        { id: "c2", name: "B", level: { id: "l1", name: "Senior 5" }, class_teacher_id: "demo-teacher" },
+        { id: "c3", name: "Science", level: { id: "l2", name: "Senior 6" }, class_teacher_id: "demo-teacher" },
+      ];
+      setLevels(demoLevels);
+      setClasses(demoClasses);
+      setSelectedLevel("l1");
+      setSelectedClass("c1");
     });
   }, [user?.id, authLoading]);
 
@@ -610,16 +619,23 @@ export default function StudentsPage() {
     setLoading(true);
     try {
       const res = await students.list({ classId, limit: 100, search: search || undefined });
-      setStudentsByClass((prev) => ({ ...prev, [classId]: res.data }));
-    } catch (err) {
-      if (isDemoMode()) {
-        const filtered = getStoredStudents().filter((s) => {
+      if (res.data && res.data.length > 0) {
+        setStudentsByClass((prev) => ({ ...prev, [classId]: res.data }));
+      } else {
+        const stored = getStoredStudents().filter((s) => {
           const matchClass = !classId || s.class?.id === classId || (s as any).class_id === classId;
           const matchSearch = !search || `${s.user.first_name} ${s.user.last_name}`.toLowerCase().includes(search.toLowerCase());
           return matchClass && matchSearch;
         });
-        setStudentsByClass((prev) => ({ ...prev, [classId]: filtered }));
+        setStudentsByClass((prev) => ({ ...prev, [classId]: stored.length > 0 ? stored : res.data }));
       }
+    } catch (err) {
+      const filtered = getStoredStudents().filter((s) => {
+        const matchClass = !classId || s.class?.id === classId || (s as any).class_id === classId;
+        const matchSearch = !search || `${s.user.first_name} ${s.user.last_name}`.toLowerCase().includes(search.toLowerCase());
+        return matchClass && matchSearch;
+      });
+      setStudentsByClass((prev) => ({ ...prev, [classId]: filtered }));
     }
     finally { setLoading(false); }
   }, [search]);

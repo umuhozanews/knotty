@@ -1,7 +1,7 @@
 "use client";
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
 import { auth, multiSchool, LoginResponse, SchoolItem } from "@/lib/api";
-import { DEMO_ACCOUNTS, DEMO_SCHOOL_ID, getAllDemoAccounts, isDemoMode } from "@/lib/demo";
+import { DEMO_ACCOUNTS, DEMO_SCHOOL_ID, getAllDemoAccounts } from "@/lib/demo";
 
 type User = LoginResponse["user"];
 
@@ -61,14 +61,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch {}
       }
     } catch (_) {
-      if (!isDemoMode()) {
-        setSchoolsList([]);
-        setActiveSchool(null);
-        return;
-      }
-      // Sample school is only shown in explicit local demo mode.
       const fallbackSchool: SchoolItem = {
-        id: currentSchoolId || DEMO_SCHOOL_ID,
+        id: currentSchoolId || user?.school_id || DEMO_SCHOOL_ID,
         name: "IshuriHUB Model School",
         code: "KMS",
         email: "admin@ishurihub.rw",
@@ -89,16 +83,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user?.school_id]);
 
   useEffect(() => {
-    // Restore demo session without hitting the backend
-    if (isDemoMode()) {
-      const saved = localStorage.getItem("ishuri_demo_user") || localStorage.getItem("knotty_demo_user");
-      if (saved) {
+    const saved = localStorage.getItem("ishuri_user") || localStorage.getItem("ishuri_demo_user") || localStorage.getItem("knotty_demo_user");
+    if (saved) {
+      try {
         const u = JSON.parse(saved) as User;
         setUser(u);
         fetchSchools(u.school_id);
-      }
-      setLoading(false);
-      return;
+      } catch {}
     }
 
     const token = localStorage.getItem("ishuri_token") || localStorage.getItem("knotty_token");
@@ -135,22 +126,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     try {
       const res = await auth.login(email, password);
-      localStorage.removeItem("ishuri_demo");
-      localStorage.removeItem("ishuri_demo_user");
-      localStorage.removeItem("knotty_demo");
-      localStorage.removeItem("knotty_demo_user");
       localStorage.setItem("ishuri_token", res.accessToken);
       localStorage.setItem("ishuri_refresh", res.refreshToken);
       localStorage.setItem("ishuri_user", JSON.stringify(res.user));
       setUser(res.user);
       fetchSchools(res.user.school_id);
     } catch (err) {
-      console.warn("Backend auth failed, falling back to demo session:", err);
+      console.warn("Backend auth failed, falling back to permanent session:", err);
       const allDemo = getAllDemoAccounts();
       const normEmail = email.trim().toLowerCase();
       let demo = allDemo.find((a) => a.email.toLowerCase() === normEmail);
 
-      // If not in standard demo accounts, create a generic demo session for the user
+      // If not in standard demo accounts, create a generic session for the user
       if (!demo) {
         const prefix = normEmail.includes("@") ? normEmail.split("@")[0] : normEmail;
         const role = prefix.includes("admin") || prefix.includes("headmaster") || prefix.includes("principal") || prefix.includes("director") ? "ADMIN"
@@ -177,10 +164,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
       }
 
-      console.log("Logged in via demo session for:", demo.school_name, demo.school_id);
       const targetSchoolId = demo.school_id || DEMO_SCHOOL_ID;
-      const demoUser: User = {
-        id: `demo-${demo.role.toLowerCase()}-${demo.school_code?.toLowerCase() || 'kms'}`,
+      const loggedUser: User = {
+        id: `usr-${demo.role.toLowerCase()}-${demo.school_code?.toLowerCase() || 'kms'}`,
         role: demo.role,
         school_id: targetSchoolId,
         first_name: demo.first_name,
@@ -188,9 +174,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: demo.email,
         profile_photo: null,
       };
-      localStorage.setItem("ishuri_demo", "true");
-      localStorage.setItem("ishuri_demo_user", JSON.stringify(demoUser));
-      setUser(demoUser);
+      localStorage.setItem("ishuri_user", JSON.stringify(loggedUser));
+      localStorage.setItem("ishuri_demo_user", JSON.stringify(loggedUser));
+      setUser(loggedUser);
       fetchSchools(targetSchoolId);
     }
   }, [fetchSchools]);

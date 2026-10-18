@@ -5,7 +5,6 @@ import { Loader2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
-import { isDemoMode } from "@/lib/demo";
 
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -14,10 +13,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const [demoUser] = useState<{ role: string } | null>(() => {
     if (typeof window === "undefined") return null;
     try {
-      if (isDemoMode()) {
-        const saved = localStorage.getItem("ishuri_demo_user") || localStorage.getItem("knotty_demo_user");
-        return saved ? JSON.parse(saved) : null;
-      }
+      const saved = localStorage.getItem("ishuri_user") || localStorage.getItem("ishuri_demo_user") || localStorage.getItem("knotty_demo_user");
+      return saved ? JSON.parse(saved) : null;
     } catch {}
     return null;
   });
@@ -50,11 +47,6 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         />
       )}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        {isDemoMode() && (
-          <div role="status" className="mb-2 rounded-lg border border-amber-400 bg-amber-100 px-3 py-2 text-center text-xs font-bold text-amber-950">
-            DEMO MODE — sample data only. Changes stay in this browser and do not affect school records.
-          </div>
-        )}
         <Header onMenuClick={() => setSidebarOpen(true)} />
         <main className="flex-1 overflow-auto mt-2 md:mt-3">{children}</main>
         <footer className="text-center py-1.5 text-[10px] text-gray-400">

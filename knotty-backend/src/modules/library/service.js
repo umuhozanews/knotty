@@ -190,7 +190,25 @@ async function borrowBook(data, schoolId) {
   if (student_id) {
     student = await prisma.student.findFirst({ where: { id: student_id, school_id: schoolId } });
   } else if (student_code) {
-    student = await prisma.student.findFirst({ where: { student_code, school_id: schoolId } });
+    student = await prisma.student.findFirst({ where: { student_code: { equals: student_code, mode: 'insensitive' }, school_id: schoolId } });
+  } else if (data.card_number || data.nfc_uid) {
+    const cardVal = data.card_number || data.nfc_uid;
+    const cleanVal = String(cardVal).replace(/[:\s-]/g, '');
+    const card = await prisma.knottyCard.findFirst({
+      where: {
+        school_id: schoolId,
+        OR: [
+          { card_number: { equals: cardVal, mode: 'insensitive' } },
+          { card_number: { equals: cleanVal, mode: 'insensitive' } },
+          { nfc_uid: { equals: cardVal, mode: 'insensitive' } },
+          { nfc_uid: { equals: cleanVal, mode: 'insensitive' } },
+        ],
+      },
+      include: { student: true },
+    });
+    if (card && card.student) {
+      student = card.student;
+    }
   }
   if (!student) throw Object.assign(new Error('Student not found'), { status: 404 });
 
@@ -246,7 +264,14 @@ async function returnBook(data, schoolId) {
     });
   } else {
     const copy = await prisma.bookCopy.findFirst({
-      where: { copy_tag, school_id: schoolId },
+      where: {
+        school_id: schoolId,
+        OR: [
+          { copy_tag: copy_tag },
+          { copy_tag: { equals: copy_tag, mode: 'insensitive' } },
+          { book: { isbn: { equals: copy_tag, mode: 'insensitive' } } },
+        ],
+      },
       include: { book: true },
     });
     if (!copy) throw Object.assign(new Error('Book copy not found'), { status: 404 });
@@ -369,7 +394,25 @@ async function createReservation(data, schoolId) {
   if (student_id) {
     student = await prisma.student.findFirst({ where: { id: student_id, school_id: schoolId } });
   } else if (student_code) {
-    student = await prisma.student.findFirst({ where: { student_code, school_id: schoolId } });
+    student = await prisma.student.findFirst({ where: { student_code: { equals: student_code, mode: 'insensitive' }, school_id: schoolId } });
+  } else if (data.card_number || data.nfc_uid) {
+    const cardVal = data.card_number || data.nfc_uid;
+    const cleanVal = String(cardVal).replace(/[:\s-]/g, '');
+    const card = await prisma.knottyCard.findFirst({
+      where: {
+        school_id: schoolId,
+        OR: [
+          { card_number: { equals: cardVal, mode: 'insensitive' } },
+          { card_number: { equals: cleanVal, mode: 'insensitive' } },
+          { nfc_uid: { equals: cardVal, mode: 'insensitive' } },
+          { nfc_uid: { equals: cleanVal, mode: 'insensitive' } },
+        ],
+      },
+      include: { student: true },
+    });
+    if (card && card.student) {
+      student = card.student;
+    }
   }
   if (!student) throw Object.assign(new Error('Student not found'), { status: 404 });
 
@@ -696,16 +739,24 @@ async function getStats(schoolId) {
   };
 }
 
-// Look up a student by card_number, NFC UID, or student_code.
-// Returns { id, name, class, card_number } so the library page
-// can use any identifier the librarian has to hand.
+// Look up a student by card_number, NFC UID, student_code, or name.
+// Returns { id, name, class, card_number, wallet_balance, is_active, is_frozen, has_card }
 async function lookupStudent(query, schoolId) {
   if (!query) throw Object.assign(new Error('Query is required'), { status: 400 });
   const q = String(query).trim();
+  const cleanQ = q.replace(/[:\s-]/g, '');
 
-  // 1. Try card_number (most common — barcode/QR/manual entry)
+  // 1. Try card_number or NFC UID (case-insensitive, with stripped colons/spaces/dashes)
   let card = await prisma.knottyCard.findFirst({
-    where: { card_number: q, school_id: schoolId },
+    where: {
+      school_id: schoolId,
+      OR: [
+        { card_number: { equals: q, mode: 'insensitive' } },
+        { card_number: { equals: cleanQ, mode: 'insensitive' } },
+        { nfc_uid: { equals: q, mode: 'insensitive' } },
+        { nfc_uid: { equals: cleanQ, mode: 'insensitive' } },
+      ],
+    },
     include: {
       student: {
         include: {
@@ -717,26 +768,16 @@ async function lookupStudent(query, schoolId) {
     },
   });
 
-  // 2. Try NFC UID (hex serial from tag tap)
-  if (!card) {
-    card = await prisma.knottyCard.findFirst({
-      where: { nfc_uid: q, school_id: schoolId },
-      include: {
-        student: {
-          include: {
-            user: { select: { first_name: true, last_name: true, profile_photo: true } },
-            class: { select: { name: true } },
-            level: { select: { name: true } },
-          },
-        },
-      },
-    });
-  }
-
-  // 3. Try student_code (e.g. KMS001)
+  // 2. Try student_code (e.g. KMS001) or student ID
   if (!card) {
     const student = await prisma.student.findFirst({
-      where: { student_code: { equals: q, mode: 'insensitive' }, school_id: schoolId },
+      where: {
+        school_id: schoolId,
+        OR: [
+          { student_code: { equals: q, mode: 'insensitive' } },
+          { id: q },
+        ],
+      },
       include: {
         card: true,
         user: { select: { first_name: true, last_name: true, profile_photo: true } },
@@ -755,12 +796,15 @@ async function lookupStudent(query, schoolId) {
         class: `${student.level?.name || ''} ${student.class?.name || ''}`.trim(),
         student_code: student.student_code,
         card_number: null,
+        wallet_balance: 0,
+        is_active: false,
+        is_frozen: false,
         has_card: false,
       };
     }
   }
 
-  // 4. Try student name search
+  // 3. Try student name search
   if (!card) {
     const student = await prisma.student.findFirst({
       where: {
@@ -789,12 +833,15 @@ async function lookupStudent(query, schoolId) {
         class: `${student.level?.name || ''} ${student.class?.name || ''}`.trim(),
         student_code: student.student_code,
         card_number: null,
+        wallet_balance: 0,
+        is_active: false,
+        is_frozen: false,
         has_card: false,
       };
     }
   }
 
-  if (!card) throw Object.assign(new Error('Student not found — check card number, student code, or link the NFC tag in Admin > Cards'), { status: 404 });
+  if (!card) throw Object.assign(new Error('Student or card not found — check card number, NFC tag, or student code'), { status: 404 });
 
   const { student } = card;
   return {
@@ -804,6 +851,9 @@ async function lookupStudent(query, schoolId) {
     class: `${student.level?.name || ''} ${student.class?.name || ''}`.trim(),
     student_code: student.student_code,
     card_number: card.card_number,
+    wallet_balance: card.wallet_balance ?? 0,
+    is_active: card.is_active,
+    is_frozen: card.is_frozen,
     has_card: true,
   };
 }

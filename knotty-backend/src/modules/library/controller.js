@@ -211,7 +211,8 @@ async function getStats(req, res, next) {
 
 async function lookupStudent(req, res, next) {
   try {
-    const result = await service.lookupStudent(req.query.q, req.user.school_id);
+    const query = req.query.q || req.query.query || req.query.card || req.query.nfc_uid || req.query.search;
+    const result = await service.lookupStudent(query, req.user.school_id);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }

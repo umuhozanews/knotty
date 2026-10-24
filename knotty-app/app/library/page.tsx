@@ -113,7 +113,9 @@ export default function LibraryPage() {
   const [returning, setReturning] = useState<string | null>(null);
   const [renewingId, setRenewingId] = useState<string | null>(null);
   const [continuousMode, setContinuousMode] = useState(true);
-  const [deskSubTab, setDeskSubTab] = useState<"card-desk" | "check-book">("card-desk");
+  const [deskSubTab, setDeskSubTab] = useState<"card-desk" | "quick-return" | "check-book">("card-desk");
+  const [returnTagInput, setReturnTagInput] = useState("");
+  const [returningTag, setReturningTag] = useState(false);
 
   /* ── Check book in library ─────────────────────────────────── */
   const [bookCheckQuery, setBookCheckQuery] = useState("");
@@ -295,8 +297,27 @@ export default function LibraryPage() {
       setStudentBorrows(historyRes.data.filter((b: LibraryBorrowRecord) => !b.returned_at));
       setStudentHistoryList(historyRes.data.filter((b: LibraryBorrowRecord) => Boolean(b.returned_at)));
     } catch (err) {
+      // If student lookup failed, check if this is a book copy tag or barcode scanned to return
+      try {
+        const retRes = await library.returnBook({ copy_tag: query.trim() });
+        playChime();
+        const bkTitle = retRes.data.record?.copy?.book?.title ?? "Book";
+        const stdUser = retRes.data.record?.student?.user;
+        const stdName = stdUser ? `${stdUser.first_name} ${stdUser.last_name}` : "Student";
+        const fine = retRes.data.fine_amount;
+        toast(
+          fine > 0
+            ? `"${bkTitle}" returned for ${stdName}! Overdue fine: ${fine.toLocaleString()} RWF ${retRes.data.fine_charged_to_wallet ? "(deducted from card wallet)" : ""}`
+            : `"${bkTitle}" returned successfully for ${stdName}!`,
+          "success"
+        );
+        loadHome();
+        setCardInput("");
+        return;
+      } catch {}
+
       playErrorTone();
-      toast(err instanceof Error ? err.message : "Student not found — check card or student code", "error");
+      toast(err instanceof Error ? err.message : "Student or book tag not found — check card or student code", "error");
     } finally {
       setLoadingStudent(false);
     }
@@ -395,6 +416,7 @@ export default function LibraryPage() {
       toast(fine > 0
         ? `Returned — fine ${fine.toLocaleString()} RWF ${res.data.fine_charged_to_wallet ? "deducted from card" : "(settle manually)"}`
         : "Book returned successfully!", "success");
+      playChime();
       if (student?.id) {
         const borrows = await library.studentHistory(student.id, 1, 30).catch(() => ({ data: [] }));
         setStudentBorrows(borrows.data.filter((b: LibraryBorrowRecord) => !b.returned_at));
@@ -402,20 +424,55 @@ export default function LibraryPage() {
       }
       setStats(s => ({ ...s, activeMembers: Math.max(0, s.activeMembers - 1) }));
       setRecentBorrows(prev => prev.filter(b => b.id !== borrowId));
+      loadHome();
     } catch (err) {
+      playErrorTone();
       toast(err instanceof Error ? err.message : "Return failed", "error");
     } finally {
       setReturning(null);
     }
   }
 
+  /* ── Quick Return by Book Copy Tag ──────────────────────────── */
+  async function handleQuickReturn(copyTag: string) {
+    if (!copyTag.trim()) return;
+    setReturningTag(true);
+    try {
+      const res = await library.returnBook({ copy_tag: copyTag.trim() });
+      playChime();
+      const bkTitle = res.data.record?.copy?.book?.title ?? "Book";
+      const stdUser = res.data.record?.student?.user;
+      const stdName = stdUser ? `${stdUser.first_name} ${stdUser.last_name}` : "Student";
+      const fine = res.data.fine_amount;
+      toast(
+        fine > 0
+          ? `"${bkTitle}" returned for ${stdName}! Overdue fine: ${fine.toLocaleString()} RWF ${res.data.fine_charged_to_wallet ? "(deducted from card wallet)" : ""}`
+          : `"${bkTitle}" returned successfully for ${stdName}!`,
+        "success"
+      );
+      setReturnTagInput("");
+      loadHome();
+      if (student?.id) {
+        const borrows = await library.studentHistory(student.id, 1, 30).catch(() => ({ data: [] }));
+        setStudentBorrows(borrows.data.filter((b: LibraryBorrowRecord) => !b.returned_at));
+        setStudentHistoryList(borrows.data.filter((b: LibraryBorrowRecord) => Boolean(b.returned_at)));
+      }
+    } catch (err) {
+      playErrorTone();
+      toast(err instanceof Error ? err.message : "Failed to return book with this tag", "error");
+    } finally {
+      setReturningTag(false);
+    }
+  }
+
   /* ── Book search ───────────────────────────────────────────── */
   async function searchBooks(q: string) {
-    if (!q.trim()) { setBookResults([]); return; }
     setSearchingBook(true);
     try {
-      const res = await library.books({ search: q, limit: 8 });
+      const res = await library.books({ search: q.trim() || undefined, limit: 12 });
       setBookResults(res.data as unknown as BookOption[]);
+    } catch {
+      setBookResults([]);
     } finally {
       setSearchingBook(false);
     }
@@ -426,7 +483,14 @@ export default function LibraryPage() {
     if (!student || !selectedBook) return;
     setLending(true);
     try {
-      await library.borrowBook({ book_id: selectedBook.id, student_id: student.id, due_days: dueDays });
+      await library.borrowBook({
+        book_id: selectedBook.id,
+        student_id: student.id,
+        card_number: student.card_number,
+        student_code: student.student_code,
+        due_days: dueDays,
+      });
+      playChime();
       toast(`"${selectedBook.title}" lent to ${student.name}. Due in ${dueDays} days.`, "success");
       setShowLendForm(false);
       setSelectedBook(null);
@@ -436,7 +500,9 @@ export default function LibraryPage() {
       setStudentBorrows(borrows.data.filter((b: LibraryBorrowRecord) => !b.returned_at));
       setStudentHistoryList(borrows.data.filter((b: LibraryBorrowRecord) => Boolean(b.returned_at)));
       setStats(s => ({ ...s, activeMembers: s.activeMembers + 1 }));
+      loadHome();
     } catch (err) {
+      playErrorTone();
       toast(err instanceof Error ? err.message : "Lending failed", "error");
     } finally {
       setLending(false);
@@ -448,13 +514,25 @@ export default function LibraryPage() {
     if (!modalStudent || !selectedBook) return;
     setLending(true);
     try {
-      await library.borrowBook({ book_id: selectedBook.id, student_id: modalStudent.id, due_days: dueDays });
+      await library.borrowBook({
+        book_id: selectedBook.id,
+        student_id: modalStudent.id,
+        card_number: modalStudent.card_number,
+        student_code: modalStudent.student_code,
+        due_days: dueDays,
+      });
+      playChime();
       toast(`"${selectedBook.title}" lent to ${modalStudent.name}. Due in ${dueDays} days.`, "success");
       setShowLendModal(false);
+      setSelectedBook(null);
+      setBookSearch("");
+      setBookResults([]);
       setStats(s => ({ ...s, activeMembers: s.activeMembers + 1 }));
+      loadHome();
       // Refresh overview list
       library.schoolBorrows({ status: "active", limit: 50 }).then(r => setRecentBorrows(r.data)).catch(() => {});
     } catch (err) {
+      playErrorTone();
       toast(err instanceof Error ? err.message : "Lending failed", "error");
     } finally {
       setLending(false);
@@ -492,6 +570,12 @@ export default function LibraryPage() {
 
   /* ── Shared book search UI (used in both lend contexts) ─────── */
   function BookSearchUI({ onConfirm }: { onConfirm: () => void }) {
+    useEffect(() => {
+      if (!selectedBook && bookResults.length === 0) {
+        searchBooks("");
+      }
+    }, [selectedBook]);
+
     return !selectedBook ? (
       <div>
         <div className="relative">
@@ -1006,13 +1090,23 @@ export default function LibraryPage() {
                   </button>
                   <button
                     type="button"
+                    onClick={() => setDeskSubTab("quick-return")}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      deskSubTab === "quick-return" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-800"
+                    }`}
+                  >
+                    <RotateCcw size={14} className={deskSubTab === "quick-return" ? "text-[#FF7A22]" : ""} />
+                    Scan Book to Return
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setDeskSubTab("check-book")}
                     className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
                       deskSubTab === "check-book" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-800"
                     }`}
                   >
                     <Search size={14} className={deskSubTab === "check-book" ? "text-[#FF7A22]" : ""} />
-                    Check Book in Library
+                    Check Book
                   </button>
                 </div>
 
@@ -1093,6 +1187,33 @@ export default function LibraryPage() {
                         }}
                         busy={loadingStudent}
                       />
+                    </div>
+
+                    {/* Quick Student Card Tap Chips */}
+                    <div className="flex items-center gap-1.5 flex-wrap pt-2.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Quick Tap Card:</span>
+                      {[
+                        { name: "Hirwa Jean", code: "KNT-KMS-2026-90001", badge: "Physics" },
+                        { name: "Uwase Marie", code: "KNT-KMS-2026-90002", badge: "Math" },
+                        { name: "Nkurunziza Eric", code: "KNT-KMS-2026-00003", badge: "Overdue" },
+                        { name: "Uwimana Grace", code: "KNT-KMS-2026-00006", badge: "Overdue" },
+                        { name: "Habimana Patrick", code: "KNT-KMS-2026-00005", badge: "Biology" },
+                      ].map(st => (
+                        <button
+                          key={st.code}
+                          type="button"
+                          onClick={() => { setCardInput(st.code); lookupCard(st.code); }}
+                          className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-gray-50 hover:bg-orange-50 hover:text-[#FF7A22] border border-gray-200 text-gray-700 transition active:scale-95 cursor-pointer flex items-center gap-1.5"
+                        >
+                          <span>💳</span>
+                          <span>{st.name}</span>
+                          {st.badge === "Overdue" ? (
+                            <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-red-100 text-red-600 font-extrabold">Overdue</span>
+                          ) : (
+                            <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-orange-100 text-orange-700">{st.badge}</span>
+                          )}
+                        </button>
+                      ))}
                     </div>
 
                     {nfcError && <p className="text-xs text-red-500 mt-2 font-medium">{nfcError}</p>}
@@ -1182,15 +1303,15 @@ export default function LibraryPage() {
                                 {showHistory ? "Hide Past History" : `History (${studentHistoryList.length})`}
                               </button>
                             )}
-                            {!showLendForm && (
-                              <button
-                                type="button"
-                                onClick={() => setShowLendForm(true)}
-                                className="px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-[#FF7A22] hover:bg-[#e0691b] flex items-center gap-1 cursor-pointer shadow-sm"
-                              >
-                                <Plus size={13} /> Lend Book
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => setShowLendForm(!showLendForm)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-sm ${
+                                showLendForm ? "bg-gray-100 text-gray-700 hover:bg-gray-200" : "text-white bg-[#FF7A22] hover:bg-[#e0691b]"
+                              }`}
+                            >
+                              {showLendForm ? <X size={13} /> : <Plus size={13} />} {showLendForm ? "Cancel Lend" : "Lend Book"}
+                            </button>
                           </div>
                         </div>
 
@@ -1365,7 +1486,77 @@ export default function LibraryPage() {
                 </div>
               )}
 
-              {/* SUB-TAB 2: CHECK BOOK IN LIBRARY */}
+              {/* SUB-TAB 2: SCAN BOOK TAG TO RETURN */}
+              {deskSubTab === "quick-return" && (
+                <div className="space-y-3">
+                  <div className="bg-white rounded-3xl p-4 md:p-5 shadow-sm border border-gray-100">
+                    <h3 className="text-sm font-bold text-gray-900 mb-1 flex items-center gap-2">
+                      <RotateCcw size={16} className="text-[#FF7A22]" />
+                      Scan Book Tag or Barcode to Return
+                    </h3>
+                    <p className="text-xs text-gray-500 mb-3">
+                      Scan book copy tag, barcode, or ISBN to immediately return the book, calculate fine, and update card wallet
+                    </p>
+
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <Tag size={14} className="absolute left-3.5 top-[13px] text-gray-400" />
+                        <input
+                          value={returnTagInput}
+                          onChange={(e) => setReturnTagInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") handleQuickReturn(returnTagInput); }}
+                          placeholder="Scan or enter book tag (e.g. PHYS-S5-01, MATH-S4-01, LIT-TFA-01)…"
+                          className="w-full border border-gray-200 rounded-2xl pl-10 pr-3 py-2.5 text-sm outline-none focus:border-[#FF7A22] text-gray-900"
+                          autoFocus
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        disabled={returningTag || !returnTagInput.trim()}
+                        onClick={() => handleQuickReturn(returnTagInput)}
+                        className="px-4 py-2.5 rounded-2xl text-white text-xs font-bold disabled:opacity-40 flex items-center gap-1.5 bg-[#FF7A22] hover:bg-[#e0691b] cursor-pointer shadow-sm transition active:scale-95"
+                      >
+                        {returningTag ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+                        Return Book
+                      </button>
+                    </div>
+
+                    {/* Quick Return Chips for Active Borrows */}
+                    <div className="mt-4 pt-3 border-t border-gray-100">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">
+                        Click to Return Active Book Copy:
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          { tag: "PHYS-S5-01", title: "Principles of Physics S5", student: "Hirwa Jean" },
+                          { tag: "MATH-S4-01", title: "New General Math S4", student: "Uwase Marie" },
+                          { tag: "LIT-TFA-01", title: "Things Fall Apart", student: "Nkurunziza Eric", overdue: true },
+                          { tag: "CHEM-ORG-01", title: "Organic Chemistry", student: "Uwimana Grace", overdue: true },
+                          { tag: "BIO-CMP-01", title: "Campbell Biology", student: "Habimana Patrick" },
+                        ].map(b => (
+                          <button
+                            key={b.tag}
+                            type="button"
+                            onClick={() => { setReturnTagInput(b.tag); handleQuickReturn(b.tag); }}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold border flex items-center gap-1.5 transition active:scale-95 cursor-pointer ${
+                              b.overdue
+                                ? "bg-red-50/70 border-red-200 text-red-800 hover:bg-red-100"
+                                : "bg-gray-50 border-gray-200 text-gray-700 hover:bg-orange-50 hover:text-[#FF7A22]"
+                            }`}
+                          >
+                            <Tag size={11} className={b.overdue ? "text-red-500" : "text-gray-400"} />
+                            <span className="font-bold">{b.tag}</span>
+                            <span className="text-gray-500 text-[11px]">({b.student})</span>
+                            {b.overdue && <span className="text-[9px] bg-red-100 text-red-600 font-extrabold px-1 rounded">Overdue</span>}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* SUB-TAB 3: CHECK BOOK IN LIBRARY */}
               {deskSubTab === "check-book" && (
                 <div className="space-y-3">
                   <div className="bg-white rounded-3xl p-4 md:p-5 shadow-sm border border-gray-100">
@@ -1510,6 +1701,27 @@ export default function LibraryPage() {
                     }}
                     busy={lookingUpModalStudent}
                   />
+                </div>
+
+                {/* Quick Student Chips */}
+                <div className="flex items-center gap-1.5 flex-wrap pt-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Quick Pick:</span>
+                  {[
+                    { name: "Hirwa Jean", code: "KNT-KMS-2026-90001" },
+                    { name: "Uwase Marie", code: "KNT-KMS-2026-90002" },
+                    { name: "Nkurunziza Eric", code: "KNT-KMS-2026-00003" },
+                    { name: "Habimana Patrick", code: "KNT-KMS-2026-00005" },
+                    { name: "Uwimana Grace", code: "KNT-KMS-2026-00006" },
+                  ].map(st => (
+                    <button
+                      key={st.code}
+                      type="button"
+                      onClick={() => { setModalCardInput(st.code); lookupModalStudent(st.code); }}
+                      className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-gray-100 hover:bg-orange-50 hover:text-[#FF7A22] text-gray-700 transition cursor-pointer"
+                    >
+                      {st.name}
+                    </button>
+                  ))}
                 </div>
 
                 {listening && (

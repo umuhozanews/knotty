@@ -371,8 +371,34 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
     const val = getDemoStorage("ishuri_demo_library_books");
     if (!val) {
       const initial = [
-        { id: "book-1", title: "Advanced Physics for A-Level", author: "Dr. Musoni", isbn: "9781234567890", category: "PHYSICS", total_copies: 5, created_at: "2026-01-10T10:00:00.000Z" },
-        { id: "book-2", title: "Pure Mathematics Vol 1", author: "Prof. Kagabo", isbn: "9780987654321", category: "MATH", total_copies: 3, created_at: "2026-01-12T11:30:00.000Z" }
+        { id: "book-1", title: "New General Mathematics for Senior 4", author: "Channon, Smith & Head (REB Curriculum)", isbn: "978-0582446731", category: "Mathematics", location: "Shelf M-01", total_copies: 5, available_copies: 4, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-2", title: "Advanced Level Pure Mathematics (P1 & P2)", author: "C.J. Tranter", isbn: "978-0340053959", category: "Mathematics", location: "Shelf M-02", total_copies: 4, available_copies: 4, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-3", title: "Calculus and Analytical Geometry (9th Edition)", author: "George B. Thomas & Ross L. Finney", isbn: "978-0201531749", category: "Mathematics", location: "Shelf M-03", total_copies: 4, available_copies: 4, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-4", title: "Probability & Statistics for Secondary Schools", author: "Rwanda Basic Education Board (REB)", isbn: "978-9997701423", category: "Mathematics", location: "Shelf M-04", total_copies: 3, available_copies: 3, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-5", title: "Principles of Physics for Rwandan Schools (Senior 5)", author: "Rwanda Basic Education Board", isbn: "978-9997702116", category: "Physics", location: "Shelf P-01", total_copies: 5, available_copies: 4, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-6", title: "Ordinary Level Physics (4th Edition)", author: "A.F. Abbott", isbn: "978-0435670108", category: "Physics", location: "Shelf P-02", total_copies: 4, available_copies: 4, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-7", title: "Advanced Physics for High Schools (Mechanics & Waves)", author: "Keith Johnson & Tom Duncan", isbn: "978-0198392927", category: "Physics", location: "Shelf P-03", total_copies: 4, available_copies: 4, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-8", title: "University Physics with Modern Physics", author: "Young & Freedman", isbn: "978-0133978049", category: "Physics", location: "Shelf P-04", total_copies: 3, available_copies: 3, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-9", title: "Comprehensive Chemistry for Rwanda Senior 4", author: "Longhorn Publishers & REB", isbn: "978-9966367812", category: "Chemistry", location: "Shelf C-01", total_copies: 5, available_copies: 5, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-10", title: "Organic Chemistry for Advanced Level Secondary Schools", author: "Morrison & Boyd", isbn: "978-0136436690", category: "Chemistry", location: "Shelf C-02", total_copies: 3, available_copies: 2, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-11", title: "General Chemistry: Principles & Modern Applications", author: "Petrucci, Herring, Madura & Bissonnette", isbn: "978-0132931281", category: "Chemistry", location: "Shelf C-03", total_copies: 4, available_copies: 4, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-12", title: "Biology for Rwandan Secondary Schools (Senior 6 CBC)", author: "REB & Fountain Publishers", isbn: "978-9970194821", category: "Biology", location: "Shelf B-01", total_copies: 5, available_copies: 5, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-13", title: "Biological Science 1 and 2 (3rd Edition)", author: "D.J. Taylor, N.P.O. Green, G.W. Stout", isbn: "978-0521561785", category: "Biology", location: "Shelf B-02", total_copies: 4, available_copies: 4, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-14", title: "Campbell Biology: Concepts & Connections", author: "Martha R. Taylor & Eric J. Simon", isbn: "978-1292229478", category: "Biology", location: "Shelf B-03", total_copies: 4, available_copies: 3, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-15", title: "Computer Science for Rwandan Schools: Python & Databases", author: "Rwanda Basic Education Board (REB)", isbn: "978-9997703816", category: "Computer Science", location: "Shelf CS-01", total_copies: 6, available_copies: 5, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-16", title: "Introduction to Algorithms (4th Edition)", author: "Cormen, Leiserson, Rivest & Stein", isbn: "978-0262046305", category: "Computer Science", location: "Shelf CS-02", total_copies: 3, available_copies: 3, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-17", title: "Web Development Fundamentals: HTML, CSS, JavaScript & Next.js", author: "David Flanagan", isbn: "978-1491952023", category: "Computer Science", location: "Shelf CS-03", total_copies: 4, available_copies: 4, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-18", title: "Things Fall Apart", author: "Chinua Achebe", isbn: "978-0385474542", category: "Literature", location: "Shelf L-01", total_copies: 5, available_copies: 4, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-19", title: "The River Between", author: "Ngugi wa Thiong'o", isbn: "978-0435905484", category: "Literature", location: "Shelf L-02", total_copies: 4, available_copies: 4, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-20", title: "Petals of Blood", author: "Ngugi wa Thiong'o", isbn: "978-0143105572", category: "Literature", location: "Shelf L-03", total_copies: 4, available_copies: 4, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-21", title: "Romeo and Juliet", author: "William Shakespeare", isbn: "978-0743477543", category: "Literature", location: "Shelf L-04", total_copies: 5, available_copies: 5, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-22", title: "Une si longue lettre (So Long a Letter)", author: "Mariama Ba", isbn: "978-2266009805", category: "French", location: "Shelf FR-01", total_copies: 4, available_copies: 4, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-23", title: "History of Rwanda: From Origins to the Post-Genocide Reconstruction", author: "National Unity and Reconciliation Commission (NURC)", isbn: "978-9997704516", category: "History", location: "Shelf H-01", total_copies: 6, available_copies: 6, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-24", title: "Modern African History: 1800 to Present", author: "Kevin Shillington", isbn: "978-1137524812", category: "History", location: "Shelf H-02", total_copies: 4, available_copies: 4, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-25", title: "Geography of East Africa and the Great Lakes Region", author: "REB Secondary Geography Panel", isbn: "978-9970195514", category: "Geography", location: "Shelf G-01", total_copies: 4, available_copies: 4, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-26", title: "Imigani n'Insubizo by'Ikinyarwanda (Rwandan Proverbs & Idioms)", author: "Aloys Bigirumwami", isbn: "978-9997705124", category: "Kinyarwanda", location: "Shelf K-01", total_copies: 5, available_copies: 5, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-27", title: "Ubusizi Nyarwanda (Traditional Rwandan Poetry & Prose)", author: "Alexis Kagame", isbn: "978-9997705230", category: "Kinyarwanda", location: "Shelf K-02", total_copies: 4, available_copies: 4, created_at: "2026-01-10T10:00:00.000Z" },
+        { id: "book-28", title: "English Grammar in Use (5th Edition)", author: "Raymond Murphy", isbn: "978-1108457651", category: "English", location: "Shelf E-01", total_copies: 5, available_copies: 5, created_at: "2026-01-10T10:00:00.000Z" }
       ];
       setDemoStorage("ishuri_demo_library_books", JSON.stringify(initial));
       return initial;
@@ -391,9 +417,137 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           due_at: new Date(Date.now() + 3600 * 1000 * 24 * 5).toISOString(),
           returned_at: null,
           fine_amount: 0,
-          student: { user: { first_name: "Kamanzi", last_name: "Eric" } },
+          student: { user: { first_name: "Hirwa", last_name: "Jean" } },
           student_id: "std-1",
-          copy: { id: "copy-1-1", copy_tag: "PHYS-001", status: "BORROWED", created_at: "2026-01-10T10:00:00.000Z", book: { id: "book-1", title: "Advanced Physics for A-Level", author: "Dr. Musoni" } }
+          copy: {
+            id: "copy-phys-01",
+            copy_tag: "PHYS-S5-01",
+            status: "BORROWED",
+            created_at: "2026-01-10T10:00:00.000Z",
+            book: {
+              id: "book-5",
+              title: "Principles of Physics for Rwandan Schools (Senior 5)",
+              author: "Rwanda Basic Education Board",
+              category: "Physics",
+              location: "Shelf P-01",
+              isbn: "978-9997702116"
+            }
+          }
+        },
+        {
+          id: "bor-2",
+          borrowed_at: new Date(Date.now() - 3600 * 1000 * 72).toISOString(),
+          due_at: new Date(Date.now() + 3600 * 1000 * 24 * 4).toISOString(),
+          returned_at: null,
+          fine_amount: 0,
+          student: { user: { first_name: "Uwase", last_name: "Marie" } },
+          student_id: "std-2",
+          copy: {
+            id: "copy-math-01",
+            copy_tag: "MATH-S4-01",
+            status: "BORROWED",
+            created_at: "2026-01-10T10:00:00.000Z",
+            book: {
+              id: "book-1",
+              title: "New General Mathematics for Senior 4",
+              author: "Channon, Smith & Head (REB Curriculum)",
+              category: "Mathematics",
+              location: "Shelf M-01",
+              isbn: "978-0582446731"
+            }
+          }
+        },
+        {
+          id: "bor-3",
+          borrowed_at: new Date(Date.now() - 3600 * 1000 * 24 * 17).toISOString(),
+          due_at: new Date(Date.now() - 3600 * 1000 * 24 * 3).toISOString(), // 3 days overdue
+          returned_at: null,
+          fine_amount: 600,
+          student: { user: { first_name: "Nkurunziza", last_name: "Eric" } },
+          student_id: "std-3",
+          copy: {
+            id: "copy-lit-01",
+            copy_tag: "LIT-TFA-01",
+            status: "BORROWED",
+            created_at: "2026-01-10T10:00:00.000Z",
+            book: {
+              id: "book-18",
+              title: "Things Fall Apart",
+              author: "Chinua Achebe",
+              category: "Literature",
+              location: "Shelf L-01",
+              isbn: "978-0385474542"
+            }
+          }
+        },
+        {
+          id: "bor-4",
+          borrowed_at: new Date(Date.now() - 3600 * 1000 * 24 * 19).toISOString(),
+          due_at: new Date(Date.now() - 3600 * 1000 * 24 * 5).toISOString(), // 5 days overdue
+          returned_at: null,
+          fine_amount: 1000,
+          student: { user: { first_name: "Uwimana", last_name: "Grace" } },
+          student_id: "std-6",
+          copy: {
+            id: "copy-chem-01",
+            copy_tag: "CHEM-ORG-01",
+            status: "BORROWED",
+            created_at: "2026-01-10T10:00:00.000Z",
+            book: {
+              id: "book-10",
+              title: "Organic Chemistry for Advanced Level Secondary Schools",
+              author: "Morrison & Boyd",
+              category: "Chemistry",
+              location: "Shelf C-02",
+              isbn: "978-0136436690"
+            }
+          }
+        },
+        {
+          id: "bor-5",
+          borrowed_at: new Date(Date.now() - 3600 * 1000 * 24 * 2).toISOString(),
+          due_at: new Date(Date.now() + 3600 * 1000 * 24 * 7).toISOString(),
+          returned_at: null,
+          fine_amount: 0,
+          student: { user: { first_name: "Habimana", last_name: "Patrick" } },
+          student_id: "std-5",
+          copy: {
+            id: "copy-bio-01",
+            copy_tag: "BIO-CMP-01",
+            status: "BORROWED",
+            created_at: "2026-01-10T10:00:00.000Z",
+            book: {
+              id: "book-14",
+              title: "Campbell Biology: Concepts & Connections",
+              author: "Martha R. Taylor & Eric J. Simon",
+              category: "Biology",
+              location: "Shelf B-03",
+              isbn: "978-1292229478"
+            }
+          }
+        },
+        {
+          id: "bor-6",
+          borrowed_at: new Date(Date.now() - 3600 * 1000 * 24 * 12).toISOString(),
+          due_at: new Date(Date.now() - 3600 * 1000 * 24 * 2).toISOString(),
+          returned_at: new Date(Date.now() - 3600 * 1000 * 24 * 1).toISOString(),
+          fine_amount: 0,
+          student: { user: { first_name: "Hirwa", last_name: "Jean" } },
+          student_id: "std-1",
+          copy: {
+            id: "copy-calc-01",
+            copy_tag: "CALC-01",
+            status: "AVAILABLE",
+            created_at: "2026-01-10T10:00:00.000Z",
+            book: {
+              id: "book-3",
+              title: "Calculus and Analytical Geometry (9th Edition)",
+              author: "George B. Thomas & Ross L. Finney",
+              category: "Mathematics",
+              location: "Shelf M-03",
+              isbn: "978-0201531749"
+            }
+          }
         }
       ];
       setDemoStorage("ishuri_demo_library_borrows", JSON.stringify(initial));
@@ -1111,30 +1265,6 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
   }
 
 
-  // 6b. Library Stats
-  if (path.startsWith("/library/stats")) {
-    return {
-      success: true,
-      data: {
-        borrowedBooks: 145,
-        returnedBooks: 320,
-        overdueBooks: 12,
-        missingBooks: 3,
-        totalBooks: 1240,
-        visitors: 450,
-        newMembers: 24,
-        pendingFees: 15000,
-        borrowedTrend: "+12%",
-        returnedTrend: "+8%",
-        overdueTrend: "-5%",
-        missingTrend: "0%",
-        totalTrend: "+2%",
-        visitorsTrend: "+15%",
-        newMembersTrend: "+4%",
-        pendingFeesTrend: "-10%"
-      }
-    } as unknown as T;
-  }
 
   // Canteen dynamic handlers
   if (path.startsWith("/canteen/products")) {
@@ -1419,20 +1549,28 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
   if (path.startsWith("/library/stats")) {
     const books = getDemoBooks();
     const borrows = getDemoBorrows();
-    const totalBooks = books.reduce((sum: number, b: any) => sum + b.total_copies, 0);
+    const totalBooks = books.reduce((sum: number, b: any) => sum + (b.total_copies || 1), 0);
     const activeBorrows = borrows.filter((b: any) => b.returned_at === null);
     const returnedBorrows = borrows.filter((b: any) => b.returned_at !== null);
+    const overdueBorrows = activeBorrows.filter((b: any) => new Date(b.due_at) < new Date());
+    const now = Date.now();
+    let pendingFees = 0;
+    for (const b of overdueBorrows) {
+      const days = Math.max(1, Math.ceil((now - new Date(b.due_at).getTime()) / 86400000));
+      pendingFees += (b.fine_amount || (days * 200));
+    }
     return {
       success: true,
       data: {
         borrowedBooks: activeBorrows.length,
         returnedBooks: returnedBorrows.length,
-        overdueBooks: activeBorrows.filter((b: any) => new Date(b.due_at) < new Date()).length,
+        overdueBooks: overdueBorrows.length,
         missingBooks: 0,
         totalBooks: totalBooks,
+        activeMembers: activeBorrows.length,
         visitors: 145,
         newMembers: 12,
-        pendingFees: 2000,
+        pendingFees: pendingFees,
         borrowedTrend: "+5%",
         returnedTrend: "+8%",
         overdueTrend: "0%",
@@ -1445,19 +1583,85 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
     } as unknown as T;
   }
 
+  if (path.startsWith("/library/reports/overdue")) {
+    const borrowsList = getDemoBorrows();
+    const now = Date.now();
+    const overdues = borrowsList
+      .filter((b: any) => b.returned_at === null && new Date(b.due_at).getTime() < now)
+      .map((b: any) => {
+        const daysOver = Math.max(1, Math.ceil((now - new Date(b.due_at).getTime()) / 86400000));
+        return {
+          ...b,
+          days_overdue: daysOver,
+          accrued_fine: b.fine_amount || (daysOver * 200),
+        };
+      });
+    return {
+      success: true,
+      data: overdues,
+      pagination: { total: overdues.length, page: 1, limit: 50, pages: 1 }
+    } as unknown as T;
+  }
+
+  if (path.includes("/renew") && path.startsWith("/library/borrow/")) {
+    const borrowId = path.split("/")[3];
+    const borrowsList = getDemoBorrows();
+    const borrow = borrowsList.find((b: any) => b.id === borrowId);
+    if (!borrow) throw new Error("Active borrow record not found.");
+    const curDue = new Date(borrow.due_at).getTime();
+    borrow.due_at = new Date(curDue + 14 * 86400000).toISOString();
+    borrow.renewed_count = (borrow.renewed_count || 0) + 1;
+    saveDemoBorrows(borrowsList);
+    return {
+      success: true,
+      data: borrow,
+      message: "Loan renewed for 14 additional days"
+    } as unknown as T;
+  }
+
+  if (path.includes("/waive-fine") && path.startsWith("/library/borrow/")) {
+    const borrowId = path.split("/")[3];
+    const borrowsList = getDemoBorrows();
+    const borrow = borrowsList.find((b: any) => b.id === borrowId);
+    if (!borrow) throw new Error("Borrow record not found.");
+    borrow.fine_waived = true;
+    borrow.fine_amount = 0;
+    saveDemoBorrows(borrowsList);
+    return {
+      success: true,
+      data: borrow,
+      message: "Fine waived successfully"
+    } as unknown as T;
+  }
+
   if (path.startsWith("/library/student-lookup")) {
-    const q = decodeURIComponent(path.split("?q=")[1]?.split("&")[0] || "").toLowerCase().trim();
+    const rawQ = decodeURIComponent(path.split("?q=")[1]?.split("&")[0] || "").trim();
+    const q = rawQ.toLowerCase();
+    const cleanQ = q.replace(/[:\s-]/g, "");
     const students = getStudents();
-    const found = students.find((s: any) =>
-      s.student_code?.toLowerCase().includes(q) ||
-      s.card?.card_number?.toLowerCase().includes(q) ||
-      s.card?.nfc_uid?.toLowerCase() === q ||
-      s.id?.toLowerCase() === q ||
-      `${s.user?.first_name} ${s.user?.last_name}`.toLowerCase().includes(q)
-    );
+    const found = students.find((s: any) => {
+      const stdCode = (s.student_code || "").toLowerCase();
+      const cardNum = (s.card?.card_number || "").toLowerCase();
+      const cleanCardNum = cardNum.replace(/[:\s-]/g, "");
+      const nfcUid = (s.card?.nfc_uid || "").toLowerCase();
+      const cleanNfcUid = nfcUid.replace(/[:\s-]/g, "");
+      const sId = (s.id || "").toLowerCase();
+      const fullName = `${s.user?.first_name || ""} ${s.user?.last_name || ""}`.toLowerCase();
+      return (
+        stdCode === q ||
+        cleanCardNum === cleanQ ||
+        cleanNfcUid === cleanQ ||
+        cardNum.includes(q) ||
+        nfcUid === q ||
+        sId === q ||
+        fullName.includes(q) ||
+        (s.user?.first_name && q.includes(s.user.first_name.toLowerCase())) ||
+        (s.user?.last_name && q.includes(s.user.last_name.toLowerCase()))
+      );
+    });
 
     if (!found) {
-      throw new Error(`Student not found matching "${q}".`);
+      throw new Error(`Student not found matching "${rawQ}" — check student code, card number, or tap card.`);
     }
 
     return {
@@ -1465,8 +1669,14 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
       data: {
         id: found.id,
         name: `${found.user.first_name} ${found.user.last_name}`,
-        class: found.class?.name || "Senior 5 A",
-        card_number: found.card?.card_number || "KNT-DEMO-001"
+        class: found.class?.name ? (found.level?.name ? `${found.level.name} ${found.class.name}` : found.class.name) : (found.level?.name || "Senior 5 A"),
+        student_code: found.student_code,
+        card_number: found.card?.card_number || null,
+        wallet_balance: found.card?.wallet_balance ?? 0,
+        photo: found.user?.profile_photo || null,
+        is_active: found.card?.is_active ?? true,
+        is_frozen: found.card?.is_frozen ?? false,
+        has_card: Boolean(found.card),
       }
     } as unknown as T;
   }
@@ -1486,14 +1696,20 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
       }
 
       const q = (path.includes("search=") ? decodeURIComponent(path.split("search=")[1]?.split("&")[0] || "") : "").toLowerCase().trim();
-      const filtered = q
-        ? booksList.filter((b: any) =>
-            b.title?.toLowerCase().includes(q) ||
-            b.author?.toLowerCase().includes(q) ||
-            b.isbn?.toLowerCase().includes(q) ||
-            b.category?.toLowerCase().includes(q)
-          )
-        : booksList;
+      const cat = (path.includes("category=") ? decodeURIComponent(path.split("category=")[1]?.split("&")[0] || "") : "").trim();
+      let filtered = booksList;
+      if (cat && cat !== "All") {
+        filtered = filtered.filter((b: any) => b.category?.toLowerCase() === cat.toLowerCase());
+      }
+      if (q) {
+        filtered = filtered.filter((b: any) =>
+          b.title?.toLowerCase().includes(q) ||
+          b.author?.toLowerCase().includes(q) ||
+          b.isbn?.toLowerCase().includes(q) ||
+          b.category?.toLowerCase().includes(q) ||
+          b.location?.toLowerCase().includes(q)
+        );
+      }
 
       return {
         success: true,
@@ -1538,32 +1754,51 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
         const studentBors = borrowsList.filter((b: any) => b.student_id === studentId);
         return { success: true, data: studentBors, pagination: { total: studentBors.length, page: 1, limit: 100, pages: 1 } } as unknown as T;
       }
-      return { success: true, data: borrowsList, pagination: { total: borrowsList.length, page: 1, limit: 100, pages: 1 } } as unknown as T;
+      const urlObj = new URL(path, "http://localhost");
+      const status = urlObj.searchParams.get("status");
+      let filtered = borrowsList;
+      if (status === "active") filtered = filtered.filter((b: any) => b.returned_at === null);
+      else if (status === "returned") filtered = filtered.filter((b: any) => b.returned_at !== null);
+      else if (status === "overdue") filtered = filtered.filter((b: any) => b.returned_at === null && new Date(b.due_at) < new Date());
+      return { success: true, data: filtered, pagination: { total: filtered.length, page: 1, limit: 100, pages: 1 } } as unknown as T;
     }
     
     if (method === "POST") {
       const students = getStudents();
-      const std = students.find((s: any) => s.id === body.student_id || s.student_code === body.student_code);
+      const std = students.find((s: any) =>
+        s.id === body.student_id ||
+        s.student_code === body.student_id ||
+        s.student_code === body.student_code ||
+        (body.card_number && s.card?.card_number === body.card_number) ||
+        (body.nfc_uid && s.card?.nfc_uid === body.nfc_uid)
+      );
       if (!std) {
         throw new Error("Student not found for book loan.");
       }
-      const books = getDemoBooks();
-      const bookObj = books.find((b: any) => b.id === body.book_id);
+      const booksList = getDemoBooks();
+      const bookObj = booksList.find((b: any) => b.id === body.book_id || b.isbn === body.book_id);
       if (!bookObj) {
         throw new Error("Book not found for lending.");
       }
-      
+      if ((bookObj.available_copies ?? bookObj.total_copies) <= 0) {
+        throw new Error(`All copies of "${bookObj.title}" are currently checked out.`);
+      }
+
+      bookObj.available_copies = Math.max(0, (bookObj.available_copies ?? bookObj.total_copies) - 1);
+      saveDemoBooks(booksList);
+
+      const copyTag = body.copy_tag || `${bookObj.category?.substring(0, 4).toUpperCase() || "BK"}-${String(Math.floor(Math.random() * 90 + 10))}`;
       const newBorrow = {
         id: "bor-" + Date.now(),
         borrowed_at: new Date().toISOString(),
-        due_at: new Date(Date.now() + (body.due_days || 7) * 24 * 3600 * 1000).toISOString(),
+        due_at: new Date(Date.now() + (body.due_days || 7) * 86400000).toISOString(),
         returned_at: null,
         fine_amount: 0,
         student: { user: { first_name: std.user.first_name, last_name: std.user.last_name } },
         student_id: std.id,
         copy: {
           id: "copy-" + Date.now(),
-          copy_tag: body.copy_tag || `${bookObj?.category || "BK"}-01`,
+          copy_tag: copyTag,
           status: "BORROWED",
           created_at: new Date().toISOString(),
           book: bookObj
@@ -1577,29 +1812,58 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
 
   if (path.startsWith("/library/return")) {
     const borrowsList = getDemoBorrows();
+    const booksList = getDemoBooks();
+    const studentsList = getStudents();
+
     const idx = borrowsList.findIndex((b: any) => 
       (body.borrow_id && b.id === body.borrow_id) ||
-      (body.copy_tag && b.copy?.copy_tag === body.copy_tag && b.returned_at === null)
+      (body.copy_tag && b.copy?.copy_tag?.toLowerCase() === body.copy_tag?.toLowerCase() && b.returned_at === null) ||
+      (body.copy_tag && b.copy?.book?.isbn?.toLowerCase() === body.copy_tag?.toLowerCase() && b.returned_at === null)
     );
-    if (idx > -1) {
-      borrowsList[idx].returned_at = new Date().toISOString();
-      saveDemoBorrows(borrowsList);
-      return {
-        success: true,
-        data: {
-          record: borrowsList[idx],
-          fine_amount: 0,
-          fine_charged_to_wallet: false
-        },
-        message: "Book returned successfully"
-      } as unknown as T;
+
+    if (idx === -1) {
+      throw new Error(body.copy_tag ? `No active borrow record found for copy tag or barcode "${body.copy_tag}".` : "Active borrow record not found.");
     }
+
+    const borrow = borrowsList[idx];
+    const now = new Date();
+    let fineAmount = 0;
+    let fineCharged = false;
+
+    if (now > new Date(borrow.due_at)) {
+      const diffDays = Math.ceil((now.getTime() - new Date(borrow.due_at).getTime()) / 86400000);
+      fineAmount = diffDays * 200;
+    }
+
+    if (fineAmount > 0) {
+      const stIdx = studentsList.findIndex((s: any) => s.id === borrow.student_id);
+      if (stIdx > -1 && studentsList[stIdx].card && (studentsList[stIdx].card.wallet_balance || 0) >= fineAmount) {
+        studentsList[stIdx].card.wallet_balance -= fineAmount;
+        fineCharged = true;
+        saveStudents(studentsList);
+      }
+    }
+
+    borrow.returned_at = now.toISOString();
+    borrow.fine_amount = fineAmount;
+    if (borrow.copy) borrow.copy.status = "AVAILABLE";
+    saveDemoBorrows(borrowsList);
+
+    const bookId = borrow.copy?.book?.id;
+    if (bookId) {
+      const bObj = booksList.find((b: any) => b.id === bookId);
+      if (bObj) {
+        bObj.available_copies = Math.min(bObj.total_copies, (bObj.available_copies ?? 0) + 1);
+        saveDemoBooks(booksList);
+      }
+    }
+
     return {
       success: true,
       data: {
-        record: borrowsList[0] || null,
-        fine_amount: 0,
-        fine_charged_to_wallet: false
+        record: borrow,
+        fine_amount: fineAmount,
+        fine_charged_to_wallet: fineCharged
       },
       message: "Book returned successfully"
     } as unknown as T;
@@ -4285,7 +4549,7 @@ export const library = {
     request<{ success: boolean; data: LibraryBookCopy }>(`/library/copies/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteCopy: (id: string) => request(`/library/copies/${id}`, { method: "DELETE" }),
 
-  borrowBook: (data: { copy_tag?: string; book_id?: string; student_code?: string; student_id?: string; due_days?: number; notes?: string }) =>
+  borrowBook: (data: { copy_tag?: string; book_id?: string; student_code?: string; student_id?: string; card_number?: string; nfc_uid?: string; due_days?: number; notes?: string }) =>
     request<{ success: boolean; data: LibraryBorrowRecord; message: string }>("/library/borrow", { method: "POST", body: JSON.stringify(data) }),
   returnBook: (data: { copy_tag?: string; borrow_id?: string; fine_rate_per_day?: number }) =>
     request<{ success: boolean; data: { record: LibraryBorrowRecord; fine_amount: number; fine_charged_to_wallet: boolean }; message: string }>("/library/return", { method: "POST", body: JSON.stringify(data) }),

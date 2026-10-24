@@ -107,8 +107,15 @@ function StudentModal({
     }
   }, [existing, isEdit]);
 
+  const selectedLvl = levels.find((l) => l.id === form.level_id);
   const filteredClasses = form.level_id
-    ? classes.filter((c) => (c.level?.id || (c as any).level_id) === form.level_id)
+    ? classes.filter((c) => {
+        const cLvlId = c.level?.id || (c as any).level_id;
+        if (cLvlId === form.level_id) return true;
+        const cLvlName = (c.level?.name || "").trim().toLowerCase();
+        const selectedName = (selectedLvl?.name || "").trim().toLowerCase();
+        return Boolean(cLvlName && selectedName && cLvlName === selectedName);
+      })
     : classes;
 
   const set = (k: keyof StudentForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -390,7 +397,14 @@ function StudentModal({
                       value={form.level_id}
                       onChange={(e) => {
                         const lvlId = e.target.value;
-                        const matching = classes.filter((c) => (c.level?.id || (c as any).level_id) === lvlId);
+                        const selected = levels.find((l) => l.id === lvlId);
+                        const matching = classes.filter((c) => {
+                          const cLvlId = c.level?.id || (c as any).level_id;
+                          if (cLvlId === lvlId) return true;
+                          const cLvlName = (c.level?.name || "").trim().toLowerCase();
+                          const selectedName = (selected?.name || "").trim().toLowerCase();
+                          return Boolean(cLvlName && selectedName && cLvlName === selectedName);
+                        });
                         setForm((f) => ({
                           ...f,
                           level_id: lvlId,
@@ -400,12 +414,16 @@ function StudentModal({
                       className={inp}
                     >
                       <option value="">Select level</option>
-                      {levels.sort((a,b)=>(a.name>b.name?1:-1)).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                      {levels.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                     </select>
                   </Field>
                   <Field label="Class" required>
-                    <select value={form.class_id} onChange={set("class_id")} className={inp}>
-                      <option value="">Select class</option>
+                    <select value={form.class_id} onChange={set("class_id")} className={inp} required>
+                      <option value="">
+                        {form.level_id
+                          ? (filteredClasses.length === 0 ? "No classes available" : "Select class")
+                          : "First select a level"}
+                      </option>
                       {filteredClasses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </Field>
@@ -624,7 +642,23 @@ export default function StudentsPage() {
   useEffect(() => {
     if (authLoading || !user) return;
     Promise.all([structure.levels(), structure.classes()]).then(([lvls, clss]) => {
-      let sorted = [...lvls.data].sort((a, b) => a.name.localeCompare(b.name));
+      // Deduplicate levels by normalized name, prioritizing levels that have classes
+      const levelMap = new Map<string, typeof lvls.data[0]>();
+      for (const l of lvls.data) {
+        const key = l.name.trim().toLowerCase();
+        const existing = levelMap.get(key);
+        const lClassCount = clss.data.filter((c: any) => (c.level?.id || c.level_id) === l.id).length;
+        if (!existing) {
+          levelMap.set(key, l);
+        } else {
+          const existClassCount = clss.data.filter((c: any) => (c.level?.id || c.level_id) === existing.id).length;
+          if (lClassCount > existClassCount) {
+            levelMap.set(key, l);
+          }
+        }
+      }
+      const uniqueLevels = Array.from(levelMap.values());
+      let sorted = uniqueLevels.sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0) || a.name.localeCompare(b.name, undefined, { numeric: true }));
       if (sorted.length === 0) {
         sorted = [
           { id: "l1", name: "Senior 5", description: "Senior 5 level" },
@@ -640,7 +674,7 @@ export default function StudentsPage() {
       setClasses(clss.data);
       if (sorted.length > 0) {
         setSelectedLevel(sorted[0].id);
-        const firstClass = clss.data.find((c) => c.level.id === sorted[0].id) || clss.data[0];
+        const firstClass = clss.data.find((c: any) => (c.level?.id || c.level_id) === sorted[0].id) || clss.data[0];
         if (firstClass) setSelectedClass(firstClass.id);
       }
     }).catch((err) => {

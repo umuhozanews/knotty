@@ -112,6 +112,20 @@ async function createStudent(data, schoolId) {
       });
     }
 
+    let level_id = studentDetails.level_id || null;
+    let class_id = studentDetails.class_id || null;
+    if (class_id) {
+      const cls = await tx.class.findFirst({ where: { id: class_id, school_id: schoolId } });
+      if (cls && cls.level_id) {
+        level_id = cls.level_id;
+      }
+    } else if (level_id) {
+      const cls = await tx.class.findFirst({ where: { level_id, school_id: schoolId } });
+      if (cls) {
+        class_id = cls.id;
+      }
+    }
+
     const student = await tx.student.create({
       data: {
         user_id: user.id,
@@ -120,8 +134,8 @@ async function createStudent(data, schoolId) {
         date_of_birth: studentDetails.date_of_birth,
         gender: studentDetails.gender,
         nationality: studentDetails.nationality,
-        level_id: studentDetails.level_id,
-        class_id: studentDetails.class_id,
+        level_id: level_id || undefined,
+        class_id: class_id || undefined,
         parent_id: parentId || undefined,
       },
       include: {

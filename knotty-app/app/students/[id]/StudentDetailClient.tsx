@@ -1062,12 +1062,32 @@ export default function StudentProfilePage() {
       nfcAbortRef.current = null;
       setNfcScanning(false);
       if (err instanceof Error && err.name !== "AbortError") {
-        setNfcError(
-          err.name === "NotAllowedError"
-            ? "NFC permission denied. Allow NFC access in Chrome settings."
-            : err.message
-        );
+        const msg = err.message.toLowerCase();
+        if (msg.includes("setting is disabled") || (msg.includes("disabled") && msg.includes("nfc"))) {
+          setNfcError("NFC setting is disabled on this device. Enable NFC in Settings > Connected devices, or click Simulate NFC UID below.");
+        } else if (err.name === "NotAllowedError" || msg.includes("permission")) {
+          setNfcError("NFC permission denied. Allow NFC access in browser settings, or click Simulate NFC UID below.");
+        } else {
+          setNfcError(err.message);
+        }
       }
+    }
+  }
+
+  async function simulateAssignNFC() {
+    setNfcError(null);
+    const fakeUid = Array.from({ length: 7 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0').toUpperCase()).join("");
+    try {
+      let cardId = profile?.card?.id;
+      if (!cardId) {
+        const res = await cards.issue(studentId);
+        cardId = (res.data as { id: string }).id;
+      }
+      await cards.linkNFC(cardId, fakeUid);
+      show(`Simulated NFC card assigned — UID: ${fakeUid}`, "success");
+      await reloadProfile();
+    } catch (err) {
+      setNfcError(err instanceof Error ? err.message : "Failed to assign NFC UID");
     }
   }
 
@@ -1324,7 +1344,18 @@ export default function StudentProfilePage() {
                             <Nfc size={11} />
                             {nfcScanning ? "Tap NFC card now… (tap to cancel)" : profile.card.nfc_uid ? "Update NFC Card" : "Assign NFC Card"}
                           </button>
-                          {nfcError && <p className="text-xs text-red-500 mt-1.5 bg-red-50 px-2 py-1.5 rounded-lg">{nfcError}</p>}
+                          {nfcError && (
+                            <div className="mt-1.5 bg-red-50 p-2 rounded-lg text-left">
+                              <p className="text-xs text-red-500 mb-1">{nfcError}</p>
+                              <button
+                                type="button"
+                                onClick={simulateAssignNFC}
+                                className="text-[11px] text-blue-600 font-semibold underline hover:text-blue-700"
+                              >
+                                Or assign simulated NFC UID for testing →
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
                       {profile.card.qr_code && (
@@ -1347,7 +1378,19 @@ export default function StudentProfilePage() {
                             {nfcScanning ? "Tap NFC card now… (tap to cancel)" : "Issue & Assign NFC Card"}
                           </button>
                           <button onClick={issueCard} className="text-xs text-gray-500 underline hover:text-gray-700 transition">Issue card without NFC</button>
-                          {nfcError && <p className="text-xs text-red-500 bg-red-50 px-3 py-1.5 rounded-lg">{nfcError}</p>}
+                          <button onClick={simulateAssignNFC} className="text-xs text-blue-600 underline hover:text-blue-700 transition">Issue with simulated NFC UID</button>
+                          {nfcError && (
+                            <div className="bg-red-50 p-2.5 rounded-lg text-left max-w-xs">
+                              <p className="text-xs text-red-500 mb-1">{nfcError}</p>
+                              <button
+                                type="button"
+                                onClick={simulateAssignNFC}
+                                className="text-[11px] text-blue-600 font-semibold underline hover:text-blue-700"
+                              >
+                                Assign simulated NFC UID instead →
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
                       {user?.role !== "TEACHER" && user?.role !== "ADMIN" && (

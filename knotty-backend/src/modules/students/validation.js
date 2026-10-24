@@ -3,7 +3,7 @@ const Joi = require('joi');
 const createStudentSchema = Joi.object({
   first_name: Joi.string().required(),
   last_name: Joi.string().required(),
-  email: Joi.string().required(),
+  email: Joi.string().optional().allow('', null),
   phone: Joi.string().optional().allow(''),
   password: Joi.string().min(8).default('Ishuri@2024'),
   date_of_birth: Joi.date().optional().allow(null, ''),

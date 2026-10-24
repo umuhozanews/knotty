@@ -941,22 +941,39 @@
           processCardTap(serialNo);
         };
       } catch (err) {
-        alert(`NFC Permission error: ${err.message}`);
+        const msg = (err && err.message) ? err.message : '';
+        if (msg.toLowerCase().includes('disabled') || msg.toLowerCase().includes('setting')) {
+          alert('NFC is turned off in device settings. Please enable NFC in your device Settings > Connected devices > NFC, or click any of the Quick Test Cards below.');
+        } else {
+          alert(`NFC: ${msg || 'Device not ready'}. Use the Quick Test Cards below or manual card input.`);
+        }
       }
     }
 
     function scanNFCForRegistration() {
       if (!('NDEFReader' in window)) {
-        alert('Web NFC requires Chrome on Android.');
+        const fakeUid = Array.from({length: 5}, () => Math.floor(Math.random()*256).toString(16).padStart(2,'0').toUpperCase()).join("");
+        document.getElementById('reg-nfc-uid').value = fakeUid;
+        alert(`Web NFC unavailable on this browser. Generated simulated NFC UID: ${fakeUid}`);
         return;
       }
-      const ndef = new NDEFReader();
-      ndef.scan().then(() => {
-        ndef.onreading = (event) => {
-          const serialNo = event.serialNumber.replace(/:/g, '').toUpperCase();
-          document.getElementById('reg-nfc-uid').value = serialNo;
-        };
-      });
+      try {
+        const ndef = new NDEFReader();
+        ndef.scan().then(() => {
+          ndef.onreading = (event) => {
+            const serialNo = event.serialNumber.replace(/:/g, '').toUpperCase();
+            document.getElementById('reg-nfc-uid').value = serialNo;
+          };
+        }).catch((err) => {
+          const fakeUid = Array.from({length: 5}, () => Math.floor(Math.random()*256).toString(16).padStart(2,'0').toUpperCase()).join("");
+          document.getElementById('reg-nfc-uid').value = fakeUid;
+          alert(`NFC hardware disabled in settings (${err.message}). Generated simulated NFC UID: ${fakeUid}`);
+        });
+      } catch (err) {
+        const fakeUid = Array.from({length: 5}, () => Math.floor(Math.random()*256).toString(16).padStart(2,'0').toUpperCase()).join("");
+        document.getElementById('reg-nfc-uid').value = fakeUid;
+        alert(`Generated simulated NFC UID: ${fakeUid}`);
+      }
     }
 
     // Dynamic QR Preview

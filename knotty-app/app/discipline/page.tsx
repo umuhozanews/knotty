@@ -144,7 +144,7 @@ function OffenseModal({
               <p className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>MARKS TO DEDUCT</p>
               <span className="text-xs font-bold text-red-500">-{form.marks_deducted} / {TOTAL_MARKS}</span>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 mb-2">
               <input
                 type="range"
                 min={1}
@@ -162,6 +162,19 @@ function OffenseModal({
                 className="w-14 text-center border border-gray-200 rounded-xl py-1.5 text-sm font-bold"
                 style={{ color: "#C62828" }}
               />
+            </div>
+            {/* Quick preset buttons */}
+            <div className="flex gap-1.5">
+              {[1, 2, 3, 5, 10].map((pts) => (
+                <button
+                  key={pts}
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, marks_deducted: pts }))}
+                  className={`flex-1 py-1 rounded-xl text-xs font-bold border transition ${form.marks_deducted === pts ? "bg-red-600 text-white border-red-600" : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"}`}
+                >
+                  -{pts}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -239,6 +252,28 @@ export default function DisciplinePage() {
   const [records, setRecords]       = useState<DisciplineRecord[]>([]);
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [showOffenseModal, setShowOffenseModal] = useState(false);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  /* ── Direct marks deduction ────────────────────────────────── */
+  async function handleAdjustMarks(recordId: string, delta: number) {
+    const rec = records.find(r => r.id === recordId);
+    if (!rec) return;
+    const currentDeducted = rec.marks_deducted !== undefined ? Number(rec.marks_deducted) : (rec.severity === "SERIOUS" ? 5 : rec.severity === "MODERATE" ? 3 : 1);
+    const newMarks = Math.min(TOTAL_MARKS, Math.max(0, currentDeducted + delta));
+    setUpdatingId(recordId);
+    // Optimistically update
+    setRecords(prev => prev.map(r => r.id === recordId ? { ...r, marks_deducted: newMarks } : r));
+    try {
+      await discipline.update(recordId, { marks_deducted: newMarks });
+      toast(`Marks updated: -${newMarks} (${delta > 0 ? `+${delta} deducted` : `${Math.abs(delta)} restored`})`, "success");
+      loadSchool();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to update marks", "error");
+      setRecords(prev => prev.map(r => r.id === recordId ? { ...r, marks_deducted: currentDeducted } : r));
+    } finally {
+      setUpdatingId(null);
+    }
+  }
 
   /* ── School-wide list (bottom) ─────────────────────────────── */
   const [schoolRecords, setSchoolRecords]     = useState<DisciplineRecord[]>([]);
@@ -514,12 +549,41 @@ export default function DisciplinePage() {
                                   {r.recorder && ` · ${r.recorder.first_name} ${r.recorder.last_name}`}
                                 </p>
                               </div>
-                              {(r.marks_deducted ?? 0) > 0 && (
-                                <div className="flex-shrink-0 text-right">
-                                  <span className="text-sm font-bold text-red-500">-{r.marks_deducted}</span>
-                                  <p className="text-xs text-gray-400">marks</p>
+                              <div className="flex-shrink-0 flex flex-col items-end gap-1.5">
+                                <div className="text-right">
+                                  <span className="text-sm font-bold text-red-500">
+                                    -{r.marks_deducted !== undefined ? r.marks_deducted : (r.severity === "SERIOUS" ? 5 : r.severity === "MODERATE" ? 3 : 1)}
+                                  </span>
+                                  <p className="text-[10px] text-gray-400">marks deducted</p>
                                 </div>
-                              )}
+                                {/* Direct quick marks deduction buttons */}
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[9px] font-bold text-gray-400">Deduct:</span>
+                                  {[1, 2, 5].map((pts) => (
+                                    <button
+                                      key={pts}
+                                      type="button"
+                                      disabled={updatingId === r.id}
+                                      onClick={() => handleAdjustMarks(r.id, pts)}
+                                      title={`Directly deduct ${pts} more mark(s)`}
+                                      className="px-1.5 py-0.5 rounded-lg text-[10px] font-bold border transition hover:bg-red-50 disabled:opacity-40"
+                                      style={{ borderColor: "#FECACA", color: "#C62828", background: "#FEF2F2" }}
+                                    >
+                                      -{pts}
+                                    </button>
+                                  ))}
+                                  <button
+                                    type="button"
+                                    disabled={updatingId === r.id || (r.marks_deducted ?? 0) <= 0}
+                                    onClick={() => handleAdjustMarks(r.id, -1)}
+                                    title="Restore 1 mark"
+                                    className="px-1.5 py-0.5 rounded-lg text-[10px] font-bold border transition hover:bg-green-50 disabled:opacity-30"
+                                    style={{ borderColor: "#BBF7D0", color: "#166534", background: "#F0FDF4" }}
+                                  >
+                                    +1
+                                  </button>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         );

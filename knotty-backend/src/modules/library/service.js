@@ -760,6 +760,40 @@ async function lookupStudent(query, schoolId) {
     }
   }
 
+  // 4. Try student name search
+  if (!card) {
+    const student = await prisma.student.findFirst({
+      where: {
+        school_id: schoolId,
+        user: {
+          OR: [
+            { first_name: { contains: q, mode: 'insensitive' } },
+            { last_name: { contains: q, mode: 'insensitive' } },
+          ],
+        },
+      },
+      include: {
+        card: true,
+        user: { select: { first_name: true, last_name: true, profile_photo: true } },
+        class: { select: { name: true } },
+        level: { select: { name: true } },
+      },
+    });
+    if (student && student.card) {
+      card = { ...student.card, student };
+    } else if (student) {
+      return {
+        id: student.id,
+        name: `${student.user.first_name} ${student.user.last_name}`,
+        photo: student.user.profile_photo,
+        class: `${student.level?.name || ''} ${student.class?.name || ''}`.trim(),
+        student_code: student.student_code,
+        card_number: null,
+        has_card: false,
+      };
+    }
+  }
+
   if (!card) throw Object.assign(new Error('Student not found — check card number, student code, or link the NFC tag in Admin > Cards'), { status: 404 });
 
   const { student } = card;

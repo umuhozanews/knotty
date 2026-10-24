@@ -37,7 +37,7 @@ export default function DashboardPage() {
 
   return (
     <DashboardShell>
-      {isManagementRole(role) && <AdminDashboard />}
+      {(!role || isManagementRole(role)) && <AdminDashboard />}
       {role === "TEACHER"    && <TeacherDashboard />}
       {role === "NURSE"      && <NurseDashboard />}
       {role === "DISCIPLINE" && <DisciplineDashboard />}

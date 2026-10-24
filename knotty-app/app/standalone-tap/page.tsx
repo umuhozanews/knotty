@@ -51,7 +51,7 @@ const INITIAL_STUDENTS: LocalStudent[] = [
 ];
 
 export default function StandaloneTapPage() {
-  const { scan, isSupported } = useNFC();
+  const { scan, isSupported, error: nfcError } = useNFC();
 
   const [tab, setTab] = useState<"terminal" | "grant" | "logs" | "api">("terminal");
   const [students, setStudents] = useState<LocalStudent[]>(INITIAL_STUDENTS);
@@ -340,6 +340,11 @@ export default function StandaloneTapPage() {
                     <Wifi size={32} />
                   </button>
                   <p className="text-sm font-semibold text-white">Tap Card / Scan Hardware Reader</p>
+                  {nfcError && (
+                    <p className="text-xs text-amber-300 bg-amber-950/50 border border-amber-500/30 px-3 py-1.5 rounded-xl max-w-md">
+                      {nfcError}
+                    </p>
+                  )}
 
                   <form
                     onSubmit={(e) => {

@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { X, Loader2, AlertTriangle, BookOpen, ShieldAlert, Wifi, StopCircle, User, Heart } from "lucide-react";
 import { useNFC, NFCResult } from "@/hooks/useNFC";
+import VirtualCardTap from "@/components/VirtualCardTap";
 import { cards, discipline, reports, health, CardScanResult, DisciplineRecord, AcademicReport, HealthRecord } from "@/lib/api";
 
 export type NFCMode = "report" | "discipline" | "health";
@@ -148,20 +149,28 @@ export default function NFCStudentModal({ mode, onClose }: { mode: NFCMode; onCl
                     </p>
                     <p className="text-xs text-gray-400 mt-1">Hold the NFC card near the back of your phone</p>
                   </div>
-                  {nfcError && <p className="text-xs text-red-500 text-center">{nfcError}</p>}
+                  {nfcError && <p className="text-xs text-red-500 text-center px-4">{nfcError}</p>}
                   {listening && (
                     <button onClick={() => { stopListen(); onClose(); }} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm text-gray-500 border border-gray-200 hover:bg-gray-50">
                       <StopCircle size={14} /> Cancel
                     </button>
                   )}
+                  <div className="pt-2 flex flex-col items-center gap-2">
+                    <p className="text-xs text-gray-400">Or use Virtual Tap / test card:</p>
+                    <VirtualCardTap onTap={(cn) => handleNFCTap({ type: "text", value: cn })} />
+                  </div>
                 </>
               ) : (
-                <div className="text-center">
-                  <div className="w-16 h-16 rounded-full bg-orange-50 flex items-center justify-center mx-auto mb-3">
+                <div className="text-center space-y-3">
+                  <div className="w-16 h-16 rounded-full bg-orange-50 flex items-center justify-center mx-auto mb-2">
                     <AlertTriangle size={28} className="text-orange-400" />
                   </div>
-                  <p className="text-sm font-semibold text-gray-700">NFC Not Available</p>
-                  <p className="text-xs text-gray-400 mt-1">Web NFC requires Chrome on Android</p>
+                  <p className="text-sm font-semibold text-gray-700">NFC Hardware Unavailable</p>
+                  <p className="text-xs text-gray-400">Web NFC requires Chrome on Android with NFC enabled.</p>
+                  <div className="pt-2 flex flex-col items-center gap-2">
+                    <p className="text-xs text-gray-500 font-medium">Test lookup with virtual card tap:</p>
+                    <VirtualCardTap onTap={(cn) => handleNFCTap({ type: "text", value: cn })} />
+                  </div>
                 </div>
               )}
             </div>

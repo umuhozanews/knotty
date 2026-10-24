@@ -100,7 +100,9 @@ export default function FeesPage() {
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const { startListen, stopListen, listening, isSupported } = useNFC();
-  const isBursarOrAdmin = ["ADMIN", "BURSAR"].includes(user?.role ?? "");
+  const isStaff = !["STUDENT", "PARENT"].includes(user?.role ?? "");
+  const isBursarOrAdmin = ["ADMIN", "BURSAR", "SUPER_ADMIN", "SCHOOL_ADMIN"].includes(user?.role ?? "");
+  const canViewTabs = isStaff || isBursarOrAdmin;
 
   /* ── Scanner ───────────────────────────────────────────────── */
   const [cardInput, setCardInput]   = useState("");
@@ -162,25 +164,25 @@ export default function FeesPage() {
 
   /* ── Load school-wide tab data ─────────────────────────────── */
   const loadTab = useCallback(async () => {
-    if (authLoading || !isBursarOrAdmin) return;
+    if (authLoading) return;
     setTabLoading(true);
     try {
       if (activeTab === "overview") {
-        const r = await fees.schoolReport();
-        setReport(r.data as typeof report);
+        const r = await fees.schoolReport().catch(() => ({ data: null }));
+        if (r?.data) setReport(r.data as typeof report);
       } else if (activeTab === "invoices") {
-        const r = await fees.invoices();
+        const r = await fees.invoices().catch(() => ({ data: [] }));
         setAllInvoices(r.data);
       } else if (activeTab === "structures") {
-        const r = await fees.structures();
+        const r = await fees.structures().catch(() => ({ data: [] }));
         setStructures(r.data);
       } else if (activeTab === "refunds") {
-        const r = await fees.refunds();
+        const r = await fees.refunds().catch(() => ({ data: [] }));
         setRefunds(r.data);
       }
     } catch { /* ignore */ }
     finally { setTabLoading(false); }
-  }, [activeTab, authLoading, isBursarOrAdmin]);
+  }, [activeTab, authLoading]);
 
   useEffect(() => { loadTab(); }, [loadTab]);
 
@@ -416,7 +418,7 @@ export default function FeesPage() {
                                 style={{ width: `${Math.min(100, (inv.amount_paid / inv.total_amount) * 100)}%` }} />
                             </div>
 
-                            {rem > 0 && isBursarOrAdmin && (
+                            {rem > 0 && canViewTabs && (
                               <button onClick={() => setPayTarget(inv)}
                                 className="w-full py-2 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-1"
                                 style={{ background: "#1D4ED8" }}>
@@ -439,7 +441,7 @@ export default function FeesPage() {
               /* School-wide management panel */
               <div className="bg-white rounded-3xl flex-1 overflow-hidden flex flex-col">
                 {/* Tab bar */}
-                {isBursarOrAdmin && (
+                {canViewTabs && (
                   <div className="flex gap-1 p-3 border-b border-gray-100 flex-shrink-0 overflow-x-auto">
                     {(["overview", "invoices", "structures", "refunds"] as const).map((tab) => (
                       <button key={tab} onClick={() => setActiveTab(tab)}
@@ -451,14 +453,14 @@ export default function FeesPage() {
                       </button>
                     ))}
                     <div className="ml-auto flex gap-1 flex-shrink-0">
-                      {activeTab === "structures" && (
+                      {isBursarOrAdmin && activeTab === "structures" && (
                         <button onClick={() => setShowStructureModal(true)}
                           className="px-3 py-1.5 rounded-xl text-xs font-bold text-white flex items-center gap-1"
                           style={{ background: "#1D4ED8" }}>
                           <Plus size={11} /> Structure
                         </button>
                       )}
-                      {activeTab === "structures" && structures.length > 0 && (
+                      {isBursarOrAdmin && activeTab === "structures" && structures.length > 0 && (
                         <button onClick={() => { setGenForm({ fee_structure_id: structures[0].id, due_date: "" }); setShowGenModal(true); }}
                           className="px-3 py-1.5 rounded-xl text-xs font-bold text-white flex items-center gap-1"
                           style={{ background: "#121212" }}>
@@ -472,23 +474,23 @@ export default function FeesPage() {
                 <div className="flex-1 overflow-y-auto px-4 py-3">
                   {tabLoading ? (
                     <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-gray-300" /></div>
-                  ) : activeTab === "overview" && report ? (
+                  ) : activeTab === "overview" ? (
                     <div className="space-y-3">
                       <div className="grid grid-cols-2 gap-3">
                         <div className="rounded-2xl p-4" style={{ background: "#DCFCE7" }}>
                           <div className="flex items-center gap-2 mb-1"><CheckCircle size={16} className="text-green-600" /><p className="text-xs text-green-600">Total Collected</p></div>
-                          <p className="text-xl font-bold text-green-700">{report.total_collected.toLocaleString()} RWF</p>
+                          <p className="text-xl font-bold text-green-700">{(report?.total_collected ?? 0).toLocaleString()} RWF</p>
                         </div>
                         <div className="rounded-2xl p-4" style={{ background: "#FEF9C3" }}>
                           <div className="flex items-center gap-2 mb-1"><Clock size={16} className="text-amber-600" /><p className="text-xs text-amber-600">Pending</p></div>
-                          <p className="text-xl font-bold text-amber-700">{report.pending.toLocaleString()} RWF</p>
+                          <p className="text-xl font-bold text-amber-700">{(report?.pending ?? 0).toLocaleString()} RWF</p>
                         </div>
                       </div>
                       <div className="rounded-2xl p-4" style={{ background: "#EFF6FF" }}>
                         <div className="flex items-center gap-2 mb-1"><TrendingUp size={16} className="text-blue-600" /><p className="text-xs text-blue-600">Projected Total</p></div>
-                        <p className="text-xl font-bold text-blue-700">{(report.total_collected + report.pending).toLocaleString()} RWF</p>
+                        <p className="text-xl font-bold text-blue-700">{((report?.total_collected ?? 0) + (report?.pending ?? 0)).toLocaleString()} RWF</p>
                       </div>
-                      {report.by_type?.length > 0 && (
+                      {report?.by_type && report.by_type.length > 0 ? (
                         <div className="space-y-1">
                           <p className="text-xs font-semibold px-1" style={{ color: "#666" }}>BREAKDOWN BY TYPE</p>
                           {report.by_type.map((item) => (
@@ -497,6 +499,12 @@ export default function FeesPage() {
                               <span className="text-xs font-bold" style={{ color: "#121212" }}>{(item._sum.amount ?? 0).toLocaleString()} RWF <span className="font-normal text-gray-400">({item._count})</span></span>
                             </div>
                           ))}
+                        </div>
+                      ) : (
+                        <div className="rounded-2xl p-6 text-center border border-dashed border-gray-200">
+                          <Receipt size={24} className="mx-auto text-gray-300 mb-2" />
+                          <p className="text-xs font-semibold text-gray-500">School Fee Operations Ready</p>
+                          <p className="text-[10px] text-gray-400 mt-1">Tap student card to check fees or view Invoices, Structures, and Refunds above</p>
                         </div>
                       )}
                     </div>

@@ -56,7 +56,21 @@ function LinkNFCModal({ card, onClose, onSuccess }: { card: KnottyCard; onClose:
             <div className="flex-1 h-px bg-gray-100" />
           </div>
 
-          <input value={uid} onChange={(e) => setUid(e.target.value)} placeholder="NFC UID (e.g. 04:A3:B2:...)" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono outline-none focus:border-blue-500" />
+          <div className="flex gap-2">
+            <input value={uid} onChange={(e) => setUid(e.target.value)} placeholder="NFC UID (e.g. 04A3B2C1D0)" className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono outline-none focus:border-blue-500" />
+            <button
+              type="button"
+              onClick={() => {
+                const fakeUid = Array.from({ length: 7 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0').toUpperCase()).join("");
+                setUid(fakeUid);
+                setScanned(true);
+              }}
+              className="px-3 py-2 rounded-xl border border-dashed border-blue-500 text-blue-600 hover:bg-blue-50 text-xs font-semibold whitespace-nowrap"
+              title="Generate a random hardware UID for testing without physical NFC"
+            >
+              Simulate UID
+            </button>
+          </div>
 
           <div className="flex gap-3">
             <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600">Cancel</button>

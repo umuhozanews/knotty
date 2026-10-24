@@ -88,14 +88,17 @@ async function createStudent(data, schoolId) {
       parentId = existingParent.id;
     }
 
+    const rawEmail = (studentDetails.email && String(studentDetails.email).trim().toLowerCase()) || "";
+    const studentEmail = rawEmail || `${studentDetails.first_name.toLowerCase().replace(/[^a-z0-9]/g, '')}.${studentDetails.last_name.toLowerCase().replace(/[^a-z0-9]/g, '')}.${student_code.toLowerCase()}@student.ishurihub.rw`;
+
     const user = await tx.user.create({
       data: {
         school_id: schoolId,
         role: 'STUDENT',
-        first_name: studentDetails.first_name,
-        last_name: studentDetails.last_name,
-        email: studentDetails.email,
-        phone: studentDetails.phone,
+        first_name: studentDetails.first_name.trim(),
+        last_name: studentDetails.last_name.trim(),
+        email: studentEmail,
+        phone: studentDetails.phone || null,
         password_hash,
       },
     });

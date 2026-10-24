@@ -3,6 +3,24 @@ import { useState, useCallback, useRef } from "react";
 
 export type NFCResult = { type: "text"; value: string } | { type: "uid"; value: string };
 
+function formatNFCError(e: unknown): string {
+  if (!(e instanceof Error)) return "NFC error occurred";
+  const msg = e.message || "";
+  const name = e.name || "";
+  const lower = msg.toLowerCase();
+
+  if (lower.includes("nfc setting is disabled") || lower.includes("setting is disabled") || (lower.includes("disabled") && lower.includes("nfc"))) {
+    return "NFC is turned off in device settings. Please enable NFC in your device Settings > Connected devices > NFC, or use Virtual Card Tap / manual card entry.";
+  }
+  if (lower.includes("permission") || name === "NotAllowedError") {
+    return "NFC permission denied or turned off. Enable NFC and grant permission in browser settings, or use Virtual Card Tap.";
+  }
+  if (name === "NotSupportedError" || lower.includes("not supported")) {
+    return "Web NFC is not supported on this browser/platform. Use Chrome on Android or use Virtual Card Tap.";
+  }
+  return msg;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type NDEFReaderInstance = any;
 
@@ -19,7 +37,7 @@ export function useNFC() {
   const scan = useCallback((): Promise<NFCResult | null> => {
     return new Promise(async (resolve) => {
       if (!isSupported) {
-        setError("Web NFC requires Chrome on Android. Use manual card entry instead.");
+        setError("Web NFC requires Chrome on Android. Use Virtual Card Tap or manual entry.");
         resolve(null);
         return;
       }
@@ -46,13 +64,12 @@ export function useNFC() {
 
         reader.onerror = () => {
           setScanning(false);
-          setError("NFC read error — try again");
+          setError("NFC read error — please try again");
           resolve(null);
         };
       } catch (e: unknown) {
         setScanning(false);
-        const msg = e instanceof Error ? e.message : "NFC error";
-        setError(msg.includes("permission") ? "NFC permission denied — enable in browser settings" : msg);
+        setError(formatNFCError(e));
         resolve(null);
       }
     });
@@ -61,7 +78,7 @@ export function useNFC() {
   /** Continuous listen mode — fires onTap for every card tap until stopListen() */
   const startListen = useCallback(async (onTap: (result: NFCResult) => void): Promise<boolean> => {
     if (!isSupported) {
-      setError("Web NFC requires Chrome on Android.");
+      setError("Web NFC requires Chrome on Android. Use Virtual Card Tap or manual entry.");
       return false;
     }
     try {
@@ -93,7 +110,7 @@ export function useNFC() {
       };
 
       reader.onerror = () => {
-        setError("NFC read error");
+        setError("NFC read error — please try again");
       };
 
       stopFnRef.current = () => {
@@ -108,8 +125,7 @@ export function useNFC() {
 
       return true;
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "NFC error";
-      setError(msg.includes("permission") ? "NFC permission denied — enable in browser settings" : msg);
+      setError(formatNFCError(e));
       setListening(false);
       return false;
     }

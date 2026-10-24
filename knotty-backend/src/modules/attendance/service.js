@@ -87,11 +87,23 @@ async function scanAttendance(cardNumber, recordedBy, options = {}) {
     return timeStr >= startStr && timeStr <= endStr;
   };
 
-  const isTapIn = type ? (type === 'IN') : (!existing);
+  // Determine if this tap is TAP IN or TAP OUT
+  let isTapIn;
+  if (type === 'IN') {
+    isTapIn = true;
+  } else if (type === 'OUT') {
+    isTapIn = false;
+  } else {
+    // AUTO (Smart In/Out Toggle):
+    // 1. If student has not tapped in today -> TAP IN
+    // 2. If student has tapped in today and has not tapped out -> TAP OUT
+    // 3. If student has already tapped out today -> TAP IN again (e.g. returning to school)
+    isTapIn = !existing || Boolean(existing.check_out_time);
+  }
 
   // ── TAP IN ───────────────────────────────────────────────────────────────────
   if (isTapIn) {
-    if (tapInStart && tapInEnd) {
+    if (options.enforceWindows && tapInStart && tapInEnd) {
       if (!isInRange(nowTimeStr, tapInStart, tapInEnd)) {
         throw Object.assign(
           new Error(`Tap-in not allowed. Current time (${nowTimeStr}) is outside the tap-in window (${tapInStart} - ${tapInEnd})`),
@@ -117,6 +129,8 @@ async function scanAttendance(cardNumber, recordedBy, options = {}) {
         entity_id: updated.id,
         after_state: { status, card_number: card.card_number, student_id: student.id },
       }).catch(() => {});
+      invalidateSummaryCache(student.school_id);
+      redis.del(`card:${card.card_number}`).catch(() => {});
       return { ...updated, action: 'TAP_IN', card_number: card.card_number };
     }
 
@@ -152,6 +166,7 @@ async function scanAttendance(cardNumber, recordedBy, options = {}) {
     }
 
     invalidateSummaryCache(student.school_id);
+    redis.del(`card:${card.card_number}`).catch(() => {});
     return {
       ...created,
       action: 'TAP_IN',
@@ -161,7 +176,7 @@ async function scanAttendance(cardNumber, recordedBy, options = {}) {
 
   // ── TAP OUT ──────────────────────────────────────────────────────────────────
   else {
-    if (tapOutStart && tapOutEnd) {
+    if (options.enforceWindows && tapOutStart && tapOutEnd) {
       if (!isInRange(nowTimeStr, tapOutStart, tapOutEnd)) {
         throw Object.assign(
           new Error(`Tap-out not allowed. Current time (${nowTimeStr}) is outside the tap-out window (${tapOutStart} - ${tapOutEnd})`),
@@ -174,7 +189,7 @@ async function scanAttendance(cardNumber, recordedBy, options = {}) {
       throw Object.assign(new Error('Cannot Tap Out without checking in first'), { status: 400 });
     }
 
-    if (existing.check_out_time) {
+    if (existing.check_out_time && type === 'OUT') {
       return { ...existing, action: 'ALREADY_OUT', card_number: card.card_number };
     }
 
@@ -194,6 +209,7 @@ async function scanAttendance(cardNumber, recordedBy, options = {}) {
     }).catch(() => {});
 
     invalidateSummaryCache(student.school_id);
+    redis.del(`card:${card.card_number}`).catch(() => {});
     return { ...updated, action: 'TAP_OUT', card_number: card.card_number };
   }
 }
@@ -377,7 +393,21 @@ async function getTodaySummary(schoolId, classId, user) {
 
   const records = await prisma.attendance.findMany({
     where,
-    select: { id: true, status: true, check_in_time: true, check_out_time: true, student: { select: { user: { select: { first_name: true, last_name: true, profile_photo: true } }, class: { select: { name: true } } } } },
+    select: {
+      id: true,
+      status: true,
+      check_in_time: true,
+      check_out_time: true,
+      student: {
+        select: {
+          id: true,
+          student_code: true,
+          user: { select: { first_name: true, last_name: true, profile_photo: true } },
+          class: { select: { name: true } },
+          card: { select: { card_number: true } },
+        },
+      },
+    },
     orderBy: { check_in_time: 'desc' },
   });
 
@@ -400,7 +430,7 @@ async function getTodaySummary(schoolId, classId, user) {
   const checkedIn = summary.PRESENT + summary.LATE + summary.EXCUSED;
   summary.ABSENT = Math.max(0, totalStudents - checkedIn);
 
-  const result = { summary, total: records.length, recent: records.slice(0, 10) };
+  const result = { summary, total: records.length, recent: records.slice(0, 100) };
   redis.set(`att_summary:${schoolId}:${classId || 'all'}`, JSON.stringify(result), 'EX', SUMMARY_TTL).catch(() => {});
   return result;
 }

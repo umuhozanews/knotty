@@ -58,12 +58,12 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     NFC_PAGE_MODE[pathname] ??
     (user?.role ? NFC_ROLE_MODE[user.role] : undefined);
 
-  // Roles allowed to use the NFC quick-lookup button
-  const nfcAllowedRoles = ["ADMIN", "TEACHER", "DISCIPLINE", "NURSE"];
+  // Roles allowed to use the NFC / Virtual Card quick-lookup button
+  const nfcAllowedRoles = ["ADMIN", "TEACHER", "DISCIPLINE", "NURSE", "BURSAR", "LIBRARIAN"];
   const roleAllowed = user?.role ? nfcAllowedRoles.includes(user.role) : false;
 
-  // Don't show on attendance page — it has its own dedicated NFC listener
-  const showNfcBtn = nfcSupported && !!nfcMode && roleAllowed && pathname !== "/attendance";
+  // Don't show on attendance page — it has its own dedicated scanner
+  const showNfcBtn = !!nfcMode && roleAllowed && pathname !== "/attendance";
 
   // Search
   const [query, setQuery] = useState("");

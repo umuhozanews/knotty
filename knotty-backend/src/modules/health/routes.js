@@ -6,7 +6,7 @@ const { authorize } = require('../../middleware/rbac');
 router.use(authenticate);
 
 // Incident Logs (Legacy/Direct Logs)
-router.get('/', authorize('ADMIN', 'NURSE'), ctrl.listSchool);
+router.get('/', authorize('ADMIN', 'NURSE', 'TEACHER', 'DISCIPLINE', 'BURSAR'), ctrl.listSchool);
 router.post('/', authorize('ADMIN', 'NURSE'), ctrl.create);
 router.get('/student/:studentId', authorize('ADMIN', 'NURSE', 'PARENT', 'STUDENT'), ctrl.list);
 router.put('/:id', authorize('ADMIN', 'NURSE'), ctrl.update);
@@ -22,7 +22,7 @@ router.post('/immunization/:studentId', authorize('ADMIN', 'NURSE'), ctrl.addImm
 router.delete('/immunization/:id', authorize('ADMIN', 'NURSE'), ctrl.removeImmunizationRecord);
 
 // Clinic Visits & Medications
-router.get('/visits', authorize('ADMIN', 'NURSE'), ctrl.listAllClinicVisits);
+router.get('/visits', authorize('ADMIN', 'NURSE', 'TEACHER', 'DISCIPLINE', 'BURSAR'), ctrl.listAllClinicVisits);
 router.get('/visits/student/:studentId', authorize('ADMIN', 'NURSE', 'PARENT', 'STUDENT'), ctrl.listClinicVisits);
 router.post('/visits/student/:studentId', authorize('ADMIN', 'NURSE'), ctrl.createClinicVisit);
 

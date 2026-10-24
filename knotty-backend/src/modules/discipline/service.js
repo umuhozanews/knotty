@@ -72,7 +72,7 @@ async function list(studentId, schoolId, { page, limit }) {
 async function update(id, schoolId, data, actorId) {
   const before = await prisma.disciplineRecord.findFirst({
     where: { id, school_id: schoolId },
-    select: { type: true, status: true, title: true },
+    select: { type: true, severity: true, marks_deducted: true, title: true },
   });
   const result = await prisma.disciplineRecord.updateMany({ where: { id, school_id: schoolId }, data });
   logAction({

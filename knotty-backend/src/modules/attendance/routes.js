@@ -8,12 +8,12 @@ const { checkClassAccess } = require('../../middleware/classAccess');
 
 router.use(authenticate);
 
-router.post('/scan', authorize('ADMIN', 'TEACHER', 'DISCIPLINE'), transactionLimiter, ctrl.scan);
-router.post('/scan-nfc', authorize('ADMIN', 'TEACHER', 'DISCIPLINE'), transactionLimiter, ctrl.scanNFC);
-router.post('/scan-secure', authorize('ADMIN', 'TEACHER', 'DISCIPLINE'), transactionLimiter, ctrl.scanSecure);
-router.post('/bulk', authorize('ADMIN', 'TEACHER'), checkClassAccess, transactionLimiter, ctrl.bulk);
-router.post('/queue', authorize('ADMIN', 'TEACHER', 'DISCIPLINE'), transactionLimiter, ctrl.queue);
-router.get('/today-summary', authorize('ADMIN', 'TEACHER', 'DISCIPLINE'), checkClassAccess, ctrl.todaySummary);
+router.post('/scan', authorize('ADMIN', 'TEACHER', 'DISCIPLINE', 'BURSAR', 'NURSE'), transactionLimiter, ctrl.scan);
+router.post('/scan-nfc', authorize('ADMIN', 'TEACHER', 'DISCIPLINE', 'BURSAR', 'NURSE'), transactionLimiter, ctrl.scanNFC);
+router.post('/scan-secure', authorize('ADMIN', 'TEACHER', 'DISCIPLINE', 'BURSAR', 'NURSE'), transactionLimiter, ctrl.scanSecure);
+router.post('/bulk', authorize('ADMIN', 'TEACHER', 'DISCIPLINE', 'BURSAR'), checkClassAccess, transactionLimiter, ctrl.bulk);
+router.post('/queue', authorize('ADMIN', 'TEACHER', 'DISCIPLINE', 'BURSAR', 'NURSE'), transactionLimiter, ctrl.queue);
+router.get('/today-summary', authorize('ADMIN', 'TEACHER', 'DISCIPLINE', 'BURSAR', 'NURSE'), checkClassAccess, ctrl.todaySummary);
 router.get('/me', authorize('STUDENT'), ctrl.myAttendance);
 router.get('/student/:studentId', authorize('ADMIN', 'TEACHER', 'DISCIPLINE', 'PARENT', 'STUDENT'), ctrl.student);
 router.get('/class/:classId', authorize('ADMIN', 'TEACHER'), checkClassAccess, ctrl.byClass);

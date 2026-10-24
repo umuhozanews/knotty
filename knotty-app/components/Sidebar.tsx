@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, ClipboardCheck, CreditCard, ShoppingCart,
   Banknote, FileText, AlertTriangle, Settings, LogOut, ChevronRight,
   Heart, BookOpen, User, CalendarDays, GraduationCap, Wallet, X, Library, Shield,
-  UserCheck, Building2,
+  UserCheck, Building2, Smartphone,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { isManagementRole } from "@/lib/roles";
@@ -13,30 +13,30 @@ import { isManagementRole } from "@/lib/roles";
 // Every nav item and which roles can see it
 const ALL_NAV = [
   // ── Shared dashboard ──
-  { icon: LayoutDashboard, label: "Dashboard",    href: "/",              roles: ["ADMIN","TEACHER","CANTEEN","NURSE","BURSAR","DISCIPLINE"] },
+  { icon: LayoutDashboard, label: "Dashboard",    href: "/",              roles: ["ADMIN","TEACHER","CANTEEN","NURSE","BURSAR","DISCIPLINE","LIBRARIAN"] },
+
+  // ── Admin / Teacher / Staff shared ──
+  { icon: Users,           label: "Students",     href: "/students",      roles: ["ADMIN","TEACHER","BURSAR","DISCIPLINE","LIBRARIAN","NURSE"] },
+  { icon: UserCheck,       label: "Workers",      href: "/workers",       roles: ["ADMIN","BURSAR","DISCIPLINE","TEACHER","LIBRARIAN","NURSE"] },
+  { icon: Building2,       label: "Schools Hub",  href: "/schools",       roles: ["ADMIN","TEACHER","BURSAR","DISCIPLINE","LIBRARIAN"] },
+  { icon: ClipboardCheck,  label: "Attendance",   href: "/attendance",    roles: ["ADMIN","TEACHER","DISCIPLINE","BURSAR","NURSE","LIBRARIAN"] },
+  { icon: Shield,          label: "Gate Access",  href: "/gate-access",   roles: ["ADMIN","DISCIPLINE","TEACHER","BURSAR"] },
+  { icon: Library,         label: "Library",      href: "/library",       roles: ["ADMIN","TEACHER","LIBRARIAN","STUDENT","BURSAR","DISCIPLINE","NURSE","CANTEEN","PARENT"] },
+  { icon: BookOpen,        label: "Materials",    href: "/materials",     roles: ["ADMIN","TEACHER","LIBRARIAN","STUDENT"] },
+  { icon: FileText,        label: "Reports",      href: "/reports",       roles: ["ADMIN","TEACHER","BURSAR","DISCIPLINE","LIBRARIAN"] },
+  { icon: AlertTriangle,   label: "Discipline",   href: "/discipline",    roles: ["ADMIN","TEACHER","DISCIPLINE","BURSAR"] },
+  { icon: Heart,           label: "Health",       href: "/health",        roles: ["ADMIN","NURSE","TEACHER","DISCIPLINE"] },
+  { icon: CreditCard,      label: "Cards",        href: "/cards",         roles: ["ADMIN","BURSAR","TEACHER","DISCIPLINE","CANTEEN"] },
+  { icon: ShoppingCart,    label: "Canteen",      href: "/canteen",       roles: ["ADMIN","CANTEEN","BURSAR","TEACHER"] },
+  { icon: Banknote,        label: "Fees",         href: "/fees",          roles: ["ADMIN","BURSAR","TEACHER","DISCIPLINE","LIBRARIAN","NURSE","STUDENT","PARENT"] },
+  { icon: Smartphone,      label: "Virtual Tap",  href: "/standalone-tap", roles: ["ADMIN","TEACHER","BURSAR","DISCIPLINE","LIBRARIAN","NURSE","CANTEEN"] },
 
   // ── Student self-service ──
   { icon: LayoutDashboard, label: "My Dashboard", href: "/",              roles: ["STUDENT", "PARENT"] },
-  { icon: User,            label: "My Profile",   href: "/my-profile",    roles: ["STUDENT"] },
-  { icon: CalendarDays,    label: "My Attendance",href: "/my-attendance", roles: ["STUDENT"] },
-  { icon: GraduationCap,   label: "My Reports",   href: "/my-reports",    roles: ["STUDENT"] },
-  { icon: Wallet,          label: "My Card",      href: "/my-card",       roles: ["STUDENT"] },
-  { icon: BookOpen,        label: "Materials",     href: "/materials",     roles: ["STUDENT"] },
-
-  // ── Admin / Teacher / Staff shared ──
-  { icon: Users,           label: "Students",     href: "/students",      roles: ["ADMIN","TEACHER","BURSAR","DISCIPLINE"] },
-  { icon: UserCheck,       label: "Workers",      href: "/workers",       roles: ["ADMIN","BURSAR","DISCIPLINE"] },
-  { icon: Building2,       label: "Schools Hub",  href: "/schools",       roles: ["ADMIN"] },
-  { icon: ClipboardCheck,  label: "Attendance",   href: "/attendance",    roles: ["ADMIN","TEACHER","DISCIPLINE"] },
-  { icon: Shield,          label: "Gate Access",  href: "/gate-access",   roles: ["ADMIN","DISCIPLINE"] },
-  { icon: Library,         label: "Library",      href: "/library",       roles: ["ADMIN","TEACHER","LIBRARIAN","STUDENT","BURSAR","DISCIPLINE"] },
-  { icon: BookOpen,        label: "Materials",    href: "/materials",     roles: ["ADMIN","TEACHER"] },
-  { icon: FileText,        label: "Reports",      href: "/reports",       roles: ["ADMIN","TEACHER"] },
-  { icon: AlertTriangle,   label: "Discipline",   href: "/discipline",    roles: ["ADMIN","TEACHER","DISCIPLINE"] },
-  { icon: Heart,           label: "Health",       href: "/health",        roles: ["ADMIN","NURSE"] },
-  { icon: CreditCard,      label: "Cards",        href: "/cards",         roles: ["ADMIN","BURSAR"] },
-  { icon: ShoppingCart,    label: "Canteen",      href: "/canteen",       roles: ["ADMIN","CANTEEN"] },
-  { icon: Banknote,        label: "Fees",         href: "/fees",          roles: ["ADMIN","BURSAR"] },
+  { icon: User,            label: "My Profile",   href: "/my-profile",    roles: ["STUDENT", "ADMIN"] },
+  { icon: CalendarDays,    label: "My Attendance",href: "/my-attendance", roles: ["STUDENT", "ADMIN"] },
+  { icon: GraduationCap,   label: "My Reports",   href: "/my-reports",    roles: ["STUDENT", "ADMIN"] },
+  { icon: Wallet,          label: "My Card",      href: "/my-card",       roles: ["STUDENT", "ADMIN"] },
 ];
 
 // Pretty display name for each role

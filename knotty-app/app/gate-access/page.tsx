@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { gateAccess, teachers, Campus, GateDevice, RestrictedZone, AccessLog, VisitorLog, Teacher } from "@/lib/api";
 import DashboardShell from "@/components/DashboardShell";
+import VirtualCardTap from "@/components/VirtualCardTap";
 import {
   Loader2, Shield, Plus, X, CheckCircle, Clock,
   DoorOpen, Users, Settings, Activity, ShieldAlert,
@@ -308,7 +309,10 @@ export default function GateAccessPage() {
                 </select>
               </div>
               <div>
-                <label className="text-[10px] text-slate-400 font-semibold block mb-1 uppercase">Card Number</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[10px] text-slate-400 font-semibold uppercase">Card Number</label>
+                  <VirtualCardTap onTap={(cn) => setTestCard(cn)} />
+                </div>
                 <input value={testCard} onChange={e => setTestCard(e.target.value)}
                   placeholder="e.g. KNT-KMS-2026-00001" required
                   className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-blue-500 placeholder-slate-600" />

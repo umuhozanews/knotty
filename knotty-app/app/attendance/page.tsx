@@ -2,10 +2,11 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Loader2, Wifi, CheckCircle, XCircle, Clock, MinusCircle,
-  Radio, StopCircle, CreditCard, Settings, X, LogIn, LogOut, AlertTriangle, Download,
+  Radio, StopCircle, CreditCard, Settings, X, LogIn, LogOut, AlertTriangle, Download, Search, Users, RefreshCw,
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import KnottyCard from "@/components/KnottyCard";
+import VirtualCardTap from "@/components/VirtualCardTap";
 import {
   attendance, cards, structure, Class,
   AttendanceTodaySummary, CardScanFull, AttendanceSettings,
@@ -21,8 +22,12 @@ interface ScanLogEntry {
   id: string;
   name: string;
   className: string;
+  studentCode?: string;
+  cardNumber?: string;
   action: TapAction;
+  status?: string;
   time: string;
+  rawTime?: string;
   photo: string | null;
 }
 
@@ -93,7 +98,9 @@ export default function AttendancePage() {
   const [classes, setClasses]             = useState<Class[]>([]);
   const [selectedClass, setSelectedClass] = useState("");
   const [date, setDate]                   = useState(() => new Date().toLocaleDateString('en-ZA', { timeZone: 'Africa/Kigali' }).replace(/\//g, '-'));
-  const [scanType, setScanType]           = useState<"IN" | "OUT">("IN");
+  const [scanType, setScanType]           = useState<"AUTO" | "IN" | "OUT">("AUTO");
+  const [logFilter, setLogFilter]         = useState<"ALL" | "IN" | "OUT">("ALL");
+  const [logSearch, setLogSearch]         = useState("");
   const [tapInStart, setTapInStart]       = useState("07:00");
   const [tapInEnd, setTapInEnd]           = useState("12:00");
   const [tapOutStart, setTapOutStart]     = useState("15:00");
@@ -135,11 +142,15 @@ export default function AttendancePage() {
       if (r?.recent) {
         const logs: ScanLogEntry[] = r.recent.map((rec: any) => ({
           id: rec.id || Math.random().toString(),
-          name: `${rec.student.user.first_name} ${rec.student.user.last_name}`,
-          className: rec.student.class?.name || "",
+          name: `${rec.student?.user?.first_name || ''} ${rec.student?.user?.last_name || ''}`.trim() || 'Unknown Student',
+          className: rec.student?.class?.name || "",
+          studentCode: rec.student?.student_code || "",
+          cardNumber: rec.student?.card?.card_number || "",
           action: rec.check_out_time ? "TAP_OUT" : "TAP_IN",
+          status: rec.status,
           time: fmtTime(rec.check_out_time || rec.check_in_time),
-          photo: rec.student.user.profile_photo,
+          rawTime: rec.check_out_time || rec.check_in_time,
+          photo: rec.student?.user?.profile_photo || null,
         }));
         setScanLog(logs);
       }
@@ -227,14 +238,18 @@ export default function AttendancePage() {
 
       const name = fresh.data.student.name;
       const logEntry: ScanLogEntry = {
-        id: Date.now().toString(),
+        id: rec.id || Date.now().toString(),
         name,
         className: fresh.data.student.class,
+        studentCode: fresh.data.student.student_code,
+        cardNumber: cardNumber,
         action,
-        time: fmtTime(new Date().toISOString()),
+        status: rec.status,
+        time: fmtTime(action === "TAP_OUT" ? (rec.check_out_time || new Date().toISOString()) : (rec.check_in_time || new Date().toISOString())),
+        rawTime: new Date().toISOString(),
         photo: fresh.data.student.photo,
       };
-      setScanLog((l) => [logEntry, ...l.slice(0, 49)]);
+      setScanLog((l) => [logEntry, ...l.filter(x => x.id !== logEntry.id).slice(0, 99)]);
       loadTodaySummary(selectedClass);
       toast(`${name} — ${ACTION_CFG[action].label}`, action === "TAP_IN" ? "success" : "info");
     } catch (err) {
@@ -290,14 +305,18 @@ export default function AttendancePage() {
 
         const name = `${fresh.data.student.name}`;
         const logEntry: ScanLogEntry = {
-          id: Date.now().toString(),
+          id: rec.id || Date.now().toString(),
           name,
           className: fresh.data.student.class,
+          studentCode: fresh.data.student.student_code,
+          cardNumber: card_number,
           action,
-          time: fmtTime(new Date().toISOString()),
+          status: rec.status,
+          time: fmtTime(action === "TAP_OUT" ? (rec.check_out_time || new Date().toISOString()) : (rec.check_in_time || new Date().toISOString())),
+          rawTime: new Date().toISOString(),
           photo: fresh.data.student.photo,
         };
-        setScanLog((l) => [logEntry, ...l.slice(0, 49)]);
+        setScanLog((l) => [logEntry, ...l.filter(x => x.id !== logEntry.id).slice(0, 99)]);
         loadTodaySummary(selectedClass);
         toast(`${name} — ${ACTION_CFG[action].label} (Secure Pass)`, action === "TAP_IN" ? "success" : "info");
       } catch (err) {
@@ -363,14 +382,18 @@ export default function AttendancePage() {
       setCardData(fresh.data);
 
       const logEntry: ScanLogEntry = {
-        id: Date.now().toString(),
+        id: rec.id || Date.now().toString(),
         name: cardData.student.name,
         className: cardData.student.class,
+        studentCode: cardData.student.student_code,
+        cardNumber: cardData.card_number,
         action,
-        time: fmtTime(new Date().toISOString()),
+        status: rec.status,
+        time: fmtTime(action === "TAP_OUT" ? (rec.check_out_time || new Date().toISOString()) : (rec.check_in_time || new Date().toISOString())),
+        rawTime: new Date().toISOString(),
         photo: cardData.student.photo,
       };
-      setScanLog((l) => [logEntry, ...l.slice(0, 49)]);
+      setScanLog((l) => [logEntry, ...l.filter(x => x.id !== logEntry.id).slice(0, 99)]);
       loadTodaySummary(selectedClass);
       toast(`${cardData.student.name} — ${ACTION_CFG[action].label}`, action === "TAP_IN" ? "success" : "info");
     } catch (err) {
@@ -527,11 +550,27 @@ export default function AttendancePage() {
     ? "idle"
     : cardData.is_frozen
     ? "frozen"
-    : cardData.check_out_time
-    ? "done"
-    : cardData.check_in_time
+    : scanType === "IN"
+    ? "tap_in"
+    : scanType === "OUT"
+    ? "tap_out"
+    : cardData.check_in_time && !cardData.check_out_time
     ? "tap_out"
     : "tap_in";
+
+  const filteredLogs = scanLog.filter((entry) => {
+    if (logFilter === "IN" && entry.action !== "TAP_IN") return false;
+    if (logFilter === "OUT" && entry.action !== "TAP_OUT") return false;
+    if (logSearch.trim()) {
+      const q = logSearch.toLowerCase();
+      const matchName = (entry.name || "").toLowerCase().includes(q);
+      const matchCode = (entry.studentCode || "").toLowerCase().includes(q);
+      const matchClass = (entry.className || "").toLowerCase().includes(q);
+      const matchCard = (entry.cardNumber || "").toLowerCase().includes(q);
+      return matchName || matchCode || matchClass || matchCard;
+    }
+    return true;
+  });
 
   return (
     <DashboardShell>
@@ -636,21 +675,39 @@ export default function AttendancePage() {
                 {/* Gate scan config controls */}
                 <div className="bg-white rounded-2xl shadow-sm p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Active Scan Mode</label>
-                    <div className="flex bg-gray-100 rounded-xl p-1">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-semibold text-gray-700 block">Active Scan Mode</label>
+                      <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                        {scanType === "AUTO" ? "⚡ Smart In/Out" : scanType === "IN" ? "Forced In" : "Forced Out"}
+                      </span>
+                    </div>
+                    <div className="flex bg-gray-100 rounded-xl p-1 gap-1">
+                      <button
+                        onClick={() => setScanType("AUTO")}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${scanType === "AUTO" ? "bg-blue-600 text-white shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                      >
+                        ⚡ AUTO (In/Out)
+                      </button>
                       <button
                         onClick={() => setScanType("IN")}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${scanType === "IN" ? "bg-blue-600 text-white shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${scanType === "IN" ? "bg-emerald-600 text-white shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
                       >
-                        TAP IN
+                        <LogIn size={12} /> TAP IN
                       </button>
                       <button
                         onClick={() => setScanType("OUT")}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${scanType === "OUT" ? "bg-blue-500 text-white shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${scanType === "OUT" ? "bg-indigo-600 text-white shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
                       >
-                        TAP OUT
+                        <LogOut size={12} /> TAP OUT
                       </button>
                     </div>
+                    <p className="text-[11px] text-gray-400 mt-1.5 leading-tight">
+                      {scanType === "AUTO"
+                        ? "✨ Auto mode smartly detects: checks IN arriving students, and checks OUT students who are already inside."
+                        : scanType === "IN"
+                        ? "Forces card scans to register as Arrival TAP IN."
+                        : "Forces card scans to register as Departure TAP OUT."}
+                    </p>
                   </div>
 
                   <div className="flex items-end">
@@ -730,6 +787,7 @@ export default function AttendancePage() {
                       {cardLoading ? <Loader2 size={14} className="animate-spin" /> : <CreditCard size={14} />}
                       Lookup
                     </button>
+                    <VirtualCardTap onTap={(cn) => { setCardInput(cn); lookupCard(cn); }} busy={cardLoading} />
                     {isSupported && (
                       <button
                         type="button" onClick={toggleNFCListen}
@@ -784,22 +842,20 @@ export default function AttendancePage() {
                     {/* TAP button */}
                     <button
                       onClick={doTap}
-                      disabled={tapLoading || tapState === "idle" || tapState === "frozen" || tapState === "done"}
+                      disabled={tapLoading || tapState === "idle" || tapState === "frozen"}
                       className={`w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all duration-200
-                        ${tapState === "tap_in"  ? "bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-100" : ""}
-                        ${tapState === "tap_out" ? "bg-blue-500  text-white hover:bg-blue-600  shadow-lg shadow-blue-100"   : ""}
-                        ${tapState === "done"    ? "bg-gray-100  text-gray-400 cursor-not-allowed" : ""}
-                        ${tapState === "frozen"  ? "bg-blue-50   text-blue-400 cursor-not-allowed" : ""}
-                        ${tapState === "idle"    ? "bg-gray-50   text-gray-300 cursor-not-allowed" : ""}
+                        ${tapState === "tap_in"  ? "bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-100" : ""}
+                        ${tapState === "tap_out" ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-100" : ""}
+                        ${tapState === "frozen"  ? "bg-red-50 text-red-400 cursor-not-allowed" : ""}
+                        ${tapState === "idle"    ? "bg-gray-50 text-gray-300 cursor-not-allowed" : ""}
                         ${tapping ? "scale-95" : "scale-100"}
                       `}
                     >
-                      {tapLoading         ? <Loader2    size={20} className="animate-spin" /> :
-                       tapState === "tap_in"  ? <><LogIn    size={20} />TAP IN</>  :
-                       tapState === "tap_out" ? <><LogOut   size={20} />TAP OUT</> :
-                       tapState === "done"    ? <><CheckCircle size={20} />Completed Today</> :
-                       tapState === "frozen"  ? <><XCircle    size={20} />Card Frozen</> :
-                                               <><CreditCard  size={20} />Scan a Card First</>}
+                      {tapLoading             ? <Loader2   size={20} className="animate-spin" /> :
+                       tapState === "tap_in"  ? <><LogIn   size={20} />TAP IN</>  :
+                       tapState === "tap_out" ? <><LogOut  size={20} />TAP OUT</> :
+                       tapState === "frozen"  ? <><XCircle size={20} />Card Frozen</> :
+                                                <><CreditCard size={20} />Scan a Card First</>}
                     </button>
 
                     {/* Status strip */}
@@ -836,6 +892,151 @@ export default function AttendancePage() {
                     </p>
                   </div>
                 )}
+
+                {/* ── Who Tapped Today: Live Attendance Activity Log (Shown Down Below) ── */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="p-4 sm:p-5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gray-50/50">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="relative flex h-2.5 w-2.5">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                        </span>
+                        <h3 className="font-bold text-gray-800 text-base">Students Who Tapped Today</h3>
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                          {scanLog.length} recorded
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Live real-time feed of all card scans and attendance check-ins/outs
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* Filter buttons */}
+                      <div className="flex bg-gray-100 p-0.5 rounded-lg text-xs font-semibold">
+                        <button
+                          onClick={() => setLogFilter("ALL")}
+                          className={`px-2.5 py-1 rounded-md transition ${logFilter === "ALL" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                        >
+                          All ({scanLog.length})
+                        </button>
+                        <button
+                          onClick={() => setLogFilter("IN")}
+                          className={`px-2.5 py-1 rounded-md transition ${logFilter === "IN" ? "bg-white text-emerald-700 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                        >
+                          Tapped In ({scanLog.filter((x) => x.action === "TAP_IN").length})
+                        </button>
+                        <button
+                          onClick={() => setLogFilter("OUT")}
+                          className={`px-2.5 py-1 rounded-md transition ${logFilter === "OUT" ? "bg-white text-indigo-700 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                        >
+                          Tapped Out ({scanLog.filter((x) => x.action === "TAP_OUT").length})
+                        </button>
+                      </div>
+
+                      <button
+                        onClick={() => loadTodaySummary(selectedClass)}
+                        title="Refresh attendance log"
+                        className="px-2.5 py-1 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 transition text-xs flex items-center gap-1.5 font-medium"
+                      >
+                        <RefreshCw size={12} />
+                        Refresh
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Search bar inside list */}
+                  <div className="p-3 border-b border-gray-100 bg-white">
+                    <div className="relative">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        value={logSearch}
+                        onChange={(e) => setLogSearch(e.target.value)}
+                        placeholder="Search who tapped by student name, code, class, or card number..."
+                        className="w-full text-xs pl-8 pr-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50/50"
+                      />
+                    </div>
+                  </div>
+
+                  {/* The List of who tapped */}
+                  {filteredLogs.length === 0 ? (
+                    <div className="p-8 text-center">
+                      <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-400 mx-auto flex items-center justify-center mb-2">
+                        <CreditCard size={22} />
+                      </div>
+                      <p className="text-sm font-semibold text-gray-600">No attendance taps match</p>
+                      <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto">
+                        Tap an NFC card or click Virtual Card Tap above to register attendance.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-100 max-h-[460px] overflow-y-auto">
+                      {filteredLogs.map((entry, idx) => {
+                        const isTapIn = entry.action === "TAP_IN";
+                        return (
+                          <div
+                            key={entry.id || idx}
+                            className="p-3.5 hover:bg-gray-50/80 transition flex items-center justify-between gap-3"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <Avatar name={entry.name} photo={entry.photo} size={10} />
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm font-bold text-gray-800 truncate">{entry.name}</p>
+                                  {entry.studentCode && (
+                                    <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                                      {entry.studentCode}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-500">
+                                  {entry.className && <span>{entry.className}</span>}
+                                  {entry.cardNumber && <span>• Card: {entry.cardNumber}</span>}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-3 flex-shrink-0">
+                              {/* Tap direction badge */}
+                              <div className="flex flex-col items-end">
+                                <span
+                                  className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg border ${
+                                    isTapIn
+                                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                      : "bg-indigo-50 text-indigo-700 border-indigo-200"
+                                  }`}
+                                >
+                                  {isTapIn ? <LogIn size={12} /> : <LogOut size={12} />}
+                                  {isTapIn ? "TAPPED IN" : "TAPPED OUT"}
+                                </span>
+                                <span className="text-[11px] text-gray-400 mt-1 flex items-center gap-1 font-mono">
+                                  <Clock size={10} /> {entry.time}
+                                </span>
+                              </div>
+
+                              {/* Status tag */}
+                              {entry.status && (
+                                <span
+                                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                    entry.status === "LATE"
+                                      ? "bg-amber-100 text-amber-700"
+                                      : entry.status === "PRESENT"
+                                      ? "bg-emerald-100 text-emerald-700"
+                                      : "bg-gray-100 text-gray-600"
+                                  }`}
+                                >
+                                  {entry.status}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             ) : (
               /* Bulk mark mode */

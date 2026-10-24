@@ -107,9 +107,25 @@ function StudentModal({
     }
   }, [existing, isEdit]);
 
-  const filteredClasses = form.level_id ? classes.filter((c) => c.level.id === form.level_id) : classes;
-  const set = (k: keyof StudentForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
-    setForm((f) => ({ ...f, [k]: e.target.value }));
+  const filteredClasses = form.level_id
+    ? classes.filter((c) => (c.level?.id || (c as any).level_id) === form.level_id)
+    : classes;
+
+  const set = (k: keyof StudentForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setForm((f) => {
+      const next = { ...f, [k]: val };
+      // Auto-suggest student email if not editing and email wasn't manually typed
+      if ((k === "first_name" || k === "last_name") && !isEdit) {
+        const fn = (k === "first_name" ? val : f.first_name).trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+        const ln = (k === "last_name" ? val : f.last_name).trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (fn && ln && (!f.email || f.email.includes("@student.ishurihub.rw"))) {
+          next.email = `${fn}.${ln}@student.ishurihub.rw`;
+        }
+      }
+      return next;
+    });
+  };
 
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -123,16 +139,36 @@ function StudentModal({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.first_name || !form.last_name || !form.email || !form.class_id || !form.level_id) {
-      setError("First name, last name, email, level and class are required.");
+    setError("");
+
+    if (!form.first_name?.trim()) {
+      setError("Please fill in the student's First Name.");
+      setTab("basic");
       return;
     }
+    if (!form.last_name?.trim()) {
+      setError("Please fill in the student's Second Name (Last Name).");
+      setTab("basic");
+      return;
+    }
+    if (!form.level_id) {
+      setError("Please select the Academic Level (grade/year).");
+      setTab("basic");
+      return;
+    }
+    if (!form.class_id) {
+      setError("Please select the Class section.");
+      setTab("basic");
+      return;
+    }
+
+    const effectiveEmail = form.email?.trim() || `${form.first_name.trim().toLowerCase().replace(/[^a-z0-9]/g, "")}.${form.last_name.trim().toLowerCase().replace(/[^a-z0-9]/g, "")}${Math.floor(10 + Math.random() * 90)}@student.ishurihub.rw`;
+
     setLoading(true);
-    setError("");
     try {
       if (isEdit && existing) {
         await students.update(existing.id, {
-          first_name: form.first_name, last_name: form.last_name,
+          first_name: form.first_name.trim(), last_name: form.last_name.trim(),
           phone: form.phone || undefined,
           gender: form.gender, date_of_birth: form.date_of_birth || undefined,
           nationality: form.nationality || undefined,
@@ -151,8 +187,8 @@ function StudentModal({
       } else {
         // Create student
         const payload: Record<string, unknown> = {
-          first_name: form.first_name, last_name: form.last_name,
-          email: form.email, phone: form.phone || undefined,
+          first_name: form.first_name.trim(), last_name: form.last_name.trim(),
+          email: effectiveEmail, phone: form.phone || undefined,
           password: form.password || undefined, gender: form.gender,
           level_id: form.level_id, class_id: form.class_id,
           date_of_birth: form.date_of_birth || undefined,
@@ -310,11 +346,23 @@ function StudentModal({
                   </label>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <Field label="First Name" required><input required value={form.first_name} onChange={set("first_name")} className={inp} placeholder="e.g. Ange" /></Field>
-                  <Field label="Last Name" required><input required value={form.last_name} onChange={set("last_name")} className={inp} placeholder="e.g. Uwimana" /></Field>
+                  <Field label="First Name" required>
+                    <input value={form.first_name} onChange={set("first_name")} className={inp} placeholder="e.g. Ange" />
+                  </Field>
+                  <Field label="Last Name (Second Name)" required>
+                    <input value={form.last_name} onChange={set("last_name")} className={inp} placeholder="e.g. Uwimana" />
+                  </Field>
                 </div>
-                <Field label="Email Address" required>
-                  <input type="text" required value={form.email} onChange={set("email")} className={inp} placeholder="student@school.rw" disabled={isEdit} />
+                <Field label="Email Address">
+                  <input
+                    type="email"
+                    value={form.email}
+                    onChange={set("email")}
+                    className={inp}
+                    placeholder="student@school.rw (leave blank to auto-generate)"
+                    disabled={isEdit}
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">If left empty, a student email will be created automatically.</p>
                 </Field>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Phone">
@@ -342,7 +390,7 @@ function StudentModal({
                       value={form.level_id}
                       onChange={(e) => {
                         const lvlId = e.target.value;
-                        const matching = classes.filter((c) => c.level.id === lvlId);
+                        const matching = classes.filter((c) => (c.level?.id || (c as any).level_id) === lvlId);
                         setForm((f) => ({
                           ...f,
                           level_id: lvlId,

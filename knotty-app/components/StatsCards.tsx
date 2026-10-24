@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Users, GraduationCap, BarChart2, ArrowUpRight } from "lucide-react";
-import { schools, DashboardStats } from "@/lib/api";
+import { Users, GraduationCap, BarChart2, ArrowUpRight, BookOpen, BookMarked, AlertTriangle } from "lucide-react";
+import { schools, library, DashboardStats } from "@/lib/api";
 import { DEMO_STATS } from "@/lib/demo";
 
 function Skeleton() {
@@ -11,12 +11,14 @@ function Skeleton() {
 
 export default function StatsCards({ schoolId }: { schoolId: string }) {
   const [data, setData] = useState<DashboardStats | null>(null);
-  const [activeTab, setActiveTab] = useState<"student" | "teacher">("student");
+  const [libStats, setLibStats] = useState<{ totalBooks: number; activeMembers: number; overdueBooks: number } | null>(null);
+  const [activeTab, setActiveTab] = useState<"student" | "teacher" | "library">("student");
 
   useEffect(() => {
     schools.stats(schoolId).then((r) => setData(r.data)).catch(() => {
       setData(DEMO_STATS);
     });
+    library.stats().then((r) => setLibStats(r.data)).catch(() => {});
   }, [schoolId]);
 
   const studentCards = [
@@ -73,7 +75,35 @@ export default function StatsCards({ schoolId }: { schoolId: string }) {
     },
   ];
 
-  const cards = activeTab === "student" ? studentCards : teacherCards;
+  const libraryCards = [
+    {
+      icon: <div className="w-10 h-10 bg-orange-50 rounded-full flex items-center justify-center"><BookOpen size={20} className="text-orange-600" /></div>,
+      label: "Total Books",
+      numerator: libStats?.totalBooks ?? 450,
+      denominator: undefined,
+      color: "text-orange-600",
+      href: "/library",
+    },
+    {
+      icon: <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center"><BookMarked size={20} className="text-blue-600" /></div>,
+      label: "Active Borrows",
+      numerator: libStats?.activeMembers ?? 18,
+      denominator: undefined,
+      color: "text-blue-600",
+      href: "/library",
+    },
+    {
+      icon: <div className="w-10 h-10 bg-red-50 rounded-full flex items-center justify-center"><AlertTriangle size={20} className="text-red-500" /></div>,
+      label: "Overdue Books",
+      numerator: libStats?.overdueBooks ?? 3,
+      denominator: undefined,
+      color: "text-red-500",
+      href: "/library",
+    },
+  ];
+
+  const cards = activeTab === "student" ? studentCards : activeTab === "teacher" ? teacherCards : libraryCards;
+  const linkHref = activeTab === "student" ? "/students" : activeTab === "teacher" ? "/workers" : "/library";
 
   return (
     <div className="bg-white rounded-2xl p-4 shadow-sm">
@@ -101,10 +131,21 @@ export default function StatsCards({ schoolId }: { schoolId: string }) {
           >
             Teacher
           </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("library")}
+            className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+              activeTab === "library"
+                ? "bg-white text-gray-800 shadow-xs"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Library
+          </button>
         </div>
         <div className="flex gap-2">
           <Link
-            href={activeTab === "student" ? "/students" : "/workers"}
+            href={linkHref}
             title="View Details"
             className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition"
           >

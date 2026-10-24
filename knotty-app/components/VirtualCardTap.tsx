@@ -3,6 +3,48 @@ import { useEffect, useState, useRef } from "react";
 import { Smartphone, Loader2, Search, Wifi } from "lucide-react";
 import { cards, KnottyCard } from "@/lib/api";
 
+const FALLBACK_DEMO_CARDS: KnottyCard[] = [
+  {
+    id: "demo-card-1",
+    card_number: "ISH-8492-1001",
+    nfc_uid: "04A3B2C1D0",
+    wallet_balance: 5000,
+    is_active: true,
+    is_frozen: false,
+    student: {
+      id: "demo-stu-1",
+      student_code: "STU-2026-001",
+      user: { first_name: "Jean", last_name: "Mugabo" }
+    }
+  } as unknown as KnottyCard,
+  {
+    id: "demo-card-2",
+    card_number: "ISH-8492-1002",
+    nfc_uid: "04F5E6D7C8",
+    wallet_balance: 12000,
+    is_active: true,
+    is_frozen: false,
+    student: {
+      id: "demo-stu-2",
+      student_code: "STU-2026-002",
+      user: { first_name: "Aline", last_name: "Uwase" }
+    }
+  } as unknown as KnottyCard,
+  {
+    id: "demo-card-3",
+    card_number: "ISH-8492-1003",
+    nfc_uid: "0411223344",
+    wallet_balance: 1500,
+    is_active: true,
+    is_frozen: false,
+    student: {
+      id: "demo-stu-3",
+      student_code: "STU-2026-003",
+      user: { first_name: "Eric", last_name: "Manzi" }
+    }
+  } as unknown as KnottyCard,
+];
+
 interface Props {
   /** Called when a virtual card is tapped — passes the card_number */
   onTap: (cardNumber: string) => void;
@@ -31,9 +73,13 @@ export default function VirtualCardTap({ onTap, busy }: Props) {
     setLoading(true);
     try {
       const res = await cards.list({ limit: 50 });
-      setList(((res?.data as KnottyCard[]) || []).filter((c) => c.is_active && !c.is_frozen));
-    } catch { /* ignore */ }
-    finally { setLoading(false); }
+      const active = ((res?.data as KnottyCard[]) || []).filter((c) => c.is_active && !c.is_frozen);
+      setList(active.length > 0 ? active : FALLBACK_DEMO_CARDS);
+    } catch {
+      setList(FALLBACK_DEMO_CARDS);
+    } finally {
+      setLoading(false);
+    }
   }
 
   function toggle() {
@@ -52,25 +98,26 @@ export default function VirtualCardTap({ onTap, busy }: Props) {
   }
 
   const filtered = list.filter((c) => {
-    const name = `${c.student.user.first_name} ${c.student.user.last_name}`.toLowerCase();
-    const code = c.card_number.toLowerCase();
+    const name = `${c.student?.user?.first_name ?? ""} ${c.student?.user?.last_name ?? ""}`.toLowerCase();
+    const code = (c.card_number || "").toLowerCase();
     const q = search.toLowerCase();
     return name.includes(q) || code.includes(q);
   });
 
   return (
-    <div className="relative" ref={panelRef}>
+    <div className="relative inline-block" ref={panelRef}>
       <button
+        type="button"
         onClick={toggle}
-        className="flex items-center gap-2 px-3 py-2 rounded-xl border border-dashed border-blue-500 text-blue-600 text-xs font-medium hover:bg-blue-50 transition"
-        title="Simulate NFC card tap for testing"
+        className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-dashed border-blue-500 text-blue-600 bg-blue-50/50 hover:bg-blue-50 text-xs font-semibold transition"
+        title="Simulate NFC card tap for testing or when NFC hardware is disabled"
       >
         <Smartphone size={14} />
         Virtual Tap
       </button>
 
       {open && (
-        <div className="absolute z-50 top-full mt-2 right-0 w-72 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+        <div className="absolute z-50 top-full mt-2 right-0 w-72 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden text-left">
           {/* Header */}
           <div className="px-4 py-3 border-b border-gray-50">
             <p className="text-sm font-semibold text-gray-800 flex items-center gap-2">
@@ -104,20 +151,21 @@ export default function VirtualCardTap({ onTap, busy }: Props) {
               <p className="text-xs text-gray-400 text-center py-6">No active cards found</p>
             ) : (
               filtered.map((card) => {
-                const name = `${card.student.user.first_name} ${card.student.user.last_name}`;
-                const initials = name.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase();
+                const name = `${card.student?.user?.first_name ?? "Student"} ${card.student?.user?.last_name ?? ""}`.trim();
+                const initials = name.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase() || "ST";
                 const hue = name.charCodeAt(0) * 37 % 360;
                 const isTapping = tapping === card.id;
 
                 return (
                   <button
+                    type="button"
                     key={card.id}
                     onClick={() => tapCard(card)}
                     disabled={!!busy || !!tapping}
                     className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-50 transition text-left border-b border-gray-50 last:border-0 ${isTapping ? "bg-blue-50 scale-95" : ""}`}
                   >
                     {/* Avatar */}
-                    {card.student.user.profile_photo ? (
+                    {card.student?.user?.profile_photo ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={card.student.user.profile_photo}
@@ -134,7 +182,7 @@ export default function VirtualCardTap({ onTap, busy }: Props) {
                       className="w-9 h-9 rounded-full items-center justify-center text-white text-xs font-bold flex-shrink-0"
                       style={{
                         background: `hsl(${hue}, 60%, 55%)`,
-                        display: card.student.user.profile_photo ? "none" : "flex",
+                        display: card.student?.user?.profile_photo ? "none" : "flex",
                       }}
                     >
                       {initials}
@@ -148,10 +196,10 @@ export default function VirtualCardTap({ onTap, busy }: Props) {
 
                     {/* Balance */}
                     <div className="text-right flex-shrink-0">
-                      <p className={`text-xs font-bold ${card.wallet_balance < 1000 ? "text-red-500" : "text-teal-600"}`}>
-                        {card.wallet_balance.toLocaleString()}
+                      <p className={`text-xs font-bold ${(card.wallet_balance || 0) < 1000 ? "text-red-500" : "text-teal-600"}`}>
+                        {(card.wallet_balance || 0).toLocaleString()}
                       </p>
-                      <p className="text-xs text-gray-400">RWF</p>
+                      <p className="text-[10px] text-gray-400">RWF</p>
                     </div>
 
                     {/* Tap animation */}
@@ -169,7 +217,7 @@ export default function VirtualCardTap({ onTap, busy }: Props) {
           {/* Footer */}
           <div className="px-4 py-2 bg-gray-50 border-t border-gray-100">
             <p className="text-xs text-gray-400 text-center">
-              {filtered.length} active card{filtered.length !== 1 ? "s" : ""} · Testing only
+              {filtered.length} active card{filtered.length !== 1 ? "s" : ""} · 1-click tap simulation
             </p>
           </div>
         </div>

@@ -6,7 +6,8 @@ import {
   Wifi, WifiOff, Users,
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
-import { library, LibraryBorrowRecord } from "@/lib/api";
+import VirtualCardTap from "@/components/VirtualCardTap";
+import { library, LibraryBorrowRecord, LibraryBook } from "@/lib/api";
 import { useNFC } from "@/hooks/useNFC";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
@@ -17,14 +18,14 @@ const CATEGORIES = [
   "Chemistry", "Physics", "Computer Science", "Art", "Other",
 ];
 
-type Tab = "home" | "add-book" | "lend-return";
+type Tab = "home" | "catalog" | "add-book" | "lend-return";
 type StudentInfo = { id: string; name: string; studentClass: string; card_number: string };
-type BookOption = { id: string; title: string; author?: string; isbn?: string; location?: string; available_copies?: number };
+type BookOption = { id: string; title: string; author?: string | null; isbn?: string | null; location?: string | null; available_copies?: number; total_copies?: number; category?: string | null };
 
 export default function LibraryPage() {
   const { loading: authLoading } = useAuth();
   const { toast } = useToast();
-  const { startListen, stopListen, listening, isSupported } = useNFC();
+  const { startListen, stopListen, listening, isSupported, error: nfcError } = useNFC();
 
   const [tab, setTab] = useState<Tab>("home");
 
@@ -32,6 +33,19 @@ export default function LibraryPage() {
   const [stats, setStats] = useState({ totalBooks: 0, activeMembers: 0, overdueBooks: 0, pendingFees: 0 });
   const [recentBorrows, setRecentBorrows] = useState<LibraryBorrowRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [borrowFilter, setBorrowFilter] = useState<"all" | "overdue">("all");
+
+  /* ── Pending fines modal ───────────────────────────────────── */
+  const [showFinesModal, setShowFinesModal] = useState(false);
+  const [finesLoading, setFinesLoading] = useState(false);
+  const [finesRecords, setFinesRecords] = useState<Array<LibraryBorrowRecord & { days_overdue?: number; accrued_fine?: number }>>([]);
+  const [waivingFineId, setWaivingFineId] = useState<string | null>(null);
+
+  /* ── Catalog tab ───────────────────────────────────────────── */
+  const [catalogBooks, setCatalogBooks] = useState<LibraryBook[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [catalogCategory, setCatalogCategory] = useState("All");
 
   /* ── Add Book ──────────────────────────────────────────────── */
   const [bookForm, setBookForm] = useState({
@@ -81,6 +95,80 @@ export default function LibraryPage() {
 
   useEffect(() => { if (!authLoading) loadHome(); }, [authLoading, loadHome]);
 
+  /* ── Load catalog ──────────────────────────────────────────── */
+  const loadCatalog = useCallback(async (searchQuery = catalogSearch, category = catalogCategory) => {
+    setCatalogLoading(true);
+    try {
+      const res = await library.books({
+        search: searchQuery.trim() || undefined,
+        category: category !== "All" ? category : undefined,
+        limit: 100,
+      });
+      setCatalogBooks(res.data);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to load catalog", "error");
+    } finally {
+      setCatalogLoading(false);
+    }
+  }, [catalogSearch, catalogCategory, toast]);
+
+  useEffect(() => {
+    if (tab === "catalog") {
+      loadCatalog();
+    }
+  }, [tab, loadCatalog]);
+
+  async function openFinesModal() {
+    setShowFinesModal(true);
+    setFinesLoading(true);
+    try {
+      const res = await library.overdueReport(1, 50).catch(() => null);
+      if (res?.data && res.data.length > 0) {
+        setFinesRecords(res.data);
+      } else {
+        const computed = recentBorrows
+          .filter(b => new Date(b.due_at) < new Date())
+          .map(b => {
+            const diffDays = Math.max(1, Math.ceil((Date.now() - new Date(b.due_at).getTime()) / 86400000));
+            return { ...b, days_overdue: diffDays, accrued_fine: diffDays * 200 };
+          });
+        setFinesRecords(computed);
+      }
+    } catch {
+      const computed = recentBorrows
+        .filter(b => new Date(b.due_at) < new Date())
+        .map(b => {
+          const diffDays = Math.max(1, Math.ceil((Date.now() - new Date(b.due_at).getTime()) / 86400000));
+          return { ...b, days_overdue: diffDays, accrued_fine: diffDays * 200 };
+        });
+      setFinesRecords(computed);
+    } finally {
+      setFinesLoading(false);
+    }
+  }
+
+  async function handleWaiveFine(borrowId: string) {
+    setWaivingFineId(borrowId);
+    try {
+      await library.waiveFine(borrowId);
+      toast("Fine waived successfully", "success");
+      setFinesRecords(prev => prev.filter(r => r.id !== borrowId));
+      setStats(s => ({ ...s, pendingFees: Math.max(0, s.pendingFees - 200) }));
+      loadHome();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to waive fine", "error");
+    } finally {
+      setWaivingFineId(null);
+    }
+  }
+
+  function openLendForBook(bk: BookOption) {
+    setSelectedBook(bk);
+    setModalCardInput("");
+    setModalStudent(null);
+    setShowLendModal(true);
+  }
+
   /* ── Return-tab card lookup ────────────────────────────────── */
   async function lookupCard(query: string) {
     if (!query.trim()) return;
@@ -101,9 +189,15 @@ export default function LibraryPage() {
     }
   }
 
-  function startNFC() {
-    if (!isSupported) return;
-    startListen((result) => { stopListen(); setCardInput(result.value); lookupCard(result.value); });
+  async function startNFC() {
+    if (!isSupported) {
+      toast("Web NFC requires Chrome on Android. Please use Virtual Tap or enter card number.", "info");
+      return;
+    }
+    const ok = await startListen((result) => { stopListen(); setCardInput(result.value); lookupCard(result.value); });
+    if (!ok) {
+      toast("NFC scanner unavailable — use Virtual Card Tap below", "info");
+    }
   }
 
   /* ── Modal student lookup ──────────────────────────────────── */
@@ -371,11 +465,11 @@ export default function LibraryPage() {
 
         {/* ── Tabs ────────────────────────────────────────────── */}
         <div className="flex gap-2 px-3 md:px-4 mb-3 flex-shrink-0">
-          {(["home", "add-book", "lend-return"] as Tab[]).map(t => {
-            const labels: Record<Tab, string> = { home: "Overview", "add-book": "Add Book", "lend-return": "Lend & Return" };
+          {(["home", "catalog", "add-book", "lend-return"] as Tab[]).map(t => {
+            const labels: Record<Tab, string> = { home: "Overview", catalog: "Book Catalog", "add-book": "Add Book", "lend-return": "Lend & Return" };
             return (
               <button key={t} onClick={() => setTab(t)}
-                className="px-4 py-2 rounded-xl text-xs font-bold transition"
+                className="px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer"
                 style={tab === t ? { background: "#FF7A22", color: "#fff" } : { background: "#fff", color: "#666666" }}>
                 {labels[t]}
               </button>
@@ -395,44 +489,98 @@ export default function LibraryPage() {
                 </div>
               ) : (
                 <>
-                  {/* Stats */}
+                  {/* Interactive Stats Cards */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[
-                      { label: "Total Books", value: stats.totalBooks, color: "#FF7A22", bg: "#FFF3EC" },
-                      { label: "Active Borrows", value: stats.activeMembers, color: "#121212", bg: "#F5F5F5" },
-                      { label: "Overdue", value: stats.overdueBooks, color: "#EF4444", bg: "#FEF2F2" },
-                      { label: "Pending Fines", value: `${stats.pendingFees.toLocaleString()} RWF`, color: "#666", bg: "#F5F5F5" },
+                      {
+                        label: "Total Books",
+                        value: stats.totalBooks,
+                        color: "#FF7A22",
+                        bg: "#FFF3EC",
+                        hint: "Click to view catalog →",
+                        action: () => setTab("catalog"),
+                      },
+                      {
+                        label: "Active Borrows",
+                        value: stats.activeMembers,
+                        color: "#121212",
+                        bg: "#F5F5F5",
+                        hint: borrowFilter === "all" ? "Showing active" : "Click to view active",
+                        action: () => setBorrowFilter("all"),
+                      },
+                      {
+                        label: "Overdue",
+                        value: stats.overdueBooks,
+                        color: "#EF4444",
+                        bg: "#FEF2F2",
+                        hint: borrowFilter === "overdue" ? "Showing overdue" : "Click to filter overdue",
+                        action: () => setBorrowFilter("overdue"),
+                      },
+                      {
+                        label: "Pending Fines",
+                        value: `${stats.pendingFees.toLocaleString()} RWF`,
+                        color: "#C62828",
+                        bg: "#FFF1F1",
+                        hint: "Click to manage fines →",
+                        action: openFinesModal,
+                      },
                     ].map(s => (
-                      <div key={s.label} className="bg-white rounded-2xl p-4 flex flex-col gap-1">
-                        <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "#999" }}>{s.label}</p>
+                      <button
+                        key={s.label}
+                        type="button"
+                        onClick={s.action}
+                        className="bg-white rounded-2xl p-4 flex flex-col gap-1 text-left border border-transparent hover:border-gray-200 hover:shadow-sm transition active:scale-[0.98] group cursor-pointer"
+                      >
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "#999" }}>{s.label}</p>
+                          <span className="w-2 h-2 rounded-full" style={{ background: s.color }} />
+                        </div>
                         <p className="text-xl font-bold" style={{ color: s.color }}>{s.value}</p>
-                      </div>
+                        <p className="text-[10px] text-gray-400 group-hover:text-gray-600 transition truncate mt-0.5">{s.hint}</p>
+                      </button>
                     ))}
                   </div>
 
                   {/* Quick lend button on overview */}
                   <button onClick={openLendModal}
-                    className="w-full py-3 rounded-2xl font-bold text-sm text-white flex items-center justify-center gap-2 transition active:scale-[.98]"
+                    className="w-full py-3 rounded-2xl font-bold text-sm text-white flex items-center justify-center gap-2 transition active:scale-[.98] cursor-pointer"
                     style={{ background: "#FF7A22" }}>
                     <BookMarked size={16} /> Lend a Book to Student
                   </button>
 
                   {/* Students holding books list */}
                   <div className="bg-white rounded-3xl overflow-hidden">
-                    <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
-                      <Users size={14} style={{ color: "#FF7A22" }} />
-                      <span className="text-sm font-bold" style={{ color: "#121212" }}>Students Holding Books</span>
-                      {recentBorrows.length > 0 && (
-                        <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: "#FFF3EC", color: "#FF7A22" }}>
-                          {recentBorrows.length}
-                        </span>
-                      )}
+                    <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <Users size={14} style={{ color: "#FF7A22" }} />
+                        <span className="text-sm font-bold" style={{ color: "#121212" }}>Students Holding Books</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setBorrowFilter("all")}
+                          className={`px-2.5 py-1 rounded-xl text-xs font-bold transition cursor-pointer ${
+                            borrowFilter === "all" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                          }`}
+                        >
+                          All ({recentBorrows.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setBorrowFilter("overdue")}
+                          className={`px-2.5 py-1 rounded-xl text-xs font-bold transition cursor-pointer ${
+                            borrowFilter === "overdue" ? "bg-red-600 text-white" : "bg-red-50 text-red-600 hover:bg-red-100"
+                          }`}
+                        >
+                          Overdue ({overdueItems.length})
+                        </button>
+                      </div>
                     </div>
                     {recentBorrows.length === 0 ? (
                       <p className="text-center text-sm text-gray-400 py-10">No active borrows</p>
                     ) : (
                       <div className="divide-y divide-gray-50">
-                        {recentBorrows.map(b => {
+                        {(borrowFilter === "overdue" ? overdueItems : recentBorrows).map(b => {
                           const overdue = new Date(b.due_at) < now;
                           const daysLeft = Math.ceil((new Date(b.due_at).getTime() - now.getTime()) / 86400000);
                           const borrowedDate = new Date(b.borrowed_at).toLocaleDateString("en-RW", { day: "numeric", month: "short" });
@@ -474,6 +622,115 @@ export default function LibraryPage() {
                   </div>
                 </>
               )}
+            </div>
+          )}
+
+          {/* ═══════════════ BOOK CATALOG ═══════════════ */}
+          {tab === "catalog" && (
+            <div className="space-y-3">
+              {/* Search & Categories */}
+              <div className="bg-white rounded-3xl p-4 space-y-3">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search size={14} className="absolute left-3.5 top-[11px] text-gray-400" />
+                    <input
+                      value={catalogSearch}
+                      onChange={e => {
+                        setCatalogSearch(e.target.value);
+                        loadCatalog(e.target.value, catalogCategory);
+                      }}
+                      placeholder="Search books by title, author, or ISBN…"
+                      className="w-full border border-gray-200 rounded-2xl pl-9 pr-3 py-2 text-sm outline-none"
+                    />
+                  </div>
+                  <button
+                    onClick={() => setTab("add-book")}
+                    className="px-4 py-2 rounded-2xl text-xs font-bold text-white flex items-center gap-1.5 flex-shrink-0 cursor-pointer"
+                    style={{ background: "#FF7A22" }}
+                  >
+                    <Plus size={14} /> Add Book
+                  </button>
+                </div>
+
+                {/* Category Pills */}
+                <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                  {["All", ...CATEGORIES].map(cat => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => {
+                        setCatalogCategory(cat);
+                        loadCatalog(catalogSearch, cat);
+                      }}
+                      className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
+                        catalogCategory === cat ? "bg-[#FF7A22] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Books List / Grid */}
+              <div className="bg-white rounded-3xl overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <BookOpen size={14} style={{ color: "#FF7A22" }} />
+                    <span className="text-sm font-bold" style={{ color: "#121212" }}>Library Books Catalog</span>
+                  </div>
+                  <span className="text-xs text-gray-400 font-semibold">{catalogBooks.length} books listed</span>
+                </div>
+
+                {catalogLoading ? (
+                  <div className="flex justify-center py-16"><Loader2 size={24} className="animate-spin text-[#FF7A22]" /></div>
+                ) : catalogBooks.length === 0 ? (
+                  <div className="py-12 text-center">
+                    <Book size={32} className="mx-auto text-gray-300 mb-2" />
+                    <p className="text-sm font-semibold text-gray-500">No books found</p>
+                    <p className="text-xs text-gray-400 mt-1">Try another search or register a new book</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-50">
+                    {catalogBooks.map(bk => {
+                      const avail = bk.available_copies ?? bk.total_copies ?? 1;
+                      return (
+                        <div key={bk.id} className="p-4 flex items-center justify-between gap-3 hover:bg-gray-50/50 transition">
+                          <div className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ background: "#FFF3EC" }}>
+                            <Book size={18} style={{ color: "#FF7A22" }} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold truncate" style={{ color: "#121212" }}>{bk.title}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {bk.author || "Unknown Author"}
+                              {bk.isbn && <span className="text-gray-400"> · ISBN: {bk.isbn}</span>}
+                              {bk.category && <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] bg-gray-100 text-gray-600 font-semibold">{bk.category}</span>}
+                            </p>
+                            {bk.location && (
+                              <p className="text-[10px] text-gray-400 flex items-center gap-1 mt-1">
+                                <MapPin size={10} /> Shelf: {bk.location}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 flex-shrink-0">
+                            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${avail > 0 ? "bg-green-50 text-green-700 border border-green-100" : "bg-red-50 text-red-500 border border-red-100"}`}>
+                              {avail} / {bk.total_copies} Avail
+                            </span>
+                            <button
+                              disabled={avail === 0}
+                              onClick={() => openLendForBook(bk)}
+                              className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white disabled:opacity-40 flex items-center gap-1 shadow-sm transition active:scale-95 cursor-pointer"
+                              style={{ background: "#FF7A22" }}
+                            >
+                              <BookMarked size={12} /> Lend
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -619,7 +876,9 @@ export default function LibraryPage() {
                     style={{ background: "#121212" }}>
                     {loadingStudent ? <Loader2 size={14} className="animate-spin" /> : "Look Up"}
                   </button>
+                  <VirtualCardTap onTap={(cn) => { setCardInput(cn); lookupCard(cn); }} busy={loadingStudent} />
                 </div>
+                {nfcError && <p className="text-xs text-red-500 mt-2">{nfcError}</p>}
                 {listening && (
                   <p className="text-[11px] mt-2.5 text-center font-semibold animate-pulse" style={{ color: "#FF7A22" }}>
                     Waiting for NFC card tap…
@@ -786,6 +1045,7 @@ export default function LibraryPage() {
                     style={{ background: "#121212" }}>
                     {lookingUpModalStudent ? <Loader2 size={14} className="animate-spin" /> : "Find"}
                   </button>
+                  <VirtualCardTap onTap={(cn) => { setModalCardInput(cn); lookupModalStudent(cn); }} busy={lookingUpModalStudent} />
                 </div>
 
                 {modalStudent && (
@@ -811,6 +1071,91 @@ export default function LibraryPage() {
                   </label>
                   <BookSearchUI onConfirm={handleModalLend} />
                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ═══════════════ PENDING FINES MODAL ═══════════════ */}
+      {showFinesModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          style={{ background: "rgba(0,0,0,0.45)" }}
+          onClick={e => { if (e.target === e.currentTarget) setShowFinesModal(false); }}>
+          <div className="bg-white w-full sm:max-w-lg sm:rounded-3xl rounded-t-3xl overflow-hidden flex flex-col max-h-[85vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-2xl flex items-center justify-center" style={{ background: "#FEE2E2" }}>
+                  <AlertTriangle size={18} className="text-red-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold" style={{ color: "#121212" }}>Pending Library Fines</p>
+                  <p className="text-xs text-gray-400">Overdue returns with accrued charges</p>
+                </div>
+              </div>
+              <button onClick={() => setShowFinesModal(false)} className="p-1.5 rounded-xl hover:bg-gray-100 cursor-pointer">
+                <X size={16} className="text-gray-500" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto p-5 space-y-3">
+              {finesLoading ? (
+                <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-[#FF7A22]" /></div>
+              ) : finesRecords.length === 0 ? (
+                <div className="py-10 text-center">
+                  <CheckCircle size={32} className="mx-auto text-green-500 mb-2" />
+                  <p className="text-sm font-bold text-green-700">No Pending Fines!</p>
+                  <p className="text-xs text-gray-400 mt-1">All borrowed books are returned or within deadline.</p>
+                </div>
+              ) : (
+                finesRecords.map(rec => {
+                  const daysOver = rec.days_overdue ?? Math.max(1, Math.ceil((now.getTime() - new Date(rec.due_at).getTime()) / 86400000));
+                  const fine = rec.accrued_fine ?? (daysOver * 200);
+                  return (
+                    <div key={rec.id} className="p-3.5 rounded-2xl border border-red-100 bg-red-50/40 flex flex-col gap-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-gray-900">
+                            {rec.student?.user?.first_name} {rec.student?.user?.last_name}
+                          </p>
+                          <p className="text-xs font-semibold text-gray-700 mt-0.5 truncate">
+                            "{rec.copy?.book?.title ?? "Book"}"
+                          </p>
+                          <p className="text-[10px] text-red-500 font-semibold mt-1">
+                            {daysOver} day{daysOver !== 1 ? "s" : ""} overdue · Due {new Date(rec.due_at).toLocaleDateString("en-RW", { day: "numeric", month: "short" })}
+                          </p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-sm font-bold text-red-600">{fine.toLocaleString()} RWF</p>
+                          <p className="text-[10px] text-gray-400">accrued fine</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 pt-1 border-t border-red-100/60">
+                        <button
+                          type="button"
+                          disabled={waivingFineId === rec.id}
+                          onClick={() => handleWaiveFine(rec.id)}
+                          className="px-3 py-1.5 rounded-xl text-xs font-bold border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 cursor-pointer"
+                        >
+                          {waivingFineId === rec.id ? <Loader2 size={12} className="animate-spin" /> : "Waive Fine"}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={returning === rec.id}
+                          onClick={async () => {
+                            await handleReturn(rec.id);
+                            setFinesRecords(prev => prev.filter(r => r.id !== rec.id));
+                          }}
+                          className="px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-gray-900 hover:bg-black disabled:opacity-40 flex items-center gap-1 cursor-pointer"
+                        >
+                          {returning === rec.id ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}
+                          Return Book
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>

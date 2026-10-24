@@ -612,11 +612,13 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           student_id: "std-1",
           fee_structure_id: "struct-1",
           amount: 120000,
+          total_amount: 120000,
           paid_amount: 120000,
+          amount_paid: 120000,
           status: "PAID",
           due_date: "2026-02-28T23:59:59.000Z",
           created_at: "2026-01-05T09:00:00.000Z",
-          student: { id: "std-1", user: { first_name: "Kamanzi", last_name: "Eric" } },
+          student: { id: "std-1", user: { first_name: "Kamanzi", last_name: "Eric" }, class: { name: "Senior 5 A" } },
           fee_structure: { name: "S5 PCM Tuition Fee" }
         },
         {
@@ -624,18 +626,31 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           student_id: "std-2",
           fee_structure_id: "struct-1",
           amount: 120000,
+          total_amount: 120000,
           paid_amount: 40000,
+          amount_paid: 40000,
           status: "PARTIALLY_PAID",
           due_date: "2026-02-28T23:59:59.000Z",
           created_at: "2026-01-05T09:00:00.000Z",
-          student: { id: "std-2", user: { first_name: "Uwineza", last_name: "Divine" } },
+          student: { id: "std-2", user: { first_name: "Uwineza", last_name: "Divine" }, class: { name: "Senior 5 A" } },
           fee_structure: { name: "S5 PCM Tuition Fee" }
         }
       ];
       setDemoStorage("ishuri_demo_invoices", JSON.stringify(initial));
       return initial;
     }
-    return JSON.parse(val);
+    try {
+      const parsed = JSON.parse(val);
+      return parsed.map((i: any) => ({
+        ...i,
+        total_amount: i.total_amount ?? i.amount ?? 0,
+        amount: i.amount ?? i.total_amount ?? 0,
+        amount_paid: i.amount_paid ?? i.paid_amount ?? 0,
+        paid_amount: i.paid_amount ?? i.amount_paid ?? 0,
+      }));
+    } catch {
+      return [];
+    }
   };
   const saveDemoInvoices = (data: any[]) => setDemoStorage("ishuri_demo_invoices", JSON.stringify(data));
 
@@ -1059,13 +1074,19 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
     const studentsList = getStudents();
     const studentIndex = studentsList.findIndex((s: any) => s.id === studentId || s.student_code === studentId);
     if (studentIndex > -1) {
+      const nfcUid = body?.nfc_uid ? String(body.nfc_uid).trim().toUpperCase() : null;
+      if (nfcUid) {
+        const conflict = studentsList.find((s: any) => s.card?.nfc_uid === nfcUid && s.id !== studentId);
+        if (conflict) throw new Error("This NFC tag is already linked to another student card.");
+      }
+      const initialBalance = typeof body?.initial_balance === "number" && body.initial_balance >= 0 ? body.initial_balance : 0;
       const card = {
         id: "card-" + Date.now(),
         card_number: "KNT-DEMO-" + Math.floor(100000 + Math.random() * 900000),
-        wallet_balance: 0,
+        wallet_balance: initialBalance,
         is_active: true,
         is_frozen: false,
-        nfc_uid: null,
+        nfc_uid: nfcUid,
         qr_code: "mock-qr-code",
         expires_at: new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000).toISOString()
       };
@@ -1073,6 +1094,7 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
       saveStudents(studentsList);
       return { success: true, data: card } as unknown as T;
     }
+    throw new Error("Student not found for card issue.");
   }
 
   // 5. Cards Top up
@@ -1179,11 +1201,22 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
 
   if (path.startsWith("/canteen/purchase")) {
     const students = getStudents();
-    const std = students.find((s: any) => s.card?.card_number === body.card_number) || students[0];
+    const cardNum = (body.card_number || "").trim().toLowerCase();
+    const std = students.find((s: any) =>
+      (s.card?.card_number && s.card.card_number.toLowerCase() === cardNum) ||
+      (s.card?.nfc_uid && s.card.nfc_uid.toLowerCase() === cardNum) ||
+      (s.student_code && s.student_code.toLowerCase() === cardNum)
+    );
+    if (!std) {
+      throw new Error(`Card or NFC tag [${body.card_number}] not registered to any student.`);
+    }
     const txs = getDemoCanteenTransactions();
     const totalAmount = (body.items || []).reduce((sum: number, it: any) => sum + (it.price * it.quantity), 0);
     
-    let balanceBefore = std.card?.wallet_balance ?? 5000;
+    let balanceBefore = std.card?.wallet_balance ?? 0;
+    if (balanceBefore < totalAmount) {
+      throw new Error(`Insufficient wallet balance (${balanceBefore} RWF). Total cost is ${totalAmount} RWF.`);
+    }
     let balanceAfter = Math.max(0, balanceBefore - totalAmount);
 
     const stdIdx = students.findIndex((s: any) => s.id === std.id);
@@ -1233,7 +1266,10 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
 
   if (path.startsWith("/fees/pay")) {
     const students = getStudents();
-    const std = students.find((s: any) => s.id === body.student_id) || students[0];
+    const std = students.find((s: any) => s.id === body.student_id);
+    if (!std) {
+      throw new Error("Student not found for fee payment.");
+    }
     const payments = getDemoFeePayments();
     const newPay = {
       id: "pay-" + Date.now(),
@@ -1418,7 +1454,11 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
       s.card?.nfc_uid?.toLowerCase() === q ||
       s.id?.toLowerCase() === q ||
       `${s.user?.first_name} ${s.user?.last_name}`.toLowerCase().includes(q)
-    ) || students[0];
+    );
+
+    if (!found) {
+      throw new Error(`Student not found matching "${q}".`);
+    }
 
     return {
       success: true,
@@ -1503,9 +1543,15 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
     
     if (method === "POST") {
       const students = getStudents();
-      const std = students.find((s: any) => s.id === body.student_id || s.student_code === body.student_code) || students[0];
+      const std = students.find((s: any) => s.id === body.student_id || s.student_code === body.student_code);
+      if (!std) {
+        throw new Error("Student not found for book loan.");
+      }
       const books = getDemoBooks();
-      const bookObj = books.find((b: any) => b.id === body.book_id) || books[0];
+      const bookObj = books.find((b: any) => b.id === body.book_id);
+      if (!bookObj) {
+        throw new Error("Book not found for lending.");
+      }
       
       const newBorrow = {
         id: "bor-" + Date.now(),
@@ -1586,7 +1632,10 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
 
     if (method === "POST") {
       const students = getStudents();
-      const std = students.find((s: any) => s.id === body.student_id) || students[0];
+      const std = students.find((s: any) => s.id === body.student_id);
+      if (!std) {
+        throw new Error("Student not found for discipline record.");
+      }
       const marksDeducted = body.marks_deducted !== undefined && body.marks_deducted !== null
         ? Number(body.marks_deducted)
         : (body.severity === "SERIOUS" ? 5 : body.severity === "MODERATE" ? 3 : 1);
@@ -1638,7 +1687,10 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
 
     if (method === "POST") {
       const students = getStudents();
-      const std = students.find((s: any) => s.id === body.student_id) || students[0];
+      const std = students.find((s: any) => s.id === body.student_id);
+      if (!std) {
+        throw new Error("Student not found for health clinic record.");
+      }
       const newRec = {
         id: "health-" + Date.now(),
         type: body.type,
@@ -1787,8 +1839,39 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
 
   if (path.startsWith("/gate-access/evaluate")) {
     const students = getStudents();
-    const std = students.find((s: any) => s.card?.card_number === body.cardNumber) || students[0];
+    const cNum = (body.cardNumber || "").trim().toLowerCase();
+    const std = students.find((s: any) =>
+      (s.card?.card_number && s.card.card_number.toLowerCase() === cNum) ||
+      (s.card?.nfc_uid && s.card.nfc_uid.toLowerCase() === cNum) ||
+      (s.student_code && s.student_code.toLowerCase() === cNum)
+    );
     const logs = getDemoAccessLogs();
+
+    if (!std) {
+      const deniedLog = {
+        id: "log-" + Date.now(),
+        device_id: body.deviceId || "dev-main-in",
+        card_id: "unknown",
+        direction: body.direction || "ENTRY",
+        decision: "DENIED",
+        denial_reason: `Card or tag [${body.cardNumber}] unrecognized`,
+        overridden_by_user_id: null,
+        occurred_at: new Date().toISOString(),
+        device: { name: "Gate Device", location_type: "CAMPUS_GATE" },
+        card: null
+      };
+      logs.unshift(deniedLog);
+      saveDemoAccessLogs(logs);
+      return {
+        success: false,
+        data: {
+          decision: "DENIED",
+          reason: `Card [${body.cardNumber}] unrecognized`,
+          ownerName: "Unknown User",
+          studentCode: "N/A"
+        }
+      } as unknown as T;
+    }
 
     const newLog = {
       id: "log-" + Date.now(),
@@ -2053,10 +2136,10 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
     if (method === "POST") {
       if (examId && path.includes("/results")) {
         const currentResList = getDemoExamResults();
+        const students = getStudents();
         const recorded = (body.results || []).map((r: any) => {
           const id = "res-" + Math.random().toString(36).substr(2, 9);
-          const students = getStudents();
-          const std = students.find((s: any) => s.id === r.student_id) || students[0];
+          const std = students.find((s: any) => s.id === r.student_id);
           
           let grade = "F";
           const pct = (r.score / 100) * 100;
@@ -2437,7 +2520,7 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
           },
           total: students.length || 20,
           recent: todayRecs.slice(0, 20).map((r: any) => {
-            const std = students.find((s: any) => s.id === r.student_id) || r.student || students[0];
+            const std = students.find((s: any) => s.id === r.student_id) || r.student;
             return {
               id: r.id,
               check_in_time: r.check_in_time,
@@ -2470,16 +2553,23 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
         let targetStudent: any = null;
 
         if (body?.nfc_uid) {
-          targetStudent = students.find((s: any) => s.card?.nfc_uid === body.nfc_uid);
+          const uid = String(body.nfc_uid).trim().toLowerCase();
+          targetStudent = students.find((s: any) => s.card?.nfc_uid && s.card.nfc_uid.toLowerCase() === uid);
           if (targetStudent?.card?.card_number) cardNum = targetStudent.card.card_number;
         }
 
         if (!targetStudent && cardNum) {
-          targetStudent = students.find((s: any) => s.card?.card_number === cardNum || s.student_code === cardNum || s.id === cardNum);
+          const cLower = cardNum.toLowerCase();
+          targetStudent = students.find((s: any) =>
+            (s.card?.card_number && s.card.card_number.toLowerCase() === cLower) ||
+            (s.student_code && s.student_code.toLowerCase() === cLower) ||
+            s.id === cardNum
+          );
         }
 
         if (!targetStudent) {
-          targetStudent = students[0];
+          const term = body?.nfc_uid ? `NFC tag [${body.nfc_uid}]` : `Card [${cardNum || "empty"}]`;
+          throw new Error(`${term} is not registered to any student. Please issue a card first.`);
         }
 
         const now = new Date();
@@ -2571,6 +2661,43 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
   if (path.startsWith("/cards") && !path.startsWith("/cards/issue/")) {
     const students = getStudents();
 
+    // GET /cards (list cards)
+    if (method === "GET" && (path === "/cards" || path.startsWith("/cards?"))) {
+      const allCards = students
+        .filter((s: any) => s.card)
+        .map((s: any) => ({
+          id: s.card.id,
+          student_id: s.id,
+          school_id: s.school_id || "demo-school-id",
+          card_number: s.card.card_number,
+          qr_code: s.card.qr_code || "",
+          nfc_uid: s.card.nfc_uid || null,
+          wallet_balance: s.card.wallet_balance || 0,
+          daily_limit: s.card.daily_limit || null,
+          is_active: s.card.is_active ?? true,
+          is_frozen: s.card.is_frozen ?? false,
+          issued_at: s.card.issued_at || new Date().toISOString(),
+          expires_at: s.card.expires_at || new Date(Date.now() + 2 * 365 * 24 * 3600 * 1000).toISOString(),
+          student: {
+            id: s.id,
+            student_code: s.student_code,
+            level: s.level,
+            class: s.class,
+            user: {
+              first_name: s.user.first_name,
+              last_name: s.user.last_name,
+              profile_photo: s.user.profile_photo || null,
+              email: s.user.email || null,
+            }
+          }
+        }));
+      return {
+        success: true,
+        data: allCards,
+        pagination: { total: allCards.length, page: 1, limit: 50, pages: 1 }
+      } as unknown as T;
+    }
+
     if (method === "PUT" && path.includes("/nfc")) {
       const id = path.split("?")[0].split("/")[2];
       const idx = students.findIndex((s: any) => s.card?.id === id);
@@ -2599,32 +2726,36 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
     // GET /cards/scan/:num OR /cards/scan-nfc/:uid OR /cards/nfc/:uid
     if (method === "GET" && (path.includes("/scan/") || path.includes("/scan-nfc/") || path.includes("/nfc/"))) {
       let student: any = null;
+      let searchedQuery = "";
       if (path.includes("/scan-nfc/")) {
-        const nfcUid = decodeURIComponent(path.split("/scan-nfc/")[1]?.split("?")[0] || "");
-        student = students.find((s: any) => s.card?.nfc_uid === nfcUid);
+        const nfcUid = decodeURIComponent(path.split("/scan-nfc/")[1]?.split("?")[0] || "").trim().toLowerCase();
+        searchedQuery = nfcUid;
+        student = students.find((s: any) => s.card?.nfc_uid && s.card.nfc_uid.toLowerCase() === nfcUid);
       } else if (path.includes("/nfc/")) {
-        const nfcUid = decodeURIComponent(path.split("/nfc/")[1]?.split("?")[0] || "");
-        student = students.find((s: any) => s.card?.nfc_uid === nfcUid);
+        const nfcUid = decodeURIComponent(path.split("/nfc/")[1]?.split("?")[0] || "").trim().toLowerCase();
+        searchedQuery = nfcUid;
+        student = students.find((s: any) => s.card?.nfc_uid && s.card.nfc_uid.toLowerCase() === nfcUid);
       } else {
-        const cardNum = decodeURIComponent(path.split("/scan/")[1]?.split("?")[0] || "");
+        const cardNum = decodeURIComponent(path.split("/scan/")[1]?.split("?")[0] || "").trim().toLowerCase();
+        searchedQuery = cardNum;
         student = students.find((s: any) =>
-          s.card?.card_number === cardNum ||
-          s.card?.qr_code === cardNum ||
-          s.student_code === cardNum ||
+          (s.card?.card_number && s.card.card_number.toLowerCase() === cardNum) ||
+          (s.card?.qr_code && s.card.qr_code.toLowerCase() === cardNum) ||
+          (s.student_code && s.student_code.toLowerCase() === cardNum) ||
           s.id === cardNum
         );
       }
 
       if (!student) {
-        student = students[0];
+        throw new Error(`Card or NFC tag [${searchedQuery || "unknown"}] is not linked to any student. Please issue or link a card first.`);
       }
 
       return {
         success: true,
         data: {
           id: student.card?.id || "card-" + student.id,
-          card_number: student.card?.card_number || "KNT-DEMO-999999",
-          wallet_balance: student.card?.wallet_balance ?? 1500,
+          card_number: student.card?.card_number || searchedQuery,
+          wallet_balance: student.card?.wallet_balance ?? 0,
           daily_limit: student.card?.daily_limit ?? null,
           is_active: student.card?.is_active ?? true,
           is_frozen: student.card?.is_frozen ?? false,
@@ -3091,8 +3222,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const isLocalMode = typeof window !== "undefined" && (
     getDemoStorage("ishuri_demo") === "true" ||
     getDemoStorage("knotty_demo") === "true" ||
-    !BASE ||
-    BASE.includes("localhost")
+    !BASE
   );
 
   if (isLocalMode) {
@@ -3112,7 +3242,6 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       if (!_refreshing) _refreshing = refreshAccessToken().finally(() => { _refreshing = null; });
       const newToken = await _refreshing;
       if (!newToken) {
-        if (typeof window !== "undefined") return handleDemoRequest<T>(path, options);
         clearSessionAndRedirect();
         throw new Error("Session expired. Please log in again.");
       }
@@ -3122,7 +3251,6 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       });
       const retryJson = await safeJson(retry) as Record<string, unknown>;
       if (!retry.ok) {
-        if (typeof window !== "undefined") return handleDemoRequest<T>(path, options);
         const details = Array.isArray(retryJson.details) ? `: ${retryJson.details.join(", ")}` : "";
         throw new Error(((retryJson.message as string) || `Request failed: ${retry.status}`) + details);
       }
@@ -3131,15 +3259,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
     const json = await safeJson(res) as Record<string, unknown>;
     if (!res.ok) {
-      if (typeof window !== "undefined") return handleDemoRequest<T>(path, options);
       const details = Array.isArray(json.details) ? `: ${json.details.join(", ")}` : "";
       throw new Error(((json.message as string) || `Request failed: ${res.status}`) + details);
     }
     return json as T;
   } catch (backendError) {
-    // Backend offline / error / non-JSON: Seamlessly fall back to permanent local storage!
-    console.warn(`Backend request failed for ${path}, serving from permanent local storage:`, backendError);
-    if (typeof window !== "undefined") {
+    console.warn(`Backend request failed for ${path}:`, backendError);
+    if (typeof window !== "undefined" && (getDemoStorage("ishuri_demo") === "true" || getDemoStorage("knotty_demo") === "true")) {
       return localResult !== undefined ? localResult : handleDemoRequest<T>(path, options);
     }
     throw backendError;
@@ -3150,8 +3276,7 @@ async function requestBlob(path: string): Promise<Blob> {
   const isLocalMode = typeof window !== "undefined" && (
     getDemoStorage("ishuri_demo") === "true" ||
     getDemoStorage("knotty_demo") === "true" ||
-    !BASE ||
-    BASE.includes("localhost")
+    !BASE
   );
 
   const getFallbackPdfBlob = () => {
@@ -3589,8 +3714,8 @@ export const cards = {
     request<{ success: boolean; data: CardScanFull }>(`/cards/${cardNumber}/scan`),
   scanNFC: (nfcUid: string) =>
     request<{ success: boolean; data: CardScanResult }>(`/cards/nfc/${nfcUid}`),
-  issue: (studentId: string) =>
-    request<{ success: boolean; data: IshuriCard }>(`/cards/issue/${studentId}`, { method: "POST" }),
+  issue: (studentId: string, data?: { nfc_uid?: string; initial_balance?: number }) =>
+    request<{ success: boolean; data: IshuriCard }>(`/cards/issue/${studentId}`, { method: "POST", body: data ? JSON.stringify(data) : undefined }),
   freeze: (id: string) => request(`/cards/${id}/freeze`, { method: "PUT" }),
   unfreeze: (id: string) => request(`/cards/${id}/unfreeze`, { method: "PUT" }),
   linkNFC: (id: string, nfc_uid: string) =>

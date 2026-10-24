@@ -25,7 +25,9 @@ const STATUS_STYLE: Record<string, { bg: string; text: string; icon: React.React
 function PayModal({ invoice, onClose, onSuccess }: {
   invoice: Invoice; onClose: () => void; onSuccess: () => void;
 }) {
-  const remaining = invoice.total_amount - invoice.amount_paid;
+  const total = invoice.total_amount ?? (invoice as any).amount ?? 0;
+  const paid = invoice.amount_paid ?? (invoice as any).paid_amount ?? 0;
+  const remaining = Math.max(0, total - paid);
   const [form, setForm] = useState({ amount: String(remaining), channel: "CASH", phone: "" });
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -391,7 +393,9 @@ export default function FeesPage() {
                   ) : (
                     <div className="space-y-2">
                       {studentInvoices.map((inv) => {
-                        const rem = inv.total_amount - inv.amount_paid;
+                        const invTotal = inv.total_amount ?? (inv as any).amount ?? 0;
+                        const invPaid = inv.amount_paid ?? (inv as any).paid_amount ?? 0;
+                        const rem = Math.max(0, invTotal - invPaid);
                         const st = STATUS_STYLE[inv.status] ?? STATUS_STYLE.PENDING;
                         return (
                           <div key={inv.id} className="rounded-2xl p-4" style={{ background: "#F9F9F9" }}>
@@ -407,15 +411,15 @@ export default function FeesPage() {
                                 <p className="text-xs text-gray-400">Due: {new Date(inv.due_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</p>
                               </div>
                               <div className="text-right flex-shrink-0">
-                                <p className="text-sm font-bold" style={{ color: "#121212" }}>{inv.total_amount.toLocaleString()} RWF</p>
-                                <p className="text-xs text-green-600">Paid: {inv.amount_paid.toLocaleString()}</p>
+                                <p className="text-sm font-bold" style={{ color: "#121212" }}>{invTotal.toLocaleString()} RWF</p>
+                                <p className="text-xs text-green-600">Paid: {invPaid.toLocaleString()}</p>
                               </div>
                             </div>
 
                             {/* Progress bar */}
                             <div className="w-full h-1.5 rounded-full bg-gray-200 overflow-hidden mb-3">
                               <div className="h-full rounded-full transition-all bg-green-500"
-                                style={{ width: `${Math.min(100, (inv.amount_paid / inv.total_amount) * 100)}%` }} />
+                                style={{ width: `${Math.min(100, invTotal > 0 ? (invPaid / invTotal) * 100 : 100)}%` }} />
                             </div>
 
                             {rem > 0 && canViewTabs && (
@@ -513,7 +517,9 @@ export default function FeesPage() {
                       {allInvoices.length === 0
                         ? <p className="text-center text-sm text-gray-400 py-8">No invoices found</p>
                         : allInvoices.map((inv) => {
-                          const rem = inv.total_amount - inv.amount_paid;
+                          const invTotal = inv.total_amount ?? (inv as any).amount ?? 0;
+                          const invPaid = inv.amount_paid ?? (inv as any).paid_amount ?? 0;
+                          const rem = Math.max(0, invTotal - invPaid);
                           const st = STATUS_STYLE[inv.status] ?? STATUS_STYLE.PENDING;
                           return (
                             <div key={inv.id} className="rounded-2xl p-3 flex items-center gap-3" style={{ background: "#F9F9F9" }}>
@@ -522,7 +528,7 @@ export default function FeesPage() {
                                   <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full font-semibold" style={{ background: st.bg, color: st.text }}>{st.icon} {inv.status}</span>
                                   <span className="text-xs font-semibold truncate" style={{ color: "#121212" }}>{inv.student?.user?.first_name} {inv.student?.user?.last_name}</span>
                                 </div>
-                                <p className="text-xs text-gray-400">{inv.student?.class?.name} · {inv.total_amount.toLocaleString()} RWF total</p>
+                                <p className="text-xs text-gray-400">{inv.student?.class?.name} · {invTotal.toLocaleString()} RWF total</p>
                               </div>
                               {rem > 0 && (
                                 <button onClick={() => setPayTarget(inv)}

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import DashboardShell from "@/components/DashboardShell";
 import { useNFC } from "@/hooks/useNFC";
+import { cards } from "@/lib/api";
 import { 
   Wifi, 
   CreditCard, 
@@ -77,6 +78,30 @@ export default function StandaloneTapPage() {
     const savedLog = localStorage.getItem("ishuri_standalone_logs") || localStorage.getItem("knotty_standalone_logs");
     if (savedSt) setStudents(JSON.parse(savedSt));
     if (savedLog) setLogs(JSON.parse(savedLog));
+
+    // Hydrate cards from system
+    cards.list({ limit: 100 }).then((res) => {
+      const cardList: LocalStudent[] = (res?.data || []).map((c: any) => ({
+        id: c.student?.id || c.id,
+        first_name: c.student?.user?.first_name || "Student",
+        last_name: c.student?.user?.last_name || "",
+        student_code: c.student?.student_code || "KMS000",
+        class_name: `${c.student?.level?.name || ""} ${c.student?.class?.name || ""}`.trim() || "Senior 5 A",
+        card_number: c.card_number,
+        nfc_uid: c.nfc_uid || null,
+        wallet_balance: c.wallet_balance || 0,
+        is_frozen: c.is_frozen || false,
+      }));
+      if (cardList.length > 0) {
+        setStudents((prev) => {
+          const merged = [...cardList];
+          prev.forEach((p) => {
+            if (!merged.some((m) => m.card_number === p.card_number)) merged.push(p);
+          });
+          return merged;
+        });
+      }
+    }).catch(() => {});
   }, []);
 
   const saveState = (updatedStudents: LocalStudent[], updatedLogs: AttendanceLog[]) => {
@@ -117,13 +142,52 @@ export default function StandaloneTapPage() {
   };
 
   // Core Tap Processing Logic
-  const handleTap = (query: string) => {
+  const handleTap = async (query: string) => {
     const term = query.trim().toUpperCase();
     if (!term) return;
 
-    const student = students.find(
+    let student = students.find(
       (s) => s.card_number.toUpperCase() === term || (s.nfc_uid && s.nfc_uid.toUpperCase() === term)
     );
+
+    // If not found in local list, check system API
+    if (!student) {
+      try {
+        const fresh = await cards.scan(term);
+        if (fresh?.data?.student) {
+          student = {
+            id: fresh.data.student.id,
+            first_name: fresh.data.student.name.split(" ")[0] || "Student",
+            last_name: fresh.data.student.name.split(" ").slice(1).join(" ") || "",
+            student_code: fresh.data.student.student_code,
+            class_name: fresh.data.student.class,
+            card_number: fresh.data.card_number,
+            nfc_uid: null,
+            wallet_balance: fresh.data.wallet_balance || 0,
+            is_frozen: fresh.data.is_frozen || false,
+          };
+          setStudents((prev) => [student!, ...prev]);
+        }
+      } catch (_) {
+        try {
+          const freshNfc = await cards.scanNFC(term);
+          if (freshNfc?.data?.student) {
+            student = {
+              id: freshNfc.data.student.id,
+              first_name: freshNfc.data.student.name.split(" ")[0] || "Student",
+              last_name: freshNfc.data.student.name.split(" ").slice(1).join(" ") || "",
+              student_code: freshNfc.data.student.student_code,
+              class_name: freshNfc.data.student.class,
+              card_number: freshNfc.data.card_number,
+              nfc_uid: term,
+              wallet_balance: freshNfc.data.wallet_balance || 0,
+              is_frozen: Boolean((freshNfc.data as any)?.is_frozen),
+            };
+            setStudents((prev) => [student!, ...prev]);
+          }
+        } catch (_) {}
+      }
+    }
 
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });

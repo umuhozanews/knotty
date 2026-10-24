@@ -18,22 +18,42 @@ async function scanAttendance(cardNumber, recordedBy, options = {}) {
     occurred_at, // offline queue: original tap timestamp from the device
   } = options;
 
-  const card = await prisma.knottyCard.findUnique({
-    where: { card_number: cardNumber },
-    include: {
-      student: {
-        include: {
-          user: { select: { first_name: true, last_name: true, profile_photo: true } },
-          class: { select: { name: true } },
-          level: { select: { name: true } },
-          parent: { select: { phone: true } },
-        },
+  const cleanNum = (cardNumber || '').trim();
+  const cardInclude = {
+    student: {
+      include: {
+        user: { select: { first_name: true, last_name: true, profile_photo: true } },
+        class: { select: { name: true } },
+        level: { select: { name: true } },
+        parent: { select: { phone: true } },
       },
     },
+  };
+
+  let card = await prisma.knottyCard.findUnique({
+    where: { card_number: cleanNum },
+    include: cardInclude,
   });
 
-  if (!card || !card.is_active || card.is_frozen) {
-    throw Object.assign(new Error('Card invalid or inactive'), { status: 400 });
+  if (!card) {
+    card = await prisma.knottyCard.findFirst({
+      where: {
+        OR: [
+          { nfc_uid: cleanNum },
+          { qr_code: cleanNum },
+          { student: { student_code: cleanNum } },
+        ],
+      },
+      include: cardInclude,
+    });
+  }
+
+  if (!card) {
+    throw Object.assign(new Error(`Card or tag [${cleanNum}] not registered to any student`), { status: 404 });
+  }
+
+  if (!card.is_active || card.is_frozen) {
+    throw Object.assign(new Error('Card is frozen or inactive'), { status: 400 });
   }
 
   const student = card.student;

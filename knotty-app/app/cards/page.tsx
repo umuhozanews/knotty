@@ -119,50 +119,205 @@ function TopUpModal({ card, onClose, onSuccess }: { card: KnottyCard; onClose: (
   );
 }
 
-function IssueCardModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+function IssueCardModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (msg: string) => void }) {
+  const { scan, scanning, isSupported } = useNFC();
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<Student[]>([]);
   const [selected, setSelected] = useState<Student | null>(null);
+  const [nfcUid, setNfcUid] = useState("");
+  const [initialBalance, setInitialBalance] = useState("5000");
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [nfcScanned, setNfcScanned] = useState(false);
 
   useEffect(() => {
-    if (!search.trim()) { setResults([]); return; }
+    setSearching(true);
+    students.list({ limit: 100 })
+      .then((r) => {
+        const uncarded = (r.data || []).filter((s) => !s.card);
+        setResults(uncarded);
+      })
+      .catch(() => {})
+      .finally(() => setSearching(false));
+  }, []);
+
+  useEffect(() => {
+    if (!search.trim()) return;
     const t = setTimeout(async () => {
       setSearching(true);
-      try { const r = await students.list({ search, limit: 6 }); setResults(r.data.filter((s) => !s.card)); } catch { /* ignore */ }
+      try {
+        const r = await students.list({ search: search.trim(), limit: 15 });
+        setResults((r.data || []).filter((s) => !s.card));
+      } catch { /* ignore */ }
       finally { setSearching(false); }
-    }, 300);
+    }, 250);
     return () => clearTimeout(t);
   }, [search]);
+
+  async function handleScanNFC() {
+    const res = await scan();
+    if (res?.value) {
+      setNfcUid(res.value.toUpperCase());
+      setNfcScanned(true);
+    }
+  }
 
   async function issue() {
     if (!selected) return;
     setLoading(true);
-    try { await cards.issue(selected.id); onSuccess(); onClose(); }
-    catch (err) { alert(err instanceof Error ? err.message : "Error"); }
-    finally { setLoading(false); }
+    try {
+      await cards.issue(selected.id, {
+        nfc_uid: nfcUid.trim() ? nfcUid.trim().toUpperCase() : undefined,
+        initial_balance: initialBalance ? parseInt(initialBalance, 10) : 0,
+      });
+      onSuccess(`Card granted successfully to ${selected.user.first_name} ${selected.user.last_name}`);
+      onClose();
+    }
+    catch (err) {
+      alert(err instanceof Error ? err.message : "Error issuing card");
+    }
+    finally {
+      setLoading(false);
+    }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-        <h3 className="font-bold text-gray-800 mb-4">Issue IshuriHUB Card</h3>
-        <div className="space-y-3">
-          <div className="relative">
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search student without a card…" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500" />
-            {searching && <Loader2 size={13} className="animate-spin absolute right-3 top-3 text-gray-400" />}
-            {results.length > 0 && (
-              <div className="absolute top-full left-0 right-0 bg-white border border-gray-100 rounded-xl shadow-lg mt-1 z-10 overflow-hidden">
-                {results.map((s) => <button key={s.id} onClick={() => { setSelected(s); setSearch(`${s.user.first_name} ${s.user.last_name}`); setResults([]); }} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">{s.user.first_name} {s.user.last_name} <span className="text-gray-400 text-xs">{s.student_code}</span></button>)}
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-gray-100 animate-in fade-in zoom-in-95">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="font-bold text-gray-800 text-lg">Grant & Issue IshuriHUB Card</h3>
+            <p className="text-xs text-gray-500">Bind card identity and optional NFC tag to student</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-sm font-semibold p-1">✕</button>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Select Student</label>
+            <div className="relative">
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by student name or code…"
+                className="w-full border border-gray-200 rounded-xl px-3.5 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+              {searching && <Loader2 size={14} className="animate-spin absolute right-3 top-3 text-gray-400" />}
+            </div>
+
+            {results.length > 0 && !selected && (
+              <div className="border border-gray-100 rounded-xl shadow-lg mt-1 max-h-48 overflow-y-auto divide-y divide-gray-50 bg-white z-10 relative">
+                {results.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => {
+                      setSelected(s);
+                      setSearch(`${s.user.first_name} ${s.user.last_name}`);
+                    }}
+                    className="w-full text-left px-3.5 py-2 text-sm hover:bg-blue-50 transition flex items-center justify-between"
+                  >
+                    <div>
+                      <p className="font-medium text-gray-800">{s.user.first_name} {s.user.last_name}</p>
+                      <p className="text-xs text-gray-400">{s.level?.name || ""} {s.class?.name || ""}</p>
+                    </div>
+                    <span className="font-mono text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600">{s.student_code}</span>
+                  </button>
+                ))}
               </div>
             )}
           </div>
-          {selected && <p className="text-sm text-blue-600 font-medium">→ {selected.user.first_name} {selected.user.last_name}</p>}
-          <div className="flex gap-3">
-            <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600">Cancel</button>
-            <button onClick={issue} disabled={loading || !selected} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-sm text-white font-medium disabled:opacity-60">
-              {loading ? <Loader2 size={14} className="animate-spin mx-auto" /> : "Issue Card"}
+
+          {selected && (
+            <div className="p-3 bg-blue-50/60 border border-blue-200/60 rounded-xl flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-blue-900">Student Target:</p>
+                <p className="text-sm font-bold text-blue-700">{selected.user.first_name} {selected.user.last_name}</p>
+                <p className="text-xs text-blue-600/80 font-mono">{selected.student_code} · {selected.class?.name || "Class section"}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setSelected(null); setSearch(""); }}
+                className="text-xs text-blue-600 hover:underline"
+              >
+                Change
+              </button>
+            </div>
+          )}
+
+          {/* NFC UID Section */}
+          <div className="pt-2 border-t border-gray-100 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
+                <Wifi size={13} className="text-blue-500" />
+                Link NFC Tag UID (Optional)
+              </label>
+              {isSupported && (
+                <button
+                  type="button"
+                  onClick={handleScanNFC}
+                  disabled={scanning}
+                  className="text-xs text-blue-600 font-medium hover:underline flex items-center gap-1"
+                >
+                  {scanning ? <Loader2 size={12} className="animate-spin" /> : <Wifi size={12} />}
+                  Scan NFC
+                </button>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <input
+                value={nfcUid}
+                onChange={(e) => setNfcUid(e.target.value)}
+                placeholder="Hardware UID (e.g. 04A3B2C1D0)"
+                className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono outline-none focus:border-blue-500"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const fakeUid = Array.from({ length: 7 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0').toUpperCase()).join("");
+                  setNfcUid(fakeUid);
+                  setNfcScanned(true);
+                }}
+                className="px-2.5 py-1.5 rounded-xl border border-dashed border-blue-400 text-blue-600 hover:bg-blue-50 text-xs font-semibold whitespace-nowrap"
+                title="Generate hardware tag UID for simulation"
+              >
+                Simulate UID
+              </button>
+            </div>
+            {nfcScanned && <p className="text-xs text-emerald-600 font-medium">✓ NFC Tag registered</p>}
+          </div>
+
+          {/* Initial Wallet Balance */}
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-gray-600">Initial Wallet Balance (RWF)</label>
+            <input
+              type="number"
+              min={0}
+              step={500}
+              value={initialBalance}
+              onChange={(e) => setInitialBalance(e.target.value)}
+              placeholder="e.g. 5000"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={issue}
+              disabled={loading || !selected}
+              className="flex-1 py-2.5 rounded-xl bg-blue-600 text-sm text-white font-semibold hover:bg-blue-700 disabled:opacity-50 transition flex items-center justify-center gap-2 shadow-sm"
+            >
+              {loading ? <Loader2 size={15} className="animate-spin" /> : <CreditCard size={15} />}
+              Grant Card
             </button>
           </div>
         </div>
@@ -219,7 +374,7 @@ export default function CardsPage() {
 
   return (
     <DashboardShell>
-      {modal === "issue" && <IssueCardModal onClose={() => setModal(null)} onSuccess={() => { fetchCards(); toast("Card issued successfully", "success"); }} />}
+      {modal === "issue" && <IssueCardModal onClose={() => setModal(null)} onSuccess={(msg) => { fetchCards(); toast(msg || "Card issued successfully", "success"); }} />}
       {modal === "nfc" && selectedCard && <LinkNFCModal card={selectedCard} onClose={() => setModal(null)} onSuccess={() => { fetchCards(); toast(`NFC linked — ${selectedCard.student.user.first_name}`, "success"); }} />}
       {modal === "topup" && selectedCard && <TopUpModal card={selectedCard} onClose={() => setModal(null)} onSuccess={(nb) => { setData((d) => d.map((c) => c.id === selectedCard.id ? { ...c, wallet_balance: nb } : c)); }} />}
 

@@ -8,13 +8,19 @@ const { paginate, paginatedResponse } = require('../../utils/helpers');
 
 const CARD_CACHE_TTL = 2; // seconds — short so wallet balance stays fresh
 
-async function issueCard(studentId, schoolId, actorId) {
+async function issueCard(studentId, schoolId, actorId, options = {}) {
   const student = await prisma.student.findFirst({
     where: { id: studentId, school_id: schoolId },
     include: { card: true, school: true },
   });
   if (!student) throw Object.assign(new Error('Student not found'), { status: 404 });
-  if (student.card) throw Object.assign(new Error('Student already has a card'), { status: 409 });
+  if (student.card) throw Object.assign(new Error('Student already has an active card'), { status: 409 });
+
+  const nfcUid = options.nfc_uid ? options.nfc_uid.trim().toUpperCase() : null;
+  if (nfcUid) {
+    const conflict = await prisma.knottyCard.findFirst({ where: { nfc_uid: nfcUid } });
+    if (conflict) throw Object.assign(new Error('This NFC tag is already linked to another student card'), { status: 409 });
+  }
 
   const card_number = await generateCardNumber(student.school.code);
   const qrData = { card_number, student_id: studentId, school_id: schoolId };
@@ -23,12 +29,16 @@ async function issueCard(studentId, schoolId, actorId) {
   const expires_at = new Date();
   expires_at.setFullYear(expires_at.getFullYear() + 2);
 
+  const initialBalance = typeof options.initial_balance === 'number' && options.initial_balance > 0 ? options.initial_balance : 0;
+
   const card = await prisma.knottyCard.create({
     data: {
       student_id: studentId,
       school_id: schoolId,
       card_number,
       qr_code,
+      nfc_uid: nfcUid,
+      wallet_balance: initialBalance,
       expires_at,
     },
     include: {
@@ -38,13 +48,29 @@ async function issueCard(studentId, schoolId, actorId) {
     },
   });
 
+  if (initialBalance > 0) {
+    await prisma.walletTransaction.create({
+      data: {
+        card_id: card.id,
+        student_id: studentId,
+        school_id: schoolId,
+        type: 'TOP_UP',
+        amount: initialBalance,
+        balance_before: 0,
+        balance_after: initialBalance,
+        source: 'CASH',
+        description: 'Initial wallet balance on card grant',
+      },
+    });
+  }
+
   logAction({
     school_id: schoolId,
     actor_user_id: actorId,
     action: 'CARD_ISSUED',
     entity_type: 'KnottyCard',
     entity_id: card.id,
-    after_state: { card_number, student_id: studentId, expires_at },
+    after_state: { card_number, student_id: studentId, nfc_uid: nfcUid, expires_at },
   }).catch(() => {});
 
   return card;
@@ -55,27 +81,43 @@ async function invalidateCardCache(cardNumber) {
 }
 
 async function scanCard(cardNumber) {
-  const cacheKey = `card:${cardNumber}`;
+  const cleanTerm = (cardNumber || '').trim();
+  const cacheKey = `card:${cleanTerm}`;
   try {
     const cached = await redis.get(cacheKey);
     if (cached) return JSON.parse(cached);
   } catch (_) {}
 
-  const card = await prisma.knottyCard.findUnique({
-    where: { card_number: cardNumber },
-    include: {
-      student: {
-        include: {
-          user: { select: { first_name: true, last_name: true, profile_photo: true } },
-          class: { select: { name: true } },
-          level: { select: { name: true } },
-          school: { select: { name: true, logo: true, tap_out_after_minutes: true } },
-        },
+  const cardInclude = {
+    student: {
+      include: {
+        user: { select: { first_name: true, last_name: true, profile_photo: true } },
+        class: { select: { name: true } },
+        level: { select: { name: true } },
+        school: { select: { name: true, logo: true, tap_out_after_minutes: true } },
       },
     },
+  };
+
+  let card = await prisma.knottyCard.findUnique({
+    where: { card_number: cleanTerm },
+    include: cardInclude,
   });
 
-  if (!card) throw Object.assign(new Error('Card not found'), { status: 404 });
+  if (!card) {
+    card = await prisma.knottyCard.findFirst({
+      where: {
+        OR: [
+          { nfc_uid: cleanTerm },
+          { qr_code: cleanTerm },
+          { student: { student_code: cleanTerm } },
+        ],
+      },
+      include: cardInclude,
+    });
+  }
+
+  if (!card) throw Object.assign(new Error(`Card [${cleanTerm}] not found or not registered to any student`), { status: 404 });
   if (!card.is_active) throw Object.assign(new Error('Card is inactive'), { status: 403 });
   if (card.is_frozen) throw Object.assign(new Error('Card is frozen'), { status: 403 });
   if (new Date() > card.expires_at) throw Object.assign(new Error('Card has expired'), { status: 403 });
@@ -301,6 +343,7 @@ async function listCards(schoolId, { page, limit, search }) {
     ...(search && {
       OR: [
         { card_number: { contains: search, mode: 'insensitive' } },
+        { nfc_uid: { contains: search, mode: 'insensitive' } },
         { student: { user: { first_name: { contains: search, mode: 'insensitive' } } } },
         { student: { user: { last_name: { contains: search, mode: 'insensitive' } } } },
         { student: { student_code: { contains: search, mode: 'insensitive' } } },

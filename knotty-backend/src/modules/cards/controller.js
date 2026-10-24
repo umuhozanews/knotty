@@ -2,7 +2,7 @@ const service = require('./service');
 
 async function issue(req, res, next) {
   try {
-    const card = await service.issueCard(req.params.studentId, req.user.school_id, req.user.id);
+    const card = await service.issueCard(req.params.studentId, req.user.school_id, req.user.id, req.body);
     res.status(201).json({ success: true, data: card });
   } catch (err) { next(err); }
 }

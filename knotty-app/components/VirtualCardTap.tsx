@@ -5,42 +5,73 @@ import { cards, KnottyCard } from "@/lib/api";
 
 const FALLBACK_DEMO_CARDS: KnottyCard[] = [
   {
-    id: "demo-card-1",
-    card_number: "ISH-8492-1001",
-    nfc_uid: "04A3B2C1D0",
-    wallet_balance: 5000,
-    is_active: true,
-    is_frozen: false,
-    student: {
-      id: "demo-stu-1",
-      student_code: "STU-2026-001",
-      user: { first_name: "Jean", last_name: "Mugabo" }
-    }
-  } as unknown as KnottyCard,
-  {
-    id: "demo-card-2",
-    card_number: "ISH-8492-1002",
+    id: "demo-card-uwase",
+    card_number: "KNT-KMS-2026-90002",
     nfc_uid: "04F5E6D7C8",
-    wallet_balance: 12000,
+    wallet_balance: 7000,
     is_active: true,
     is_frozen: false,
     student: {
-      id: "demo-stu-2",
-      student_code: "STU-2026-002",
-      user: { first_name: "Aline", last_name: "Uwase" }
+      id: "std-2",
+      student_code: "KMS269002",
+      class: { name: "Senior 1 A" },
+      user: { first_name: "Uwase", last_name: "Marie" }
     }
   } as unknown as KnottyCard,
   {
-    id: "demo-card-3",
-    card_number: "ISH-8492-1003",
-    nfc_uid: "0411223344",
-    wallet_balance: 1500,
+    id: "demo-card-hirwa",
+    card_number: "KNT-KMS-2026-90001",
+    nfc_uid: "04A3B2C1D0",
+    wallet_balance: 6000,
     is_active: true,
     is_frozen: false,
     student: {
-      id: "demo-stu-3",
-      student_code: "STU-2026-003",
-      user: { first_name: "Eric", last_name: "Manzi" }
+      id: "std-1",
+      student_code: "KMS269001",
+      class: { name: "Senior 5 A" },
+      user: { first_name: "Hirwa", last_name: "Jean" }
+    }
+  } as unknown as KnottyCard,
+  {
+    id: "demo-card-eric",
+    card_number: "KNT-KMS-2026-00003",
+    nfc_uid: "0411223344",
+    wallet_balance: 8000,
+    is_active: true,
+    is_frozen: false,
+    student: {
+      id: "std-3",
+      student_code: "KMS260003",
+      class: { name: "Senior 5 B" },
+      user: { first_name: "Nkurunziza", last_name: "Eric" }
+    }
+  } as unknown as KnottyCard,
+  {
+    id: "demo-card-patrick",
+    card_number: "KNT-KMS-2026-00005",
+    nfc_uid: "0455667788",
+    wallet_balance: 10000,
+    is_active: true,
+    is_frozen: false,
+    student: {
+      id: "std-5",
+      student_code: "KMS260005",
+      class: { name: "Senior 5 A" },
+      user: { first_name: "Habimana", last_name: "Patrick" }
+    }
+  } as unknown as KnottyCard,
+  {
+    id: "demo-card-grace",
+    card_number: "KNT-KMS-2026-00006",
+    nfc_uid: "0499AABBCC",
+    wallet_balance: 3500,
+    is_active: true,
+    is_frozen: false,
+    student: {
+      id: "std-6",
+      student_code: "KMS260006",
+      class: { name: "Senior 6 Science" },
+      user: { first_name: "Uwimana", last_name: "Grace" }
     }
   } as unknown as KnottyCard,
 ];

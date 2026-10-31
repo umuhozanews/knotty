@@ -16,7 +16,7 @@ select has_index('public','card_assignments_active_staff_key','staff cannot have
 select has_index('public','card_identifiers_school_id_identifier_kind_keyed_digest_key','same school cannot bind a digest twice per identifier kind');
 select has_trigger('public','card_lifecycle_events','card_lifecycle_events_no_update_delete','card lifecycle events are append-only');
 select has_trigger('public','card_lifecycle_events','card_lifecycle_events_no_truncate','card lifecycle history cannot be truncated');
-select has_policy('public','card_lifecycle_events','card_lifecycle_events_select_authorized','card history reads require school card permission');
+select ok(exists(select 1 from pg_policies where schemaname='public' and tablename='card_lifecycle_events' and policyname='card_lifecycle_events_select_authorized'),'card history reads require school card permission');
 select throws_ok($$select public.activate_card('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002')$$,'42501',null,'unauthorized activation is rejected');
 
 -- Behavior fixtures exercise card lifecycle side effects and device scans.
@@ -49,9 +49,12 @@ reset role;
 set local role authenticated;
 set local request.jwt.claims='{"sub":"1e000000-0000-4000-8000-000000000001","role":"authenticated"}';
 select public.activate_card('4e000000-0000-4000-8000-000000000001',current_setting('test.lifecycle_card_id')::uuid);
+reset role;
 select is((select status from public.card_assignments where id=current_setting('test.lifecycle_card_id')::uuid),'active','authorized card activation changes the card state');
 select is((select count(*)::integer from public.card_lifecycle_events where card_assignment_id=current_setting('test.lifecycle_card_id')::uuid),2,'issue and activation append lifecycle history');
 select ok((select count(*)=2 from public.school_operation_audit where entity_type='card' and entity_id=current_setting('test.lifecycle_card_id')::uuid and event_type in ('card_issued','card_activated')),'issue and activation append school audit events');
+set local role authenticated;
+set local request.jwt.claims='{"sub":"1e000000-0000-4000-8000-000000000001","role":"authenticated"}';
 select ok(set_config('test.attendance_device_id',public.register_attendance_device('4e000000-0000-4000-8000-000000000001','CARD-WF-DEVICE','mobile',decode(repeat('cd',32),'hex'))::text,true) is not null,'authorized manager registers a school-scoped attendance device');
 reset role;
 
@@ -82,6 +85,7 @@ reset role;
 set local role authenticated;
 set local request.jwt.claims='{"sub":"1e000000-0000-4000-8000-000000000001","role":"authenticated"}';
 select public.change_card_status('4e000000-0000-4000-8000-000000000001',current_setting('test.lifecycle_card_id')::uuid,'suspended','device test suspension');
+reset role;
 select is((select status from public.card_assignments where id=current_setting('test.lifecycle_card_id')::uuid),'suspended','authorized manager suspends an active card');
 select ok(exists(select 1 from public.card_lifecycle_events where card_assignment_id=current_setting('test.lifecycle_card_id')::uuid and event_type='suspended' and prior_status='active' and new_status='suspended'),'suspension appends card lifecycle history');
 select ok(exists(select 1 from public.school_operation_audit where entity_type='card' and entity_id=current_setting('test.lifecycle_card_id')::uuid and event_type='card_status_changed'),'suspension appends school audit event');

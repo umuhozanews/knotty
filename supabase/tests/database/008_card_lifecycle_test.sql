@@ -42,9 +42,9 @@ values ('48000000-0000-4000-8000-000000000001','98000000-0000-4000-8000-00000000
 
 set local role authenticated;
 set local request.jwt.claims='{"sub":"18000000-0000-4000-8000-000000000001","role":"authenticated"}';
-select is((select count(*)::integer from public.card_assignments),1,'holder can read own card assignment');
-select is((select count(*)::integer from public.card_assignments where card_number='K-B'),0,'holder cannot read another school card by known number');
-select is((select count(*)::integer from public.card_assignments where card_number='K-999'),0,'holder cannot enumerate unknown cards');
+select is((select count(id)::integer from public.card_assignments),1,'holder can read own card assignment through granted safe columns');
+select is((select count(id)::integer from public.card_assignments where id='98000000-0000-4000-8000-000000000002'),0,'holder cannot read another school card by known assignment ID');
+select is((select count(id)::integer from public.card_assignments where id='98000000-0000-4000-8000-000000000099'),0,'holder cannot enumerate unknown cards by assignment ID');
 select ok(not has_table_privilege('authenticated','public.card_identifiers','SELECT'),'card identifiers are not readable through Data API');
 select throws_ok($$update public.card_assignments set status='revoked'$$,'42501',null,'holder cannot self-change card status');
 select throws_ok($$insert into public.card_lifecycle_events (school_id,card_assignment_id,event_type,new_status,actor_membership_id,actor_person_id) values ('48000000-0000-4000-8000-000000000001','98000000-0000-4000-8000-000000000001','revoked','revoked','78000000-0000-4000-8000-000000000001','28000000-0000-4000-8000-000000000001')$$,'42501',null,'holder cannot forge card lifecycle events');

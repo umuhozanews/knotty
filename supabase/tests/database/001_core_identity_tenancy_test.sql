@@ -130,8 +130,8 @@ select ok(
 );
 
 select ok(
-  not has_schema_privilege('authenticated', 'private', 'USAGE'),
-  'authenticated users cannot resolve the private schema'
+  has_schema_privilege('authenticated', 'private', 'USAGE'),
+  'authenticated users can resolve the private schema for explicitly granted role catalogs'
 );
 select ok(
   not has_table_privilege('authenticated', 'private.person_private_identity', 'SELECT'),

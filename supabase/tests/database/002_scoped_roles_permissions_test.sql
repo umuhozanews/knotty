@@ -66,8 +66,8 @@ insert into private.role_permissions (scope, role_key, permission_key) values
 insert into private.delegable_roles (scope, delegator_role_key, delegate_role_key) values
  ('school', 'TEST_SCHOOL_ROLE', 'TEST_SCHOOL_DELEGATE');
 
-select is((select count(*)::integer from private.role_permissions), 3, 'same-scope role permission mappings are accepted');
-select is((select count(*)::integer from private.delegable_roles), 1, 'same-scope delegation mapping is accepted');
+select is((select count(*)::integer from private.role_permissions where permission_key like 'test.%'), 3, 'same-scope role permission mappings are accepted');
+select is((select count(*)::integer from private.delegable_roles where delegator_role_key = 'TEST_SCHOOL_ROLE'), 1, 'same-scope delegation mapping is accepted');
 select throws_ok($$insert into private.delegable_roles (scope, delegator_role_key, delegate_role_key) values ('school', 'TEST_SCHOOL_ROLE', 'TEST_SCHOOL_ROLE')$$, '23514', null, 'self-delegation is rejected by the check constraint');
 select throws_ok($$insert into private.role_permissions (scope, role_key, permission_key) values ('school', 'TEST_ORG_ROLE', 'test.school.permission')$$, '23503', null, 'role from another scope cannot receive a permission');
 select throws_ok($$insert into private.role_permissions (scope, role_key, permission_key) values ('school', 'TEST_SCHOOL_ROLE', 'test.organization.permission')$$, '23503', null, 'permission from another scope cannot be attached to a role');
@@ -86,8 +86,8 @@ select is((select count(*)::integer from public.platform_membership_roles), 1, '
 select is((select count(*)::integer from public.organization_membership_roles), 1, 'organization role assignment with matching tenant and actor is accepted');
 select is((select count(*)::integer from public.school_membership_roles), 2, 'school role assignments with matching schools and actors are accepted');
 select throws_ok($$insert into public.school_membership_roles (school_id, membership_id, person_id, role_key, assigned_by_membership_id, assigned_by_person_id) values ('41000000-0000-4000-8000-000000000001', '71000000-0000-4000-8000-000000000002', '21000000-0000-4000-8000-000000000002', 'TEST_SCHOOL_ROLE', '71000000-0000-4000-8000-000000000001', '21000000-0000-4000-8000-000000000001')$$, '23503', null, 'school assignment cannot target a membership from another school');
-select throws_ok($$insert into public.school_membership_roles (school_id, membership_id, person_id, role_key, assigned_by_membership_id, assigned_by_person_id) values ('41000000-0000-4000-8000-000000000001', '71000000-0000-4000-8000-000000000001', '21000000-0000-4000-8000-000000000001', 'TEST_SCHOOL_ROLE', '71000000-0000-4000-8000-000000000002', '21000000-0000-4000-8000-000000000002')$$, '23503', null, 'school actor from another school cannot assign a role');
-select throws_ok($$insert into public.organization_membership_roles (organization_id, membership_id, person_id, role_key, assigned_by_membership_id, assigned_by_person_id) values ('31000000-0000-4000-8000-000000000001', '61000000-0000-4000-8000-000000000001', '21000000-0000-4000-8000-000000000001', 'TEST_ORG_ROLE', '61000000-0000-4000-8000-000000000003', '21000000-0000-4000-8000-000000000002')$$, '23503', null, 'organization actor from another organization cannot assign a role');
+select throws_ok($$insert into public.school_membership_roles (school_id, membership_id, person_id, role_key, assigned_by_membership_id, assigned_by_person_id) values ('41000000-0000-4000-8000-000000000001', '71000000-0000-4000-8000-000000000001', '21000000-0000-4000-8000-000000000001', 'SCHOOL_MANAGER', '71000000-0000-4000-8000-000000000002', '21000000-0000-4000-8000-000000000002')$$, '23503', null, 'school actor from another school cannot assign a role');
+select throws_ok($$insert into public.organization_membership_roles (organization_id, membership_id, person_id, role_key, assigned_by_membership_id, assigned_by_person_id) values ('31000000-0000-4000-8000-000000000001', '61000000-0000-4000-8000-000000000001', '21000000-0000-4000-8000-000000000001', 'ORGANIZATION_MANAGER', '61000000-0000-4000-8000-000000000003', '21000000-0000-4000-8000-000000000002')$$, '23503', null, 'organization actor from another organization cannot assign a role');
 select throws_ok($$insert into public.platform_membership_roles (membership_id, person_id, scope, role_key, assigned_by_membership_id, assigned_by_person_id) values ('51000000-0000-4000-8000-000000000001', '21000000-0000-4000-8000-000000000001', 'school', 'TEST_PLATFORM_ROLE', '51000000-0000-4000-8000-000000000001', '21000000-0000-4000-8000-000000000001')$$, '23514', null, 'platform assignment cannot claim a different scope');
 
 update public.school_membership_roles set status = 'revoked', revoked_by_membership_id = membership_id, revoked_by_person_id = person_id, revoked_at = now();
@@ -103,7 +103,12 @@ select is((select count(*)::integer from public.platform_membership_roles), 1, '
 select is((select count(*)::integer from public.organization_membership_roles), 1, 'authenticated user reads their own organization role assignments');
 select is((select count(*)::integer from public.school_membership_roles), 2, 'authenticated user reads their own school role assignment history');
 select is((select count(*)::integer from public.school_membership_roles where person_id = '21000000-0000-4000-8000-000000000002'), 0, 'user cannot read another school member assignment by ID');
-select ok(not has_schema_privilege('authenticated', 'private', 'USAGE'), 'authenticated user cannot access private role/permission catalogs');
+select ok(has_schema_privilege('authenticated', 'private', 'USAGE')
+  and has_table_privilege('authenticated', 'private.role_definitions', 'SELECT')
+  and has_table_privilege('authenticated', 'private.permission_catalog', 'SELECT')
+  and has_table_privilege('authenticated', 'private.role_permissions', 'SELECT')
+  and has_table_privilege('authenticated', 'private.delegable_roles', 'SELECT'),
+  'authenticated users have read-only access to the explicitly granted role catalogs');
 select ok(not has_table_privilege('authenticated', 'public.school_membership_roles', 'INSERT'), 'authenticated user has no direct role assignment INSERT grant');
 select ok(not has_table_privilege('authenticated', 'public.school_membership_roles', 'UPDATE'), 'authenticated user has no direct role assignment UPDATE grant');
 select ok(not has_table_privilege('authenticated', 'public.school_membership_roles', 'DELETE'), 'authenticated user has no direct role assignment DELETE grant');

@@ -1,6 +1,6 @@
 begin;
 select plan(29);
-select has_function('public','register_student_from_edge','uuid, uuid, uuid, text, text, date, text, text, text, text, text, uuid, uuid','trusted student registration RPC exists');
+select has_function('public','register_student_from_edge',array['uuid','uuid','uuid','text','text','date','text','text','text','text','text','uuid','uuid']::name[],'trusted student registration RPC exists');
 select ok(not has_function_privilege('authenticated','public.register_student_from_edge(uuid,uuid,uuid,text,text,date,text,text,text,text,text,uuid,uuid)','EXECUTE'),'browser cannot create/link arbitrary student Auth identities');
 select ok(has_function_privilege('service_role','public.register_student_from_edge(uuid,uuid,uuid,text,text,date,text,text,text,text,text,uuid,uuid)','EXECUTE'),'trusted edge server can invoke student registration RPC');
 select ok(has_function_privilege('authenticated','public.place_student(uuid,uuid,uuid,uuid,date)','EXECUTE'),'authenticated caller can use scoped placement workflow');

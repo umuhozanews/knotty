@@ -15,8 +15,8 @@ select ok(not has_table_privilege('authenticated','public.attendance_scan_events
 select ok(not has_table_privilege('authenticated','public.attendance_devices','INSERT'),'devices require managed registration workflow');
 select has_column('public','attendance_scan_events','scan_direction','scan records retain entry or exit direction');
 select has_index('public','attendance_scan_events_school_idempotency_key','scan event idempotency is unique within school');
-select has_policy('public','attendance_records','attendance_records_select_scoped','attendance reads are class/guardian scoped');
-select has_policy('public','attendance_scan_events','attendance_scan_events_select_authorized','scan event reads are scoped');
+select ok(exists(select 1 from pg_policies where schemaname='public' and tablename='attendance_records' and policyname='attendance_records_select_scoped'),'attendance reads are class/guardian scoped');
+select ok(exists(select 1 from pg_policies where schemaname='public' and tablename='attendance_scan_events' and policyname='attendance_scan_events_select_authorized'),'scan event reads are scoped');
 select has_trigger('public','attendance_scan_events','attendance_scan_events_no_update_delete','scan event history cannot be updated or deleted');
 select has_trigger('public','attendance_scan_events','attendance_scan_events_no_truncate','scan event history cannot be truncated');
 select has_trigger('public','attendance_correction_audit','attendance_correction_audit_no_truncate','correction audit cannot be truncated');
@@ -45,7 +45,7 @@ values ('8d000000-0000-4000-8000-000000000001','4d000000-0000-4000-8000-00000000
 
 set local role authenticated;
 set local request.jwt.claims='{"sub":"1d000000-0000-4000-8000-000000000001","role":"authenticated"}';
-select public.update_school_settings('4d000000-0000-4000-8000-000000000001','Africa/Kigali','rw-RW','RWF','CBC','07:00',1);
+select public.update_school_settings('4d000000-0000-4000-8000-000000000001','Africa/Kigali','rw-RW','RWF'::char(3),'CBC',time '07:00',1::smallint);
 select ok(set_config('test.virtual_tap_event',public.record_virtual_student_tap(
  '4d000000-0000-4000-8000-000000000001','8d000000-0000-4000-8000-000000000001','9d000000-0000-4000-8000-000000000001','2026-10-30 22:30:00+00'
 )::text,true) is not null,'valid virtual tap records an attendance event');

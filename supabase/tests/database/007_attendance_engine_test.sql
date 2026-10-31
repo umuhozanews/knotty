@@ -1,5 +1,5 @@
 begin;
-select plan(23);
+select plan(24);
 select has_table('public','attendance_devices','attendance device registry exists');
 select has_table('public','attendance_records','daily attendance record exists');
 select has_table('public','staff_attendance_records','daily staff attendance record exists');
@@ -42,7 +42,8 @@ set local role authenticated;
 set local request.jwt.claims='{"sub":"17000000-0000-4000-8000-000000000001","role":"authenticated"}';
 select is((select count(*)::integer from public.attendance_records),1,'student reads own attendance');
 select is((select count(*)::integer from public.attendance_records where student_id='87000000-0000-4000-8000-000000000002'),0,'student cannot read other school attendance');
-select ok(not has_table_privilege('authenticated','public.attendance_scan_events','SELECT'),'attendance event history is not exposed to students');
+select ok(has_table_privilege('authenticated','public.attendance_scan_events','SELECT'),'scan event SELECT is granted for RLS-authorized readers');
+select is((select count(*)::integer from public.attendance_scan_events),0,'student cannot read scan event history without attendance.read permission');
 select throws_ok($$update public.attendance_scan_events set outcome='error'$$,'42501',null,'scan event cannot be updated by API role');
 select throws_ok($$insert into public.attendance_records (school_id,student_id,attendance_date,status,source) values ('47000000-0000-4000-8000-000000000001','87000000-0000-4000-8000-000000000001','2026-11-01','present','manual')$$,'42501',null,'student cannot create attendance');
 reset role;

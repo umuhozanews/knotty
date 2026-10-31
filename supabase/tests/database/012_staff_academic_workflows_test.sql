@@ -37,11 +37,11 @@ select throws_ok($$select public.register_staff('4c000000-0000-4000-8000-0000000
 select ok(set_config('test.registered_staff_id',public.register_staff(
  '4c000000-0000-4000-8000-000000000001','STAFF-001','Workflow Teacher','Teacher','Mathematics',current_date,array['teaching'],'BEd','Mathematics'
 )::text,true) is not null,'authorized manager registers a teaching staff member');
+reset role;
 select is((select employment_status from public.staff_records where id=current_setting('test.registered_staff_id')::uuid),'active','new staff member starts active in the authorized school');
 select ok(exists(select 1 from public.staff_record_categories where staff_record_id=current_setting('test.registered_staff_id')::uuid and school_id='4c000000-0000-4000-8000-000000000001' and category_key='teaching'),'staff registration persists the assigned category');
 select is((select qualification from public.teacher_details where staff_record_id=current_setting('test.registered_staff_id')::uuid),'BEd','teaching staff registration persists teacher qualifications');
 select ok(exists(select 1 from public.school_operation_audit where entity_type='staff' and entity_id=current_setting('test.registered_staff_id')::uuid and event_type='staff_registered'),'staff registration appends its school audit event');
-reset role;
 
 select * from finish();
 rollback;

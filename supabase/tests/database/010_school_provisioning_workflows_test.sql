@@ -44,14 +44,14 @@ select ok(set_config('test.school_a2',public.provision_school('3a000000-0000-400
 select throws_ok($$select public.provision_school('3a000000-0000-4000-8000-000000000002','Wrong organization','PROV-WRONG','prov-wrong@example.invalid')$$,'42501',null,'organization manager cannot provision in another organization');
 select is((select count(*)::integer from public.schools where organization_id='3a000000-0000-4000-8000-000000000001'),2,'organization manager can see registry rows only for its organization');
 select public.update_school_profile(current_setting('test.school_a')::uuid,'School A Updated','+250780000009','Kigali address','BR-2');
-select throws_ok($$select public.update_school_settings(current_setting('test.school_a')::uuid,'Africa/Kigali','rw-RW','RWF','CBC','08:00',1)$$,'42501',null,'organization membership alone cannot edit school operational settings');
+select throws_ok($$select public.update_school_settings(current_setting('test.school_a')::uuid,'Africa/Kigali','rw-RW','RWF'::char(3),'CBC',time '08:00',1::smallint)$$,'42501',null,'organization membership alone cannot edit school operational settings');
 reset role;
 
 set local role authenticated;
 set local request.jwt.claims='{"sub":"1a000000-0000-4000-8000-000000000001","role":"authenticated"}';
-select public.update_school_settings(current_setting('test.school_a')::uuid,'Africa/Kigali','rw-RW','RWF','CBC','08:00',1);
+select public.update_school_settings(current_setting('test.school_a')::uuid,'Africa/Kigali','rw-RW','RWF'::char(3),'CBC',time '08:00',1::smallint);
 select is((select timezone from public.school_settings where school_id=current_setting('test.school_a')::uuid),'Africa/Kigali','supported IANA time zone is accepted and persisted');
-select throws_ok($$select public.update_school_settings(current_setting('test.school_a')::uuid,'Mars/Olympus','rw-RW','RWF','CBC','08:00',1)$$,'22023',null,'unsupported time zone is rejected before settings are persisted');
+select throws_ok($$select public.update_school_settings(current_setting('test.school_a')::uuid,'Mars/Olympus','rw-RW','RWF'::char(3),'CBC',time '08:00',1::smallint)$$,'22023',null,'unsupported time zone is rejected before settings are persisted');
 select is((select timezone from public.school_settings where school_id=current_setting('test.school_a')::uuid),'Africa/Kigali','invalid time zone leaves the prior setting unchanged');
 select ok(set_config('test.year_id',public.create_academic_year(current_setting('test.school_a')::uuid,'2026-2027','2026-09-01','2027-08-31')::text,true) is not null,'authorized school manager creates a draft academic year');
 select public.activate_academic_year(current_setting('test.school_a')::uuid,current_setting('test.year_id')::uuid);

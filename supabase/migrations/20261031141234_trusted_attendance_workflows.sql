@@ -141,7 +141,7 @@ grant execute on function public.correct_student_attendance(uuid,uuid,text,times
 -- card lookup or raw card identifier reaches PostgreSQL.
 create function public.process_attendance_scan(p_school_id uuid,p_device_id uuid,p_device_credential_digest bytea,p_identifier_digest bytea,p_idempotency_key uuid,p_scan_direction text)
 returns uuid language plpgsql security definer set search_path = '' as $$
-declare v_device public.attendance_devices%rowtype; v_card public.card_assignments%rowtype; v_event_id uuid; v_record_id uuid; v_student_id uuid; v_staff_id uuid; v_date date; v_status text; v_identifier_status text; v_arrived_at timestamptz; v_departed_at timestamptz; v_existing boolean;
+declare v_device public.attendance_devices%rowtype; v_card public.card_assignments%rowtype; v_event_id uuid; v_record_id uuid; v_student_id uuid; v_staff_id uuid; v_date date; v_status text; v_identifier_status text; v_arrived_at timestamptz; v_departed_at timestamptz; v_existing boolean; v_local_time time;
 begin
   if p_idempotency_key is null or p_scan_direction not in ('in','out') or octet_length(p_device_credential_digest)<>32 or octet_length(p_identifier_digest)<>32 then raise exception 'invalid scan request' using errcode='22023'; end if;
   select * into v_device from public.attendance_devices where id=p_device_id and status='active' and credential_digest=p_device_credential_digest for share;

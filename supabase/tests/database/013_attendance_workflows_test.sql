@@ -1,5 +1,5 @@
 begin;
-select plan(21);
+select plan(23);
 select ok(has_function_privilege('authenticated','public.record_student_attendance(uuid,uuid,date,text,timestamp with time zone,timestamp with time zone,text)','EXECUTE'),'authenticated scoped student attendance RPC exists');
 select ok(has_function_privilege('authenticated','public.record_staff_attendance(uuid,uuid,date,text,timestamp with time zone,timestamp with time zone,text)','EXECUTE'),'authenticated scoped staff attendance RPC exists');
 select ok(has_function_privilege('authenticated','public.set_attendance_device_status(uuid,uuid,text,text)','EXECUTE'),'device lifecycle is managed by a scoped workflow');
@@ -7,6 +7,8 @@ select ok(has_function_privilege('authenticated','public.record_virtual_student_
 select ok(has_function_privilege('authenticated','public.correct_student_attendance(uuid,uuid,text,timestamp with time zone,timestamp with time zone,text)','EXECUTE'),'attendance correction uses audited RPC');
 select ok(not has_function_privilege('authenticated','public.process_attendance_scan(uuid,uuid,bytea,bytea,uuid,text)','EXECUTE'),'browser cannot submit trusted NFC scan operations');
 select ok(has_function_privilege('service_role','public.process_attendance_scan(uuid,uuid,bytea,bytea,uuid,text)','EXECUTE'),'Edge Function service boundary can process a device scan');
+select ok(position('v_local_time time;' in pg_get_functiondef('public.process_attendance_scan(uuid,uuid,bytea,bytea,uuid,text)'::regprocedure))>0,'scan RPC declares its school-local time as time');
+select ok(position('v_local_time>(select school_day_start' in pg_get_functiondef('public.process_attendance_scan(uuid,uuid,bytea,bytea,uuid,text)'::regprocedure))>0,'scan lateness compares school-local time with the configured school day start');
 select ok(not has_table_privilege('authenticated','public.attendance_records','INSERT'),'attendance records cannot be directly inserted');
 select ok(not has_table_privilege('authenticated','public.attendance_records','UPDATE'),'attendance rows require correction workflow');
 select ok(not has_table_privilege('authenticated','public.attendance_scan_events','INSERT'),'scan events cannot be forged from browser');

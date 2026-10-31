@@ -27,7 +27,9 @@ Deno.serve(async (request) => {
 
   let input: Record<string, unknown>;
   try {
-    input = await request.json();
+    const parsed: unknown = await request.json();
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("invalid object");
+    input = parsed as Record<string, unknown>;
   } catch {
     return json({ error: "invalid_json" }, 400);
   }

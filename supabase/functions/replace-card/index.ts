@@ -2,7 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.95.0";
 
 const headers = {
   "Access-Control-Allow-Origin": Deno.env.get("APP_ORIGIN") ?? "http://localhost:3000",
-  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, apikey, x-client-info, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 const respond = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { ...headers, "Content-Type": "application/json" } });
@@ -16,7 +16,11 @@ Deno.serve(async (request) => {
   const authorization = request.headers.get("Authorization");
   if (!authorization?.startsWith("Bearer ")) return respond({ error: "unauthorized" }, 401);
   let body: Record<string, unknown>;
-  try { body = await request.json(); } catch { return respond({ error: "invalid_json" }, 400); }
+  try {
+    const parsed: unknown = await request.json();
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("invalid object");
+    body = parsed as Record<string, unknown>;
+  } catch { return respond({ error: "invalid_json" }, 400); }
   const schoolId = typeof body.school_id === "string" ? body.school_id : "";
   const oldCardId = typeof body.old_card_assignment_id === "string" ? body.old_card_assignment_id : "";
   const identifierKind = body.identifier_kind === "nfc_uid" || body.identifier_kind === "qr_token" ? body.identifier_kind : "";

@@ -40,7 +40,9 @@ if (-not $wsl) {
   $wslStatus = (& $wsl.Source --status 2>&1 | Out-String).Trim()
   $wslList = (& $wsl.Source --list --verbose 2>&1 | Out-String).Trim()
   $wslOk = $LASTEXITCODE -eq 0 -and $wslList -match '(?m)\s2\s*$' -and $wslStatus -notmatch 'not installed|not available'
-  Report 'WSL 2' $wslOk (($wslStatus + ' ' + $wslList) -replace '[\r\n\0]+', ' ')
+  $wslDetail = (($wslStatus + ' ' + $wslList) -replace '[\r\n\0]+', ' ').Trim()
+  if (-not $wslDetail) { $wslDetail = 'WSL is not installed or returned no status; install WSL 2 and a Linux distribution.' }
+  Report 'WSL 2' $wslOk $wslDetail
 }
 
 $supabase = Get-Command supabase -ErrorAction SilentlyContinue

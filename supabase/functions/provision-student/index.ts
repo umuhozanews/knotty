@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.95.0";
+import { deleteUnregisteredAuthUser, isDefinitiveDatabaseFailure } from "./compensation.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": Deno.env.get("APP_ORIGIN") ?? "http://localhost:3000",
@@ -83,7 +84,26 @@ Deno.serve(async (request) => {
   };
   const { data: studentId, error: registrationError } = await admin.rpc("register_student_from_edge", rpcArgs);
   if (registrationError || typeof studentId !== "string") {
-    await admin.auth.admin.deleteUser(created.user.id);
+    if (!isDefinitiveDatabaseFailure(registrationError)) {
+      // A transport failure or malformed response can hide a committed RPC.
+      // Deleting Auth here could orphan a committed student record.
+      console.error("Student provisioning result requires reconciliation", {
+        authUserId: created.user.id,
+      });
+      return json({ error: "student_registration_outcome_unknown" }, 503);
+    }
+    const cleanup = await deleteUnregisteredAuthUser(
+      (userId) => admin.auth.admin.deleteUser(userId),
+      created.user.id,
+    );
+    if (cleanup === "cleanup_pending") {
+      // Auth and Postgres cannot share a transaction. Record only the opaque
+      // Auth UUID for operator reconciliation; never log the submitted contact.
+      console.error("Student provisioning Auth cleanup pending", {
+        authUserId: created.user.id,
+      });
+      return json({ error: "student_registration_cleanup_pending" }, 500);
+    }
     return json({ error: "student_registration_failed" }, 422);
   }
 

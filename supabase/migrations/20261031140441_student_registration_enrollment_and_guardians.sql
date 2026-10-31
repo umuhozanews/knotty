@@ -71,7 +71,7 @@ begin
   insert into public.school_membership_roles(school_id,membership_id,person_id,role_key,assigned_by_membership_id,assigned_by_person_id,assigned_reason)
     values(p_school_id,v_membership_id,v_person_id,'STUDENT',v_actor.id,v_actor.person_id,'student account provisioned through authorized student registration');
   insert into public.student_records(school_id,person_id,auth_user_id,school_membership_id,admission_number,date_of_birth,gender,nationality,status,created_by_membership_id,created_by_person_id)
-    values(p_school_id,v_person_id,p_student_auth_user_id,btrim(p_admission_number),p_date_of_birth,nullif(btrim(p_gender),''),nullif(btrim(p_nationality),''),'pending',v_actor.id,v_actor.person_id)
+    values(p_school_id,v_person_id,p_student_auth_user_id,v_membership_id,btrim(p_admission_number),p_date_of_birth,nullif(btrim(p_gender),''),nullif(btrim(p_nationality),''),'pending',v_actor.id,v_actor.person_id)
     returning id into v_student_id;
   if (p_academic_year_id is null) <> (p_class_section_id is null) then raise exception 'academic year and class must be supplied together' using errcode='22023'; end if;
   if p_academic_year_id is not null then

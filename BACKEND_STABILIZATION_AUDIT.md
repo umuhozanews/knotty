@@ -110,4 +110,4 @@ Severity describes impact if the path is used. Items marked **blocked** cannot b
 
 ## Remediation status
 
-This audit was recorded before code changes. Backend remediation begins only after this document; the final report will append the specific fixes and commit hashes.
+This audit was recorded before code changes. First remediation batch corrects the confirmed registration column/value alignment defect in `register_student_from_edge` and adds a pgTAP workflow test for registration persistence, membership/role linkage, pending status and audit logging. The pgTAP suite could not be executed because the local database is unavailable at `127.0.0.1:54322`; its plan and assertion count were checked statically. Remaining findings and frontend-owned dependencies are not resolved by this batch.

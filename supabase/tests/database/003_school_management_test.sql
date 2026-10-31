@@ -1,6 +1,6 @@
 begin;
 
-select plan(37);
+select plan(36);
 
 select has_table('public', 'school_settings', 'school settings table exists');
 select has_table('public', 'academic_years', 'academic year table exists');

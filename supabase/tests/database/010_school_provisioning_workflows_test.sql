@@ -1,5 +1,5 @@
 begin;
-select plan(25);
+select plan(28);
 select has_table('public','school_operation_audit','school operation audit exists');
 select ok((select relrowsecurity and relforcerowsecurity from pg_class where oid='public.school_operation_audit'::regclass),'school audit enforces forced RLS');
 select ok(not has_table_privilege('authenticated','public.school_operation_audit','INSERT'),'browser cannot forge school audit rows');
@@ -50,6 +50,9 @@ reset role;
 set local role authenticated;
 set local request.jwt.claims='{"sub":"1a000000-0000-4000-8000-000000000001","role":"authenticated"}';
 select public.update_school_settings(current_setting('test.school_a')::uuid,'Africa/Kigali','rw-RW','RWF','CBC','08:00',1);
+select is((select timezone from public.school_settings where school_id=current_setting('test.school_a')::uuid),'Africa/Kigali','supported IANA time zone is accepted and persisted');
+select throws_ok($$select public.update_school_settings(current_setting('test.school_a')::uuid,'Mars/Olympus','rw-RW','RWF','CBC','08:00',1)$$,'22023',null,'unsupported time zone is rejected before settings are persisted');
+select is((select timezone from public.school_settings where school_id=current_setting('test.school_a')::uuid),'Africa/Kigali','invalid time zone leaves the prior setting unchanged');
 select ok(set_config('test.year_id',public.create_academic_year(current_setting('test.school_a')::uuid,'2026-2027','2026-09-01','2027-08-31')::text,true) is not null,'authorized school manager creates a draft academic year');
 select public.activate_academic_year(current_setting('test.school_a')::uuid,current_setting('test.year_id')::uuid);
 select is((select status from public.academic_years where id=current_setting('test.year_id')::uuid),'active','academic year activation is recorded');

@@ -34,3 +34,9 @@ postgres_log.txt
 !public/**/*.webp
 !public/**/*.svg
 uploads/
+
+# Supabase CLI local secrets, caches, branches and generated database data
+supabase/.branches/
+supabase/.temp/
+supabase/.env*
+supabase/pg_data/

@@ -6,7 +6,7 @@ select ok(not has_table_privilege('authenticated','public.teacher_assignments','
 select ok(not has_table_privilege('authenticated','public.class_subjects','INSERT'),'subject class links cannot be inserted directly');
 select ok(has_function_privilege('authenticated','public.assign_teacher(uuid,uuid,uuid,uuid,text,uuid,date)','EXECUTE'),'teacher assignment uses trusted RPC');
 select ok(has_function_privilege('authenticated','public.promote_student(uuid,uuid,uuid,uuid,uuid)','EXECUTE'),'promotion uses atomic trusted RPC');
-select has_index('public','student_enrollments_one_current_per_student','only one current enrollment per school student');
+select ok(exists(select 1 from pg_indexes where schemaname='public' and indexname='student_enrollments_one_current_per_student'),'only one current enrollment per school student');
 select throws_ok($$select public.create_subject('00000000-0000-4000-8000-000000000001','X','x','not_a_category')$$,'42501',null,'unauthorized subject creation is denied');
 select throws_ok($$select public.assign_subject_to_class('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000004')$$,'42501',null,'cross-school or unauthorized subject assignment is denied');
 select ok((select relrowsecurity and relforcerowsecurity from pg_class where oid='public.staff_records'::regclass),'staff records remain protected by forced RLS');

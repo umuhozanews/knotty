@@ -1,5 +1,5 @@
 begin;
-select plan(44);
+select plan(51);
 select ok(not has_table_privilege('authenticated','public.card_assignments','INSERT'),'cards cannot be issued by direct table writes');
 select ok(not has_table_privilege('authenticated','public.card_assignments','UPDATE'),'card lifecycle changes require audited functions');
 select ok(not has_table_privilege('authenticated','public.card_identifiers','SELECT'),'raw/card identifier digests are not exposed through Data API');
@@ -11,9 +11,9 @@ select ok(has_function_privilege('authenticated','public.change_card_status(uuid
 select ok(not has_function_privilege('authenticated','public.replace_card_from_edge(uuid,uuid,uuid,text,bytea,smallint,text)','EXECUTE'),'replacement identifier digest is accepted only from Edge Function');
 select ok(has_function_privilege('service_role','public.replace_card_from_edge(uuid,uuid,uuid,text,bytea,smallint,text)','EXECUTE'),'trusted card Edge Function can replace and hash identifiers');
 select ok(has_function_privilege('authenticated','public.list_school_cards(uuid)','EXECUTE'),'card inventory uses scoped safe projection RPC');
-select has_index('public','card_assignments_active_student_key','student cannot have duplicate active issued cards');
-select has_index('public','card_assignments_active_staff_key','staff cannot have duplicate active issued cards');
-select has_index('public','card_identifiers_school_id_identifier_kind_keyed_digest_key','same school cannot bind a digest twice per identifier kind');
+select ok(exists(select 1 from pg_indexes where schemaname='public' and indexname='card_assignments_active_student_key'),'student cannot have duplicate active issued cards');
+select ok(exists(select 1 from pg_indexes where schemaname='public' and indexname='card_assignments_active_staff_key'),'staff cannot have duplicate active issued cards');
+select ok(exists(select 1 from pg_indexes where schemaname='public' and indexname='card_identifiers_school_id_identifier_kind_keyed_digest_key'),'same school cannot bind a digest twice per identifier kind');
 select has_trigger('public','card_lifecycle_events','card_lifecycle_events_no_update_delete','card lifecycle events are append-only');
 select has_trigger('public','card_lifecycle_events','card_lifecycle_events_no_truncate','card lifecycle history cannot be truncated');
 select ok(exists(select 1 from pg_policies where schemaname='public' and tablename='card_lifecycle_events' and policyname='card_lifecycle_events_select_authorized'),'card history reads require school card permission');
@@ -42,7 +42,7 @@ values ('8e000000-0000-4000-8000-000000000001','4e000000-0000-4000-8000-00000000
 
 set local role service_role;
 select ok(set_config('test.lifecycle_card_id',public.issue_card_from_edge(
- '1e000000-0000-4000-8000-000000000001','4e000000-0000-4000-8000-000000000001','student','8e000000-0000-4000-8000-000000000001',null,'nfc_uid',decode(repeat('ab',32),'hex'),1
+ '1e000000-0000-4000-8000-000000000001','4e000000-0000-4000-8000-000000000001','student','8e000000-0000-4000-8000-000000000001',null::uuid,'nfc_uid',decode(repeat('ab',32),'hex'),1::smallint
 )::text,true) is not null,'trusted card issue creates a card assignment and protected identifier');
 reset role;
 
@@ -62,22 +62,30 @@ set local role service_role;
 select ok(set_config('test.accepted_scan_id',public.process_attendance_scan(
  '4e000000-0000-4000-8000-000000000001',current_setting('test.attendance_device_id')::uuid,decode(repeat('cd',32),'hex'),decode(repeat('ab',32),'hex'),'9e000000-0000-4000-8000-000000000001','in'
 )::text,true) is not null,'authorized active device accepts an active student card scan');
+reset role;
 select is((select outcome from public.get_attendance_scan_outcome(current_setting('test.accepted_scan_id')::uuid)),'accepted','accepted scan outcome is returned by the bounded contract');
 select ok(exists(select 1 from public.attendance_scan_events where id=current_setting('test.accepted_scan_id')::uuid and attendance_record_id is not null),'accepted scan creates and links an attendance record');
+set local role service_role;
 select is(public.process_attendance_scan(
  '4e000000-0000-4000-8000-000000000001',current_setting('test.attendance_device_id')::uuid,decode(repeat('cd',32),'hex'),decode(repeat('ab',32),'hex'),'9e000000-0000-4000-8000-000000000001','in'
 )::text,current_setting('test.accepted_scan_id'),'retrying an idempotency key returns the original event');
+reset role;
 select is((select count(*)::integer from public.attendance_scan_events where school_id='4e000000-0000-4000-8000-000000000001' and idempotency_key='9e000000-0000-4000-8000-000000000001'),1,'idempotent retry does not append a second scan event');
+set local role service_role;
 select ok(set_config('test.duplicate_scan_id',public.process_attendance_scan(
  '4e000000-0000-4000-8000-000000000001',current_setting('test.attendance_device_id')::uuid,decode(repeat('cd',32),'hex'),decode(repeat('ab',32),'hex'),'9e000000-0000-4000-8000-000000000002','in'
 )::text,true) is not null,'new scan key is processed for an already-attended student');
+reset role;
 select is((select outcome from public.get_attendance_scan_outcome(current_setting('test.duplicate_scan_id')::uuid)),'duplicate','repeat arrival is classified as duplicate');
 select is((select count(*)::integer from public.attendance_records where school_id='4e000000-0000-4000-8000-000000000001' and student_id='8e000000-0000-4000-8000-000000000001'),1,'duplicate scan does not duplicate attendance rows');
+set local role service_role;
 select ok(set_config('test.rejected_scan_id',public.process_attendance_scan(
  '4e000000-0000-4000-8000-000000000001',current_setting('test.attendance_device_id')::uuid,decode(repeat('cd',32),'hex'),decode(repeat('ef',32),'hex'),'9e000000-0000-4000-8000-000000000003','in'
 )::text,true) is not null,'valid device with unknown identifier is recorded as rejected');
+reset role;
 select is((select outcome from public.get_attendance_scan_outcome(current_setting('test.rejected_scan_id')::uuid)),'rejected','unknown card has rejected outcome');
 select is((select rejection_code from public.get_attendance_scan_outcome(current_setting('test.rejected_scan_id')::uuid)),'unknown_card','rejection response has a bounded code');
+set local role service_role;
 select throws_ok($$select public.process_attendance_scan('4e000000-0000-4000-8000-000000000001',current_setting('test.attendance_device_id')::uuid,decode(repeat('00',32),'hex'),decode(repeat('ab',32),'hex'),'9e000000-0000-4000-8000-000000000004','in')$$,'42501',null,'incorrect device credential digest is rejected');
 select ok(has_function_privilege('service_role','public.get_attendance_scan_outcome(uuid)','EXECUTE') and not has_function_privilege('authenticated','public.get_attendance_scan_outcome(uuid)','EXECUTE'),'scan outcome lookup remains server-only');
 reset role;
@@ -102,5 +110,18 @@ select ok(set_config('test.wrong_school_scan_id',public.process_attendance_scan(
 )::text,true) is not null,'device request with a different school is recorded under the device school');
 select is((select rejection_code from public.get_attendance_scan_outcome(current_setting('test.wrong_school_scan_id')::uuid)),'school_scope_mismatch','scan cannot cross the registered device school scope');
 reset role;
+
+set local role service_role;
+select ok(set_config('test.replacement_card_id',public.replace_card_from_edge(
+ '1e000000-0000-4000-8000-000000000001','4e000000-0000-4000-8000-000000000001',current_setting('test.lifecycle_card_id')::uuid,
+ 'nfc_uid',decode(repeat('ff',32),'hex'),1::smallint,'replace suspended card after device test'
+)::text,true) is not null,'trusted card replacement creates a replacement assignment');
+reset role;
+select is((select status from public.card_assignments where id=current_setting('test.lifecycle_card_id')::uuid),'replaced','replacement retires the prior card assignment');
+select is((select replacement_card_id from public.card_assignments where id=current_setting('test.lifecycle_card_id')::uuid),current_setting('test.replacement_card_id')::uuid,'prior card points to its replacement');
+select is((select status from public.card_assignments where id=current_setting('test.replacement_card_id')::uuid),'issued','replacement card starts issued');
+select ok(exists(select 1 from public.card_lifecycle_events where card_assignment_id=current_setting('test.lifecycle_card_id')::uuid and event_type='replaced') and exists(select 1 from public.card_lifecycle_events where card_assignment_id=current_setting('test.replacement_card_id')::uuid and event_type='issued'),'replacement appends lifecycle history for both cards');
+select ok(exists(select 1 from public.card_identifiers where card_assignment_id=current_setting('test.replacement_card_id')::uuid and identifier_kind='nfc_uid' and keyed_digest=decode(repeat('ff',32),'hex') and status='active'),'replacement stores the new keyed identifier digest');
+select ok(exists(select 1 from public.school_operation_audit where entity_type='card' and entity_id=current_setting('test.lifecycle_card_id')::uuid and event_type='card_replaced'),'replacement appends a school audit event');
 select * from finish();
 rollback;

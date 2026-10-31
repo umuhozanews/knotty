@@ -15,7 +15,7 @@ select ok(not has_table_privilege('authenticated','public.student_documents','IN
 select ok((select relrowsecurity and relforcerowsecurity from pg_class where oid='public.guardian_relationships'::regclass),'guardian relationship RLS remains forced');
 select ok((select relrowsecurity and relforcerowsecurity from pg_class where oid='public.student_records'::regclass),'student record RLS remains forced');
 select has_column('public','guardian_relationships','guardian_school_membership_id','active guardian relationship ties to exact school membership');
-select has_index('public','guardian_relationship_one_active_per_pair','only one active guardian link for each student/guardian pair');
+select ok(exists(select 1 from pg_indexes where schemaname='public' and indexname='guardian_relationship_one_active_per_pair'),'only one active guardian link for each student/guardian pair');
 
 -- Exercise the trusted registration write path. This catches column/value
 -- misalignment that catalog and privilege assertions cannot detect.
@@ -60,12 +60,14 @@ set local role authenticated;
 set local request.jwt.claims='{"sub":"1b000000-0000-4000-8000-000000000003","role":"authenticated"}';
 select public.accept_guardian_link_request(current_setting('test.guardian_request_id')::uuid,decode(repeat('ab',32),'hex'));
 select is((select status from public.guardian_link_requests where id=current_setting('test.guardian_request_id')::uuid),'identity_verified','verified guardian claims the invitation under their own Auth identity');
+reset role;
 select is((select count(*)::integer from public.guardian_link_audit where request_id=current_setting('test.guardian_request_id')::uuid and event_type='identity_verified'),1,'guardian identity verification is audited');
 reset role;
 
 set local role authenticated;
 set local request.jwt.claims='{"sub":"1b000000-0000-4000-8000-000000000001","role":"authenticated"}';
 select ok(set_config('test.guardian_relationship_id',public.approve_guardian_link_request(current_setting('test.guardian_request_id')::uuid,'identity verified in workflow test')::text,true) is not null,'authorized manager approves the identity-verified guardian relationship');
+reset role;
 select is((select status from public.guardian_relationships where id=current_setting('test.guardian_relationship_id')::uuid),'active','guardian approval activates the relationship');
 select ok(exists(select 1 from public.guardian_relationships gr join public.school_memberships sm on sm.school_id=gr.school_id and sm.id=gr.guardian_school_membership_id and sm.person_id=gr.guardian_person_id where gr.id=current_setting('test.guardian_relationship_id')::uuid and sm.status='active'),'approved guardian relationship is bound to its active school membership');
 select is((select status from public.guardian_link_requests where id=current_setting('test.guardian_request_id')::uuid),'activated','approval advances the invitation to activated');

@@ -1,7 +1,8 @@
 # Built-in role and permission matrix
 
 This matrix documents the built-in grants seeded by
-`20261031135147_seed_scoped_permissions_and_role_workflows.sql`. It is based on
+`20261031135147_seed_scoped_permissions_and_role_workflows.sql` and the
+`attendance.devices.manage` addition in `20261031141234_trusted_attendance_workflows.sql`. It is based on
 legacy Express `authorize(...)` route lists and the `authorize('ADMIN')`
 manager shortcut, with tenant and sensitive-data boundaries made explicit.
 Role names are case-sensitive canonical keys.
@@ -41,7 +42,7 @@ discipline, attendance or card records.
 
 | Role | Exact permission keys |
 |---|---|
-| `SCHOOL_MANAGER`, `ADMIN` | Every key in the `school` scope catalog at this migration, including `roles.assign`, sensitive health/discipline/report access, finance management/refunds, and school configuration. This mirrors the legacy ADMIN route bypass only within one school. |
+| `SCHOOL_MANAGER`, `ADMIN` | Every key in the `school` scope catalog at the permission-seed migration, plus `attendance.devices.manage`; includes `roles.assign`, sensitive health/discipline/report access, finance management/refunds, and school configuration. This mirrors the legacy ADMIN route bypass only within one school. |
 | `TEACHER` | `schools.read`, `students.read`, `students.create`, `students.update`, `students.read_sensitive`, `staff.read`, `academics.read`, `academics.assessments.manage`, `attendance.read`, `attendance.record`, `attendance.staff.read`, `cards.read`, `cards.issue`, `reports.read`, `reports.read_sensitive`, `reports.manage`, `discipline.read`, `discipline.manage`, `gate.read`, `library.read`, `library.manage`, `materials.read`, `materials.manage`, `canteen.read`, `canteen.transactions.read`, `health.read_summary` |
 | `STUDENT` | `students.read_self`, `attendance.read_self`, `reports.read`, `reports.read_sensitive`, `cards.read_self`, `finance.read_self`, `academics.read`, `library.read`, `canteen.read`, `materials.read` |
 | `PARENT` | `reports.read`, `finance.read_self`, `academics.read`, `library.read`, `canteen.read`. Child data access additionally needs the exact guardian permission row. |
@@ -56,6 +57,7 @@ discipline, attendance or card records.
 | Permission | Seeded roles | Additional mandatory check |
 |---|---|---|
 | `students.read_sensitive` | `SCHOOL_MANAGER`, `ADMIN`, `TEACHER` | Same-school and object relationship; teacher class assignment for scoped student records. |
+| `attendance.devices.manage` | `SCHOOL_MANAGER`, `ADMIN` | School scope; credential digest is never returned from read APIs; only the device-authenticated Edge Function can submit scans. |
 | `reports.read_sensitive` | `SCHOOL_MANAGER`, `ADMIN`, `TEACHER`, `STUDENT` | Student self or teacher assignment; parent access only through guardian `reports.read`. |
 | `finance.read`, `finance.manage`, `finance.refund` | `SCHOOL_MANAGER`, `ADMIN`, `BURSAR` | Same-school record checks; refund requires separate atomic financial workflow. |
 | `health.read_sensitive`, `health.manage` | `SCHOOL_MANAGER`, `ADMIN`, `NURSE` | Same school and health-record authorization. |

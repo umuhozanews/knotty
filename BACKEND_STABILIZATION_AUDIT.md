@@ -123,4 +123,6 @@ This audit was recorded before code changes. Batch 1 corrected the confirmed reg
 
 The architecture proposal for Supabase Auth and existing Express account linking is recorded separately in `SUPABASE_IDENTITY_MIGRATION_PROPOSAL.md` and committed as `17bc400`. No identity migration or frontend change was implemented.
 
+Batch 2 is committed in `bd9c148cb21d92c83fbffc815d005d88ff9bbf22` (timezone integrity and pgTAP behavior coverage) and `f68396e82519a06cee1f0801c408988d6edd9194` (scan Edge CORS/outcome contract and pinned Deno dependencies).
+
 Remaining audit items include AUTH-01 and AUTH-04 (frontend Supabase session and student activation integration), AUTH-02/AUTH-03 (legacy PostgreSQL TLS and CORS), DB-03/DB-06 (frontend card type and student-detail contract), API-01 through API-03 (legacy API routing and workflow ownership), TEST-01 (frontend testing-center false positives), incomplete coverage within TEST-02/TEST-03, ARCH-01 (dual-stack cutover), TIME-01, and PERF-01. Migration and pgTAP runtime verification remains blocked by the unavailable local database. The identity proposal is not an implementation or production migration approval.

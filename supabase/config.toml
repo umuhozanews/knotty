@@ -382,6 +382,13 @@ inspector_port = 8083
 # The Deno major version to use.
 deno_version = 2
 
+# Device scans use a high-entropy device credential validated by the function
+# and stored as a digest; they do not use end-user Supabase JWTs. The function
+# still authenticates the device and validates its school scope before its
+# service-role-only database RPC. All user-facing functions verify JWTs.
+[functions.process-attendance-scan]
+verify_jwt = false
+
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 

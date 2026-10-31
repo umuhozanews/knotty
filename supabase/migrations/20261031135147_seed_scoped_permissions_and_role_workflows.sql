@@ -339,13 +339,12 @@ grant execute on function public.list_scoped_role_assignments(text,uuid) to auth
 -- Only manager roles delegate. School Admin cannot promote another person to
 -- Admin/School Manager; organization/platform powers remain in their scope.
 insert into private.delegable_roles (scope,delegator_role_key,delegate_role_key)
-select 'school','SCHOOL_MANAGER',role_key from private.role_definitions where scope='school'
+select 'school','SCHOOL_MANAGER',role_key from private.role_definitions
+where scope='school' and role_key <> 'SCHOOL_MANAGER'
 on conflict do nothing;
 insert into private.delegable_roles (scope,delegator_role_key,delegate_role_key) values
  ('school','ADMIN','TEACHER'),('school','ADMIN','STUDENT'),('school','ADMIN','PARENT'),('school','ADMIN','BURSAR'),
- ('school','ADMIN','NURSE'),('school','ADMIN','DISCIPLINE'),('school','ADMIN','LIBRARIAN'),('school','ADMIN','CANTEEN'),
- ('organization','ORGANIZATION_MANAGER','ORGANIZATION_MANAGER'),
- ('platform','PLATFORM_ADMIN','PLATFORM_ADMIN')
+ ('school','ADMIN','NURSE'),('school','ADMIN','DISCIPLINE'),('school','ADMIN','LIBRARIAN'),('school','ADMIN','CANTEEN')
 on conflict do nothing;
 
 -- Raw authenticated selects on student_records are intentionally not widened:

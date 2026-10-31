@@ -1,5 +1,5 @@
 begin;
-select plan(28);
+select plan(30);
 select has_table('private','role_definitions','built-in role definitions exist');
 select has_table('private','permission_catalog','granular permission catalog exists');
 select ok((select count(*)=1 from private.role_definitions where scope='platform' and role_key='PLATFORM_ADMIN'),'platform role remains platform scoped');
@@ -12,6 +12,8 @@ select ok(not exists(select 1 from private.role_permissions where scope='school'
 select ok(exists(select 1 from private.role_permissions where scope='school' and role_key='NURSE' and permission_key='health.read_sensitive'),'nurse receives medical access only through its role');
 select ok(exists(select 1 from private.delegable_roles where scope='school' and delegator_role_key='ADMIN' and delegate_role_key='TEACHER'),'school admin can delegate an approved staff role');
 select ok(not exists(select 1 from private.delegable_roles where scope='school' and delegator_role_key='ADMIN' and delegate_role_key in ('ADMIN','SCHOOL_MANAGER')),'school admin cannot promote to manager or peer admin');
+select ok(exists(select 1 from private.delegable_roles where scope='school' and delegator_role_key='SCHOOL_MANAGER' and delegate_role_key='TEACHER'),'school manager retains legitimate staff delegation');
+select ok(not exists(select 1 from private.delegable_roles where delegator_role_key=delegate_role_key),'seeded delegation edges never grant self-delegation');
 select ok(not has_function_privilege('anon','public.assign_scoped_role(text,uuid,uuid,text,text)','EXECUTE'),'anonymous caller cannot assign roles');
 select ok(not has_table_privilege('authenticated','public.school_membership_roles','INSERT'),'browser cannot write role assignment rows');
 select ok(not has_table_privilege('service_role','public.school_membership_roles','INSERT'),'service role has no direct role assignment write grant');

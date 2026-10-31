@@ -1,6 +1,6 @@
 begin;
 
-select plan(53);
+select plan(54);
 
 select has_table('private', 'role_definitions', 'private role definitions table exists');
 select has_table('private', 'permission_catalog', 'private permission catalog exists');
@@ -68,6 +68,7 @@ insert into private.delegable_roles (scope, delegator_role_key, delegate_role_ke
 
 select is((select count(*)::integer from private.role_permissions), 3, 'same-scope role permission mappings are accepted');
 select is((select count(*)::integer from private.delegable_roles), 1, 'same-scope delegation mapping is accepted');
+select throws_ok($$insert into private.delegable_roles (scope, delegator_role_key, delegate_role_key) values ('school', 'TEST_SCHOOL_ROLE', 'TEST_SCHOOL_ROLE')$$, '23514', null, 'self-delegation is rejected by the check constraint');
 select throws_ok($$insert into private.role_permissions (scope, role_key, permission_key) values ('school', 'TEST_ORG_ROLE', 'test.school.permission')$$, '23503', null, 'role from another scope cannot receive a permission');
 select throws_ok($$insert into private.role_permissions (scope, role_key, permission_key) values ('school', 'TEST_SCHOOL_ROLE', 'test.organization.permission')$$, '23503', null, 'permission from another scope cannot be attached to a role');
 select throws_ok($$insert into private.delegable_roles (scope, delegator_role_key, delegate_role_key) values ('school', 'TEST_SCHOOL_ROLE', 'TEST_ORG_ROLE')$$, '23503', null, 'delegation cannot cross role scopes');

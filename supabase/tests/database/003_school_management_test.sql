@@ -48,7 +48,7 @@ insert into public.school_calendar_events (school_id, academic_year_id, academic
  ('42000000-0000-4000-8000-000000000001', '82000000-0000-4000-8000-000000000001', null, 'Guardian meeting', 'meeting', 'guardians', timestamptz '2026-02-05 07:00:00+02', timestamptz '2026-02-05 08:00:00+02', '72000000-0000-4000-8000-000000000001', '22000000-0000-4000-8000-000000000001'),
  ('42000000-0000-4000-8000-000000000002', '82000000-0000-4000-8000-000000000002', '92000000-0000-4000-8000-000000000002', 'Term opening', 'activity', 'school', timestamptz '2026-01-05 07:00:00+02', timestamptz '2026-01-05 18:00:00+02', '72000000-0000-4000-8000-000000000002', '22000000-0000-4000-8000-000000000002');
 
-select is((select count(*)::integer from public.school_settings), 2, 'one settings profile can exist per school');
+select is((select count(*)::integer from public.school_settings where school_id in ('42000000-0000-4000-8000-000000000001','42000000-0000-4000-8000-000000000002')), 2, 'one settings profile can exist per school');
 select is((select count(*)::integer from public.academic_years where status = 'active'), 2, 'different schools can each activate their academic year');
 select is((select count(*)::integer from public.academic_terms where school_id = '42000000-0000-4000-8000-000000000001'), 1, 'school academic term can be linked to its academic year');
 select is((select count(*)::integer from public.school_calendar_events where academic_term_id is not null), 2, 'calendar events can reference scoped academic terms');

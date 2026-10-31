@@ -57,7 +57,7 @@ values ('64000000-0000-4000-8000-000000000001', '44000000-0000-4000-8000-0000000
 insert into public.guardian_link_audit (school_id, student_id, actor_membership_id, actor_person_id, event_type)
 values ('44000000-0000-4000-8000-000000000001', '84000000-0000-4000-8000-000000000001', '74000000-0000-4000-8000-000000000001', '24000000-0000-4000-8000-000000000001', 'invitation_created');
 
-select is((select count(*)::integer from public.student_records where status = 'active'), 2, 'student records are linked to Auth identities');
+select is((select count(*)::integer from public.student_records where id in ('84000000-0000-4000-8000-000000000001','84000000-0000-4000-8000-000000000002') and status = 'active'), 2, 'student records are linked to Auth identities');
 select is((select email::text from auth.users where id = '14000000-0000-4000-8000-000000000001'), null::text, 'student account does not require an email address');
 select is((select count(*)::integer from public.guardian_relationships where student_id = '84000000-0000-4000-8000-000000000001' and status = 'active'), 2, 'a student may have multiple active guardians');
 select is((select count(*)::integer from public.guardian_link_requests where status = 'invited'), 1, 'invitation request stores only hashed invite material');

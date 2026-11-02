@@ -6,7 +6,7 @@ const { authorize } = require('../../middleware/rbac');
 router.use(authenticate);
 
 // Student lookup — accepts card_number, NFC UID, or student_code
-router.get('/student-lookup', authorize('ADMIN', 'LIBRARIAN', 'TEACHER', 'BURSAR', 'DISCIPLINE', 'STUDENT'), ctrl.lookupStudent);
+router.get('/student-lookup', authorize('ADMIN', 'LIBRARIAN', 'TEACHER', 'BURSAR', 'DISCIPLINE'), ctrl.lookupStudent);
 
 // Books Catalog
 router.get('/books', authorize('ADMIN', 'LIBRARIAN', 'TEACHER', 'STUDENT', 'PARENT', 'BURSAR', 'DISCIPLINE', 'NURSE', 'CANTEEN'), ctrl.listBooks);

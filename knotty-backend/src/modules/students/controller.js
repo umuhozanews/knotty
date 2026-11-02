@@ -65,6 +65,12 @@ async function getOne(req, res, next) {
       }
     }
     const student = await service.getStudentById(req.params.id, req.user.school_id);
+    if (req.user.role === 'STUDENT' && student.user_id !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Access denied: You can only view your own profile.' });
+    }
+    if (req.user.role === 'PARENT' && student.parent_id !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Access denied: You can only view your own child\'s profile.' });
+    }
     res.json({ success: true, data: student });
   } catch (err) { next(err); }
 }
@@ -159,6 +165,19 @@ async function parentChildren(req, res, next) {
 
 async function listConsent(req, res, next) {
   try {
+    const prisma = require('../../config/database');
+    const student = await prisma.student.findFirst({
+      where: { id: req.params.id, school_id: req.user.school_id }
+    });
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student not found.' });
+    }
+    if (req.user.role === 'STUDENT' && student.user_id !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Access denied: You can only view your own consent records.' });
+    }
+    if (req.user.role === 'PARENT' && student.parent_id !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Access denied: You can only view your own child\'s consent records.' });
+    }
     if (req.user.role === 'TEACHER') {
       const hasAccess = await verifyTeacherStudentAccess(req.user.id, req.params.id, req.user.school_id);
       if (!hasAccess) {
@@ -172,6 +191,15 @@ async function listConsent(req, res, next) {
 
 async function recordConsent(req, res, next) {
   try {
+    if (req.user.role === 'PARENT') {
+      const prisma = require('../../config/database');
+      const student = await prisma.student.findFirst({
+        where: { id: req.params.id, school_id: req.user.school_id }
+      });
+      if (!student || student.parent_id !== req.user.id) {
+        return res.status(403).json({ success: false, message: 'Access denied: You can only record consent for your own child.' });
+      }
+    }
     const result = await service.recordConsent(req.user.school_id, req.params.id, req.body);
     res.status(201).json({ success: true, data: result });
   } catch (err) { next(err); }

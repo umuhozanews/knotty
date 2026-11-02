@@ -203,7 +203,12 @@ async function saveGradingScale(req, res, next) {
 // Exam Results
 async function listExamResults(req, res, next) {
   try {
-    const result = await service.listExamResults(req.user.school_id, req.params.examId);
+    let result = await service.listExamResults(req.user.school_id, req.params.examId);
+    if (req.user.role === 'STUDENT') {
+      result = result.filter(r => r.student && r.student.user_id === req.user.id);
+    } else if (req.user.role === 'PARENT') {
+      result = result.filter(r => r.student && r.student.parent_id === req.user.id);
+    }
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }

@@ -23,7 +23,7 @@ router.delete('/programs/:id', authorize('ADMIN'), ctrl.deleteProgram);
 // Class Sections
 router.get('/sections', authorize('ADMIN', 'TEACHER', 'STUDENT', 'PARENT'), ctrl.listSections);
 router.post('/sections', authorize('ADMIN'), ctrl.createSection);
-router.get('/sections/:id', authorize('ADMIN', 'TEACHER', 'STUDENT', 'PARENT'), ctrl.getSectionDetails);
+router.get('/sections/:id', authorize('ADMIN', 'TEACHER'), ctrl.getSectionDetails);
 
 // Enrollments
 router.post('/enroll', authorize('ADMIN'), ctrl.enroll);

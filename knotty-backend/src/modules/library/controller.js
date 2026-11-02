@@ -172,7 +172,21 @@ async function listMembers(req, res, next) {
 
 async function getMemberDetail(req, res, next) {
   try {
-    const result = await service.getMemberDetail(req.params.studentId, req.user.school_id);
+    const { studentId } = req.params;
+    if (req.user.role === 'STUDENT') {
+      const prisma = require('../../config/database');
+      const student = await prisma.student.findFirst({
+        where: { id: studentId, user_id: req.user.id, school_id: req.user.school_id },
+      });
+      if (!student) return res.status(403).json({ success: false, message: 'Access denied' });
+    } else if (req.user.role === 'PARENT') {
+      const prisma = require('../../config/database');
+      const student = await prisma.student.findFirst({
+        where: { id: studentId, school_id: req.user.school_id, parent_id: req.user.id },
+      });
+      if (!student) return res.status(403).json({ success: false, message: 'Access denied: not your child' });
+    }
+    const result = await service.getMemberDetail(studentId, req.user.school_id);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }

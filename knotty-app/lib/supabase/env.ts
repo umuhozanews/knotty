@@ -31,11 +31,11 @@ function isServiceRoleJwt(key: string): boolean {
 }
 
 export function checkSupabaseConfiguration(
-  env: SupabaseEnvironment = process.env,
+  overrideEnv?: SupabaseEnvironment,
 ): SupabaseConfigCheck {
-  const url = env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "";
-  const publishableKey = env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ?? "";
-  const legacyAnonKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? "";
+  const url = (overrideEnv?.NEXT_PUBLIC_SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL)?.trim() ?? "";
+  const publishableKey = (overrideEnv?.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)?.trim() ?? "";
+  const legacyAnonKey = (overrideEnv?.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)?.trim() ?? "";
   const key = publishableKey || legacyAnonKey;
   const keySource = publishableKey
     ? "publishable"
@@ -81,20 +81,22 @@ export function checkSupabaseConfiguration(
 }
 
 export function getSupabasePublicConfig(
-  env: SupabaseEnvironment = process.env,
+  overrideEnv?: SupabaseEnvironment,
 ): SupabasePublicConfig {
-  const check = checkSupabaseConfiguration(env);
+  const check = checkSupabaseConfiguration(overrideEnv);
   if (!check.configured || !check.keySource) {
     const details = [...check.missing, ...check.errors].join(" ");
     throw new Error(`Supabase public configuration is invalid. ${details}`);
   }
 
+  const url = (overrideEnv?.NEXT_PUBLIC_SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL)!.trim();
+  const key = check.keySource === "publishable"
+    ? (overrideEnv?.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)!.trim()
+    : (overrideEnv?.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)!.trim();
+
   return {
-    url: env.NEXT_PUBLIC_SUPABASE_URL!.trim(),
-    key:
-      check.keySource === "publishable"
-        ? env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!.trim()
-        : env.NEXT_PUBLIC_SUPABASE_ANON_KEY!.trim(),
+    url,
+    key,
     keySource: check.keySource,
   };
 }

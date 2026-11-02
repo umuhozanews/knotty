@@ -1,7 +1,7 @@
 "use client";
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
 import { auth, multiSchool, LoginResponse, SchoolItem } from "@/lib/api";
-import { DEMO_ACCOUNTS, DEMO_SCHOOL_ID, getAllDemoAccounts } from "@/lib/demo";
+import { DEMO_SCHOOL_ID } from "@/lib/demo";
 import { isSupabaseConfigured, getSafeBrowserClient } from "@/lib/supabase/client";
 
 type User = LoginResponse["user"];
@@ -85,7 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user?.school_id]);
 
   useEffect(() => {
-    const saved = localStorage.getItem("ishuri_user") || localStorage.getItem("ishuri_demo_user") || localStorage.getItem("knotty_demo_user");
+    const saved = localStorage.getItem("ishuri_user");
     if (saved) {
       try {
         const u = JSON.parse(saved) as User;
@@ -294,39 +294,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(res.user);
       fetchSchools(res.user.school_id);
     } catch (err) {
-      // 3. Offline demonstration persona fallback is strictly development-only
-      const isAllowedOfflineEnv =
-        process.env.NODE_ENV === "development" &&
-        process.env.NEXT_PUBLIC_APP_ENV !== "staging" &&
-        process.env.NEXT_PUBLIC_APP_ENV !== "production";
-
-      if (isAllowedOfflineEnv) {
-        const allDemo = getAllDemoAccounts();
-        const demo = allDemo.find((a) => a.email.toLowerCase() === normEmail);
-
-        if (demo && demo.password === password) {
-          console.warn("Using offline demo persona (development only):", normEmail);
-          const targetSchoolId = demo.school_id || DEMO_SCHOOL_ID;
-          const loggedUser: User = {
-            id: `usr-${demo.role.toLowerCase()}-${demo.school_code?.toLowerCase() || 'kms'}`,
-            role: demo.role,
-            school_id: targetSchoolId,
-            first_name: demo.first_name,
-            last_name: demo.last_name,
-            email: demo.email,
-            profile_photo: null,
-          };
-          localStorage.setItem("ishuri_user", JSON.stringify(loggedUser));
-          localStorage.setItem("ishuri_demo_user", JSON.stringify(loggedUser));
-          setUser(loggedUser);
-          fetchSchools(targetSchoolId);
-          return;
-        }
-      }
-
-      // DO NOT fabricate sessions or elevate arbitrary credentials to ADMIN
       console.error("Authentication failed:", err);
-      throw err instanceof Error ? err : new Error("Authentication failed: invalid credentials or service unreachable.");
+      throw new Error("Invalid email or password. Please check your credentials.");
     }
   }, [fetchSchools]);
 
@@ -343,10 +312,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ? `${window.location.origin}/auth/callback`
       : undefined;
 
-    const { error } = await client.auth.signInWithOAuth({
+    const { data, error } = await client.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo,
+        skipBrowserRedirect: true,
         queryParams: {
           access_type: "offline",
           prompt: "consent",
@@ -356,6 +326,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (error) {
       throw error;
+    }
+
+    if (data?.url) {
+      try {
+        const check = await fetch(data.url, { method: "GET", redirect: "manual" });
+        if (check.status === 400) {
+          const body = await check.json().catch(() => null);
+          if (body?.msg?.includes("not enabled") || body?.error_code === "validation_failed") {
+            throw new Error("Google Sign-In is not enabled yet in this Supabase project. Please configure Google OAuth Client ID & Secret in Supabase, or sign in with email and password.");
+          }
+        }
+      } catch (checkErr) {
+        if (checkErr instanceof Error && checkErr.message.includes("Google Sign-In is not enabled")) {
+          throw checkErr;
+        }
+      }
+
+      if (typeof window !== "undefined") {
+        window.location.href = data.url;
+      }
     }
   }, []);
 

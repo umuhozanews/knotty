@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import { multiSchool, SchoolItem } from "@/lib/api";
+import { supabaseSchoolService } from "@/lib/supabase/services";
+import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 
@@ -48,9 +50,29 @@ function NewSchoolModal({
     setSaving(true);
     setError("");
     try {
+      const generatedCode = code.trim().toUpperCase() || name.trim().slice(0, 4).toUpperCase();
+      if (isSupabaseConfigured()) {
+        try {
+          await supabaseSchoolService.provisionSchool({
+            organizationId: "00000000-0000-0000-0000-000000000001",
+            name: name.trim(),
+            code: generatedCode,
+            email: email.trim().toLowerCase(),
+            phone: phone.trim() || undefined,
+            address: address.trim() || undefined,
+          });
+          show("School node provisioned securely via Supabase RPC!", "success");
+          onSuccess();
+          onClose();
+          return;
+        } catch (supaErr) {
+          console.warn("Supabase provision_school fallback:", supaErr);
+        }
+      }
+
       await multiSchool.create({
         name: name.trim(),
-        code: code.trim().toUpperCase() || undefined,
+        code: generatedCode,
         email: email.trim().toLowerCase(),
         phone: phone.trim() || undefined,
         address: address.trim() || undefined,

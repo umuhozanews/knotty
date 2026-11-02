@@ -3,10 +3,12 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, Plus, Loader2, CreditCard, User, Trash2, Edit2,
-  ChevronRight, Users, UserCheck, AlertCircle, X, Eye, EyeOff
+  ChevronRight, Users, UserCheck, AlertCircle, X, Eye, EyeOff, ShieldCheck
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import { students, structure, cards, health, Level, Class, Student } from "@/lib/api";
+import { supabaseStudentService } from "@/lib/supabase/services";
+import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 import { getStoredStudents } from "@/lib/demo";
@@ -547,10 +549,10 @@ function DeleteConfirm({ student, onClose, onConfirm, loading }: { student: Stud
 }
 
 // ─── Student Row ──────────────────────────────────────────────────────────────
-function StudentRow({ s, idx, onEdit, onDelete, onIssue, issuing, isClassTeacher }: {
+function StudentRow({ s, idx, onEdit, onDelete, onIssue, onStatus, issuing, isClassTeacher }: {
   s: Student; idx: number;
   onEdit: () => void; onDelete: () => void;
-  onIssue: () => void; issuing: boolean;
+  onIssue: () => void; onStatus?: () => void; issuing: boolean;
   isClassTeacher: boolean;
 }) {
   const router = useRouter();
@@ -600,6 +602,11 @@ function StudentRow({ s, idx, onEdit, onDelete, onIssue, issuing, isClassTeacher
             {issuing ? <Loader2 size={11} className="animate-spin" /> : <CreditCard size={11} />}
           </button>
         )}
+        {isManagementRole(user?.role) && onStatus && (
+          <button onClick={onStatus} title="Update Lifecycle Status" className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 transition">
+            <ShieldCheck size={12} />
+          </button>
+        )}
         {(isManagementRole(user?.role) || (user?.role === "TEACHER" && isClassTeacher)) && (
           <button onClick={onEdit} title="Edit" className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 transition">
             <Edit2 size={12} />
@@ -619,6 +626,116 @@ function StudentRow({ s, idx, onEdit, onDelete, onIssue, issuing, isClassTeacher
   );
 }
 
+// ─── Modal: Change Student Lifecycle Status ────────────────────────────────────
+function ChangeStudentStatusModal({
+  schoolId,
+  student,
+  onClose,
+  onSuccess,
+}: {
+  schoolId: string;
+  student: Student;
+  onClose: () => void;
+  onSuccess: (msg: string) => void;
+}) {
+  const [status, setStatus] = useState<"withdrawn" | "graduated" | "inactive" | "transferred">("withdrawn");
+  const [reason, setReason] = useState("Administrative graduation / transfer review");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (reason.trim().length < 3) {
+      setError("An audit reason of at least 3 characters is required.");
+      return;
+    }
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(student.id) || !uuidRegex.test(schoolId)) {
+      setError("This student was loaded from legacy storage and lacks a valid Supabase UUID.");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    try {
+      if (isSupabaseConfigured()) {
+        await supabaseStudentService.changeStudentStatus(schoolId, student.id, status, reason.trim());
+        onSuccess(`Status updated to ${status} for ${student.user.first_name} ${student.user.last_name}`);
+        onClose();
+        return;
+      }
+      onSuccess(`Status updated to ${status} for ${student.user.first_name}`);
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || "Failed changing student status");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm p-6 border border-gray-100 dark:border-gray-800">
+        <h3 className="font-bold text-gray-800 dark:text-gray-100 text-base mb-1">Update Student Lifecycle Status</h3>
+        <p className="text-xs text-gray-400 mb-4">
+          Student: <span className="font-semibold text-gray-700 dark:text-gray-300">{student.user.first_name} {student.user.last_name}</span> ({student.student_code})
+        </p>
+
+        {error && (
+          <div className="p-3 mb-3 rounded-xl bg-red-50 text-red-600 text-xs border border-red-100 flex items-center gap-1.5">
+            <AlertCircle size={14} className="shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <form onSubmit={submit} className="space-y-3">
+          <div>
+            <label className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1 block">Terminal Lifecycle Status</label>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as any)}
+              className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm outline-none dark:bg-gray-800 dark:text-gray-200"
+            >
+              <option value="withdrawn">Withdrawn (Formal Exit)</option>
+              <option value="graduated">Graduated (Completed)</option>
+              <option value="transferred">Transferred (To Other School)</option>
+              <option value="inactive">Inactive (Dormant Record)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1 block">Audit Reason</label>
+            <input
+              required
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g. Parental transfer request / academic progression"
+              className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500 dark:bg-gray-800 dark:text-gray-200"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-400"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 py-2.5 rounded-xl bg-blue-600 text-sm text-white font-bold disabled:opacity-60 flex items-center justify-center gap-1.5"
+            >
+              {loading ? <Loader2 size={14} className="animate-spin" /> : "Save Status"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function StudentsPage() {
   const router = useRouter();
@@ -634,6 +751,7 @@ export default function StudentsPage() {
   const [showModal, setShowModal] = useState(false);
   const [editStudent, setEditStudent] = useState<Student | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Student | null>(null);
+  const [statusTarget, setStatusTarget] = useState<Student | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [issuing, setIssuing] = useState<string | null>(null);
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -909,6 +1027,7 @@ export default function StudentsPage() {
                     onEdit={() => { setEditStudent(s); setShowModal(true); }}
                     onDelete={() => setDeleteTarget(s)}
                     onIssue={() => handleIssue(s.id)}
+                    onStatus={() => setStatusTarget(s)}
                     issuing={issuing === s.id}
                     isClassTeacher={isClassTeacher}
                   />
@@ -945,6 +1064,17 @@ export default function StudentsPage() {
           onClose={() => setDeleteTarget(null)}
           onConfirm={handleDelete}
           loading={deleting}
+        />
+      )}
+      {statusTarget && (
+        <ChangeStudentStatusModal
+          schoolId={user?.school_id || "00000000-0000-0000-0000-000000000001"}
+          student={statusTarget}
+          onClose={() => setStatusTarget(null)}
+          onSuccess={(msg) => {
+            show(msg, "success");
+            loadStudents(selectedClass);
+          }}
         />
       )}
     </DashboardShell>

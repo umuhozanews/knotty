@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import { workers, WorkerItem, WorkerStats } from "@/lib/api";
+import { supabaseStaffService } from "@/lib/supabase/services";
+import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 
@@ -578,6 +580,20 @@ export default function WorkersPage() {
     setDeactivatingId(worker.id);
     try {
       const newStatus = !worker.is_active;
+      const targetSchoolId = user?.school_id;
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (isSupabaseConfigured() && targetSchoolId && uuidRegex.test(targetSchoolId) && uuidRegex.test(worker.id)) {
+        try {
+          await supabaseStaffService.updateStaffStatus(
+            targetSchoolId,
+            worker.id,
+            newStatus ? "active" : "suspended",
+            newStatus ? "Reactivated by admin" : "Suspended by admin"
+          );
+        } catch (supaErr) {
+          console.warn("Supabase staff status update fallback:", supaErr);
+        }
+      }
       await workers.update(worker.id, { is_active: newStatus });
       setWorkerList((prev) =>
         prev.map((w) =>

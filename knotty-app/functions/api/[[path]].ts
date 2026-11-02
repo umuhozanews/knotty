@@ -1,10 +1,15 @@
-export async function onRequest(context: { request: Request }): Promise<Response> {
+export async function onRequest(context: { request: Request; env?: Record<string, string> }): Promise<Response> {
   const url = new URL(context.request.url);
-  const backendBase = "https://knotty-backend.vercel.app";
+  const backendBase =
+    context.env?.BACKEND_URL ||
+    (url.hostname === "localhost" || url.hostname === "127.0.0.1"
+      ? "http://127.0.0.1:5000"
+      : "https://knotty-backend.vercel.app");
   const targetUrl = `${backendBase}${url.pathname}${url.search}`;
 
+  const targetParsed = new URL(backendBase);
   const reqHeaders = new Headers(context.request.headers);
-  reqHeaders.set("Host", "knotty-backend.vercel.app");
+  reqHeaders.set("Host", targetParsed.host);
 
   const newRequest = new Request(targetUrl, {
     method: context.request.method,

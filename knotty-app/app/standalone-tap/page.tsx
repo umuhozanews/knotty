@@ -4,6 +4,8 @@ import React, { useState, useEffect } from "react";
 import DashboardShell from "@/components/DashboardShell";
 import { useNFC } from "@/hooks/useNFC";
 import { cards } from "@/lib/api";
+import { supabaseAttendanceService } from "@/lib/supabase/services";
+import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { 
   Wifi, 
   CreditCard, 
@@ -252,6 +254,31 @@ export default function StandaloneTapPage() {
       nfc_uid: student.nfc_uid,
       timestamp: now.toISOString(),
     });
+
+    // Supabase RPC integration: record virtual student tap
+    if (isSupabaseConfigured()) {
+      const activeSchoolId = (typeof window !== "undefined" && (localStorage.getItem("ishuri_active_school_id") || localStorage.getItem("knotty_active_school_id"))) || "00000000-0000-0000-0000-000000000001";
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const idempotencyKey = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : "00000000-0000-4000-8000-000000000001";
+
+      if (uuidRegex.test(student.id) && uuidRegex.test(activeSchoolId)) {
+        supabaseAttendanceService.recordVirtualStudentTap({
+          schoolId: activeSchoolId,
+          studentId: student.id,
+          idempotencyKey,
+          occurredAt: now.toISOString(),
+        }).then((rpcRes) => {
+          logWebhook({ event: "SUPABASE_RECORD_VIRTUAL_TAP_SUCCESS", rpcRes });
+        }).catch((rpcErr) => {
+          logWebhook({ event: "SUPABASE_RECORD_VIRTUAL_TAP_FAILED", error: rpcErr?.message });
+        });
+      } else {
+        logWebhook({
+          event: "SUPABASE_VIRTUAL_TAP_SKIPPED",
+          reason: "Student ID or School ID is not a valid UUID. Local simulation recorded.",
+        });
+      }
+    }
   };
 
   const logWebhook = (data: any) => {

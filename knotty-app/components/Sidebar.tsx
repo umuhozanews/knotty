@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, ClipboardCheck, CreditCard, ShoppingCart,
   Banknote, FileText, AlertTriangle, Settings, LogOut, ChevronRight,
   Heart, BookOpen, User, CalendarDays, GraduationCap, Wallet, X, Library, Shield,
-  UserCheck, Building2, Smartphone,
+  UserCheck, Building2, Smartphone, Activity,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { isManagementRole } from "@/lib/roles";
@@ -133,13 +133,22 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       {/* Bottom actions */}
       <div className="border-t border-gray-100 px-3 py-3 space-y-0.5">
         {isManagementRole(role) && (
-          <Link href="/settings"
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-medium transition
-              ${isActive("/settings") ? "" : "text-gray-500 hover:bg-gray-50"}`}
-            style={isActive("/settings") ? { background: "#FFF3EC", color: "#FF7A22" } : undefined}
-          >
-            <Settings size={16} />Settings
-          </Link>
+          <>
+            <Link href="/admin/system-tests"
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-medium transition
+                ${isActive("/admin/system-tests") ? "" : "text-gray-500 hover:bg-gray-50"}`}
+              style={isActive("/admin/system-tests") ? { background: "#FFF3EC", color: "#FF7A22" } : undefined}
+            >
+              <Activity size={16} />System Tests
+            </Link>
+            <Link href="/settings"
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-medium transition
+                ${isActive("/settings") ? "" : "text-gray-500 hover:bg-gray-50"}`}
+              style={isActive("/settings") ? { background: "#FFF3EC", color: "#FF7A22" } : undefined}
+            >
+              <Settings size={16} />Settings
+            </Link>
+          </>
         )}
         <button onClick={handleLogout}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-gray-500 hover:bg-red-50 hover:text-red-500 text-sm font-medium transition"

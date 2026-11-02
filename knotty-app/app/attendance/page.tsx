@@ -11,6 +11,8 @@ import {
   attendance, cards, structure, Class,
   AttendanceTodaySummary, CardScanFull, AttendanceSettings,
 } from "@/lib/api";
+import { supabaseAttendanceService } from "@/lib/supabase/services";
+import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { useNFC } from "@/hooks/useNFC";
 import { useToast } from "@/context/ToastContext";
@@ -69,12 +71,127 @@ function fmtTime(s: string | null | undefined) {
   return new Date(s).toLocaleTimeString("en-RW", { hour: "2-digit", minute: "2-digit" });
 }
 
+function CorrectAttendanceModal({
+  schoolId,
+  record,
+  onClose,
+  onSuccess,
+}: {
+  schoolId: string;
+  record: ScanLogEntry;
+  onClose: () => void;
+  onSuccess: (msg: string) => void;
+}) {
+  const [status, setStatus] = useState<"present" | "absent" | "late" | "excused" | "early_departure">("present");
+  const [reason, setReason] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (reason.trim().length < 3) {
+      setError("An audit reason of at least 3 characters is required for attendance correction.");
+      return;
+    }
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(record.id) || !uuidRegex.test(schoolId)) {
+      setError("This attendance record was loaded from legacy storage and lacks a valid Supabase UUID.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      if (isSupabaseConfigured()) {
+        await supabaseAttendanceService.correctStudentAttendance({
+          schoolId,
+          attendanceId: record.id,
+          status,
+          reason: reason.trim(),
+        });
+        onSuccess(`Attendance corrected to ${status} for ${record.name}`);
+        onClose();
+        return;
+      }
+      onSuccess(`Attendance updated for ${record.name}`);
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || "Failed to correct attendance");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 border border-gray-100">
+        <h3 className="font-bold text-gray-800 text-base mb-1">Correct Attendance Record</h3>
+        <p className="text-xs text-gray-500 mb-4">
+          Audit-trailed correction for <span className="font-semibold text-gray-700">{record.name}</span>
+        </p>
+
+        {error && (
+          <div className="p-3 mb-3 rounded-xl bg-red-50 text-red-600 text-xs border border-red-100 flex items-center gap-1.5">
+            <AlertTriangle size={14} className="shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <form onSubmit={submit} className="space-y-3">
+          <div>
+            <label className="text-xs font-semibold text-gray-600 mb-1 block">Corrected Status</label>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as any)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none"
+            >
+              <option value="present">Present</option>
+              <option value="late">Late</option>
+              <option value="excused">Excused</option>
+              <option value="early_departure">Early Departure</option>
+              <option value="absent">Absent</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-gray-600 mb-1 block">Audit Reason</label>
+            <input
+              required
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g. Card sensor missed tap / verified doctor note"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 py-2.5 rounded-xl bg-blue-600 text-sm text-white font-bold disabled:opacity-60 flex items-center justify-center gap-1.5"
+            >
+              {loading ? <Loader2 size={14} className="animate-spin" /> : "Save Correction"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function AttendancePage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, activeSchool, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const { startListen, stopListen, listening, error: nfcError, isSupported } = useNFC();
 
   const [mode, setMode] = useState<"tap" | "bulk">("tap");
+  const [correctingRecord, setCorrectingRecord] = useState<ScanLogEntry | null>(null);
 
   // ── Tap mode ─────────────────────────────────────────────────
   const [cardInput, setCardInput]   = useState("");
@@ -574,6 +691,17 @@ export default function AttendancePage() {
 
   return (
     <DashboardShell>
+      {correctingRecord && (
+        <CorrectAttendanceModal
+          schoolId={activeSchool?.id || user?.school_id || "00000000-0000-0000-0000-000000000001"}
+          record={correctingRecord}
+          onClose={() => setCorrectingRecord(null)}
+          onSuccess={(msg) => {
+            toast(msg, "success");
+            loadTodaySummary(selectedClass);
+          }}
+        />
+      )}
       <div className="p-2 sm:p-4 space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -1030,6 +1158,14 @@ export default function AttendancePage() {
                                   {entry.status}
                                 </span>
                               )}
+
+                              <button
+                                onClick={() => setCorrectingRecord(entry)}
+                                className="text-[11px] px-2 py-1 rounded-lg border border-gray-200 text-gray-500 hover:text-blue-600 hover:bg-gray-50 transition"
+                                title="Audit-trailed correction"
+                              >
+                                Correct
+                              </button>
                             </div>
                           </div>
                         );

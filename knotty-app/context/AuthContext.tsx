@@ -2,6 +2,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
 import { auth, multiSchool, LoginResponse, SchoolItem } from "@/lib/api";
 import { DEMO_ACCOUNTS, DEMO_SCHOOL_ID, getAllDemoAccounts } from "@/lib/demo";
+import { isSupabaseConfigured, getSafeBrowserClient } from "@/lib/supabase/client";
 
 type User = LoginResponse["user"];
 
@@ -92,6 +93,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {}
     }
 
+    if (isSupabaseConfigured()) {
+      const client = getSafeBrowserClient();
+      if (client) {
+        client.auth.getSession().then(({ data: { session } }) => {
+          if (session?.access_token) {
+            localStorage.setItem("ishuri_token", session.access_token);
+          }
+        }).catch(() => {});
+      }
+    }
+
     const token = localStorage.getItem("ishuri_token") || localStorage.getItem("knotty_token");
     const refreshToken = localStorage.getItem("ishuri_refresh") || localStorage.getItem("knotty_refresh");
     if (!token && !refreshToken) { setLoading(false); return; }
@@ -124,60 +136,117 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchSchools]);
 
   const login = useCallback(async (email: string, password: string) => {
+    const normEmail = email.trim().toLowerCase();
+
+    // 1. If Supabase is configured, try Supabase Auth first
+    if (isSupabaseConfigured()) {
+      const client = getSafeBrowserClient();
+      if (client) {
+        try {
+          const { data, error: supaErr } = await client.auth.signInWithPassword({
+            email: normEmail,
+            password,
+          });
+
+          if (!supaErr && data?.user) {
+            // Attempt to resolve person and membership in the database
+            const { data: personData } = await client
+              .from("persons")
+              .select("id, status")
+              .eq("auth_user_id", data.user.id)
+              .maybeSingle();
+
+            if (personData) {
+              const { data: memberData } = await client
+                .from("school_memberships")
+                .select("id, school_id, status")
+                .eq("person_id", personData.id)
+                .eq("status", "active")
+                .maybeSingle();
+
+              const { data: roleData } = memberData
+                ? await client
+                    .from("school_membership_roles")
+                    .select("role_key")
+                    .eq("membership_id", memberData.id)
+                    .limit(1)
+                    .maybeSingle()
+                : { data: null };
+
+              const role = roleData?.role_key || "ADMIN";
+              const targetSchoolId = memberData?.school_id || DEMO_SCHOOL_ID;
+              const userMeta = (data.user.user_metadata || {}) as Record<string, any>;
+
+              const loggedUser: User = {
+                id: data.user.id,
+                role,
+                school_id: targetSchoolId,
+                first_name: userMeta.first_name || data.user.email?.split("@")[0] || "User",
+                last_name: userMeta.last_name || "",
+                email: data.user.email || normEmail,
+                profile_photo: null,
+              };
+
+              localStorage.setItem("ishuri_user", JSON.stringify(loggedUser));
+              if (data.session?.access_token) {
+                localStorage.setItem("ishuri_token", data.session.access_token);
+              }
+              if (data.session?.refresh_token) {
+                localStorage.setItem("ishuri_refresh", data.session.refresh_token);
+              }
+              setUser(loggedUser);
+              fetchSchools(targetSchoolId);
+              return;
+            }
+          }
+        } catch (e) {
+          console.warn("Supabase Auth sign-in attempted, checking backend:", e);
+        }
+      }
+    }
+
+    // 2. Fall back to Express API backend login
     try {
-      const res = await auth.login(email, password);
+      const res = await auth.login(normEmail, password);
       localStorage.setItem("ishuri_token", res.accessToken);
       localStorage.setItem("ishuri_refresh", res.refreshToken);
       localStorage.setItem("ishuri_user", JSON.stringify(res.user));
       setUser(res.user);
       fetchSchools(res.user.school_id);
     } catch (err) {
-      console.warn("Backend auth failed, falling back to permanent session:", err);
-      const allDemo = getAllDemoAccounts();
-      const normEmail = email.trim().toLowerCase();
-      let demo = allDemo.find((a) => a.email.toLowerCase() === normEmail);
+      // 3. Offline demonstration persona fallback is strictly development-only
+      const isAllowedOfflineEnv =
+        process.env.NODE_ENV === "development" &&
+        process.env.NEXT_PUBLIC_APP_ENV !== "staging" &&
+        process.env.NEXT_PUBLIC_APP_ENV !== "production";
 
-      // If not in standard demo accounts, create a generic session for the user
-      if (!demo) {
-        const prefix = normEmail.includes("@") ? normEmail.split("@")[0] : normEmail;
-        const role = prefix.includes("admin") || prefix.includes("headmaster") || prefix.includes("principal") || prefix.includes("director") ? "ADMIN"
-          : prefix.includes("teacher") ? "TEACHER"
-          : prefix.includes("canteen") ? "CANTEEN"
-          : prefix.includes("bursar") || prefix.includes("finance") ? "BURSAR"
-          : prefix.includes("nurse") || prefix.includes("health") ? "NURSE"
-          : prefix.includes("discipline") ? "DISCIPLINE"
-          : prefix.includes("librar") ? "LIBRARIAN"
-          : prefix.includes("parent") ? "PARENT"
-          : prefix.includes("student") ? "STUDENT"
-          : prefix.includes("worker") ? "WORKER"
-          : "ADMIN";
+      if (isAllowedOfflineEnv) {
+        const allDemo = getAllDemoAccounts();
+        const demo = allDemo.find((a) => a.email.toLowerCase() === normEmail);
 
-        demo = {
-          email: email.trim(),
-          password,
-          role,
-          first_name: prefix.charAt(0).toUpperCase() + prefix.slice(1),
-          last_name: "User",
-          school_id: DEMO_SCHOOL_ID,
-          school_code: "KMS",
-          school_name: "IshuriHUB Model School",
-        };
+        if (demo && demo.password === password) {
+          console.warn("Using offline demo persona (development only):", normEmail);
+          const targetSchoolId = demo.school_id || DEMO_SCHOOL_ID;
+          const loggedUser: User = {
+            id: `usr-${demo.role.toLowerCase()}-${demo.school_code?.toLowerCase() || 'kms'}`,
+            role: demo.role,
+            school_id: targetSchoolId,
+            first_name: demo.first_name,
+            last_name: demo.last_name,
+            email: demo.email,
+            profile_photo: null,
+          };
+          localStorage.setItem("ishuri_user", JSON.stringify(loggedUser));
+          localStorage.setItem("ishuri_demo_user", JSON.stringify(loggedUser));
+          setUser(loggedUser);
+          fetchSchools(targetSchoolId);
+          return;
+        }
       }
 
-      const targetSchoolId = demo.school_id || DEMO_SCHOOL_ID;
-      const loggedUser: User = {
-        id: `usr-${demo.role.toLowerCase()}-${demo.school_code?.toLowerCase() || 'kms'}`,
-        role: demo.role,
-        school_id: targetSchoolId,
-        first_name: demo.first_name,
-        last_name: demo.last_name,
-        email: demo.email,
-        profile_photo: null,
-      };
-      localStorage.setItem("ishuri_user", JSON.stringify(loggedUser));
-      localStorage.setItem("ishuri_demo_user", JSON.stringify(loggedUser));
-      setUser(loggedUser);
-      fetchSchools(targetSchoolId);
+      // DO NOT fabricate sessions or elevate arbitrary credentials to ADMIN
+      console.error("Authentication failed:", err);
+      throw err instanceof Error ? err : new Error("Authentication failed: invalid credentials or service unreachable.");
     }
   }, [fetchSchools]);
 
@@ -209,6 +278,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [schoolsList, user]);
 
   const logout = useCallback(() => {
+    if (isSupabaseConfigured()) {
+      getSafeBrowserClient()?.auth.signOut().catch(() => {});
+    }
     auth.logout().catch(() => {});
     localStorage.removeItem("ishuri_token");
     localStorage.removeItem("ishuri_refresh");

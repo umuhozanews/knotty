@@ -30,6 +30,7 @@ const morgan = require('morgan');
 const errorHandler = require('./middleware/errorHandler');
 const { globalLimiter } = require('./middleware/rateLimiter');
 const { waf } = require('./middleware/waf');
+const { getAllowedOrigins, isAllowedOrigin } = require('./config/corsOrigins');
 
 const path = require('path');
 const app = express();
@@ -53,24 +54,11 @@ app.use(helmet({
   hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
 }));
 app.use(globalLimiter);
-const defaultOrigins = [
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'http://localhost',
-  'https://localhost',
-  'https://knotty-app.pages.dev',
-  'https://ishuri-hub.pages.dev',
-  'capacitor://localhost',
-];
-const envOrigins = (process.env.FRONTEND_URL || '')
-  .split(',')
-  .map(o => o.trim())
-  .filter(Boolean);
-const allowedOrigins = Array.from(new Set([...defaultOrigins, ...envOrigins]));
+const allowedOrigins = getAllowedOrigins(process.env.FRONTEND_URL);
 
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.pages.dev') || origin.endsWith('.vercel.app')) return cb(null, true);
+    if (isAllowedOrigin(origin, allowedOrigins)) return cb(null, true);
     // Return false instead of Error so Express doesn't crash with 500
     cb(null, false);
   },

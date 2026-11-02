@@ -12,6 +12,7 @@ interface AuthContextValue {
   schoolsList: SchoolItem[];
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
   logout: () => void;
   switchSchool: (schoolId: string) => Promise<void>;
   refreshSchools: () => Promise<void>;
@@ -93,14 +94,89 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {}
     }
 
+    let authSubscription: { unsubscribe: () => void } | null = null;
+
     if (isSupabaseConfigured()) {
       const client = getSafeBrowserClient();
       if (client) {
         client.auth.getSession().then(({ data: { session } }) => {
           if (session?.access_token) {
             localStorage.setItem("ishuri_token", session.access_token);
+            if (session.refresh_token) {
+              localStorage.setItem("ishuri_refresh", session.refresh_token);
+            }
           }
         }).catch(() => {});
+
+        const { data: { subscription } } = client.auth.onAuthStateChange(async (event, session) => {
+          if ((event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session) {
+            localStorage.setItem("ishuri_token", session.access_token);
+            if (session.refresh_token) {
+              localStorage.setItem("ishuri_refresh", session.refresh_token);
+            }
+
+            try {
+              const { data: personData } = await client
+                .from("persons")
+                .select("id, status")
+                .eq("auth_user_id", session.user.id)
+                .maybeSingle();
+
+              let role = "STUDENT";
+              let targetSchoolId = DEMO_SCHOOL_ID;
+
+              if (personData) {
+                const { data: memberData } = await client
+                  .from("school_memberships")
+                  .select("id, school_id, status")
+                  .eq("person_id", personData.id)
+                  .eq("status", "active")
+                  .maybeSingle();
+
+                if (memberData) {
+                  targetSchoolId = memberData.school_id;
+                  const { data: roleData } = await client
+                    .from("school_membership_roles")
+                    .select("role_key")
+                    .eq("membership_id", memberData.id)
+                    .limit(1)
+                    .maybeSingle();
+
+                  if (roleData?.role_key) {
+                    role = roleData.role_key;
+                  }
+                }
+              }
+
+              const userMeta = (session.user.user_metadata || {}) as Record<string, any>;
+              const fullName = userMeta.full_name || userMeta.name || "";
+              const nameParts = fullName.split(" ");
+              const firstName = userMeta.first_name || nameParts[0] || session.user.email?.split("@")[0] || "User";
+              const lastName = userMeta.last_name || nameParts.slice(1).join(" ") || "";
+              const profilePhoto = userMeta.avatar_url || userMeta.picture || null;
+
+              const loggedUser: User = {
+                id: session.user.id,
+                role,
+                school_id: targetSchoolId,
+                first_name: firstName,
+                last_name: lastName,
+                email: session.user.email || "",
+                profile_photo: profilePhoto,
+              };
+
+              localStorage.setItem("ishuri_user", JSON.stringify(loggedUser));
+              setUser(loggedUser);
+              fetchSchools(targetSchoolId);
+              setLoading(false);
+            } catch (err) {
+              console.error("Error resolving Supabase session membership:", err);
+            }
+          } else if (event === "SIGNED_OUT") {
+            setUser(null);
+          }
+        });
+        authSubscription = subscription;
       }
     }
 
@@ -133,6 +209,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       })
       .finally(() => setLoading(false));
+
+    return () => {
+      authSubscription?.unsubscribe();
+    };
   }, [fetchSchools]);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -250,6 +330,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [fetchSchools]);
 
+  const loginWithGoogle = useCallback(async () => {
+    if (!isSupabaseConfigured()) {
+      throw new Error("Supabase is not configured. Google Sign-In requires active Supabase credentials.");
+    }
+    const client = getSafeBrowserClient();
+    if (!client) {
+      throw new Error("Failed to initialize Supabase client.");
+    }
+
+    const redirectTo = typeof window !== "undefined"
+      ? `${window.location.origin}/auth/callback`
+      : undefined;
+
+    const { error } = await client.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo,
+        queryParams: {
+          access_type: "offline",
+          prompt: "consent",
+        },
+      },
+    });
+
+    if (error) {
+      throw error;
+    }
+  }, []);
+
   const switchSchool = useCallback(async (schoolId: string) => {
     try {
       const res = await multiSchool.switch(schoolId);
@@ -303,6 +412,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       schoolsList,
       loading,
       login,
+      loginWithGoogle,
       logout,
       switchSchool,
       refreshSchools: fetchSchools,

@@ -1189,32 +1189,6 @@ export default function LibraryPage() {
                       />
                     </div>
 
-                    {/* Quick Student Card Tap Chips */}
-                    <div className="flex items-center gap-1.5 flex-wrap pt-2.5">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Quick Tap Card:</span>
-                      {[
-                        { name: "Hirwa Jean", code: "KNT-KMS-2026-90001", badge: "Physics" },
-                        { name: "Uwase Marie", code: "KNT-KMS-2026-90002", badge: "Math" },
-                        { name: "Nkurunziza Eric", code: "KNT-KMS-2026-00003", badge: "Overdue" },
-                        { name: "Uwimana Grace", code: "KNT-KMS-2026-00006", badge: "Overdue" },
-                        { name: "Habimana Patrick", code: "KNT-KMS-2026-00005", badge: "Biology" },
-                      ].map(st => (
-                        <button
-                          key={st.code}
-                          type="button"
-                          onClick={() => { setCardInput(st.code); lookupCard(st.code); }}
-                          className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-gray-50 hover:bg-orange-50 hover:text-[#16A34A] border border-gray-200 text-gray-700 transition active:scale-95 cursor-pointer flex items-center gap-1.5"
-                        >
-                          <span>💳</span>
-                          <span>{st.name}</span>
-                          {st.badge === "Overdue" ? (
-                            <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-red-100 text-red-600 font-extrabold">Overdue</span>
-                          ) : (
-                            <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-orange-100 text-orange-700">{st.badge}</span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
 
                     {nfcError && <p className="text-xs text-red-500 mt-2 font-medium">{nfcError}</p>}
 
@@ -1521,37 +1495,6 @@ export default function LibraryPage() {
                       </button>
                     </div>
 
-                    {/* Quick Return Chips for Active Borrows */}
-                    <div className="mt-4 pt-3 border-t border-gray-100">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">
-                        Click to Return Active Book Copy:
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {[
-                          { tag: "PHYS-S5-01", title: "Principles of Physics S5", student: "Hirwa Jean" },
-                          { tag: "MATH-S4-01", title: "New General Math S4", student: "Uwase Marie" },
-                          { tag: "LIT-TFA-01", title: "Things Fall Apart", student: "Nkurunziza Eric", overdue: true },
-                          { tag: "CHEM-ORG-01", title: "Organic Chemistry", student: "Uwimana Grace", overdue: true },
-                          { tag: "BIO-CMP-01", title: "Campbell Biology", student: "Habimana Patrick" },
-                        ].map(b => (
-                          <button
-                            key={b.tag}
-                            type="button"
-                            onClick={() => { setReturnTagInput(b.tag); handleQuickReturn(b.tag); }}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold border flex items-center gap-1.5 transition active:scale-95 cursor-pointer ${
-                              b.overdue
-                                ? "bg-red-50/70 border-red-200 text-red-800 hover:bg-red-100"
-                                : "bg-gray-50 border-gray-200 text-gray-700 hover:bg-orange-50 hover:text-[#16A34A]"
-                            }`}
-                          >
-                            <Tag size={11} className={b.overdue ? "text-red-500" : "text-gray-400"} />
-                            <span className="font-bold">{b.tag}</span>
-                            <span className="text-gray-500 text-[11px]">({b.student})</span>
-                            {b.overdue && <span className="text-[9px] bg-red-100 text-red-600 font-extrabold px-1 rounded">Overdue</span>}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
                   </div>
                 </div>
               )}
@@ -1703,26 +1646,6 @@ export default function LibraryPage() {
                   />
                 </div>
 
-                {/* Quick Student Chips */}
-                <div className="flex items-center gap-1.5 flex-wrap pt-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Quick Pick:</span>
-                  {[
-                    { name: "Hirwa Jean", code: "KNT-KMS-2026-90001" },
-                    { name: "Uwase Marie", code: "KNT-KMS-2026-90002" },
-                    { name: "Nkurunziza Eric", code: "KNT-KMS-2026-00003" },
-                    { name: "Habimana Patrick", code: "KNT-KMS-2026-00005" },
-                    { name: "Uwimana Grace", code: "KNT-KMS-2026-00006" },
-                  ].map(st => (
-                    <button
-                      key={st.code}
-                      type="button"
-                      onClick={() => { setModalCardInput(st.code); lookupModalStudent(st.code); }}
-                      className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-gray-100 hover:bg-orange-50 hover:text-[#16A34A] text-gray-700 transition cursor-pointer"
-                    >
-                      {st.name}
-                    </button>
-                  ))}
-                </div>
 
                 {listening && (
                   <div className="mt-2.5 p-2 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-between text-xs text-[#16A34A] font-semibold animate-pulse">

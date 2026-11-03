@@ -794,6 +794,8 @@ function ChangeStudentStatusModal({
   );
 }
 
+const ALL_KEY = "__all__";
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function StudentsPage() {
   const router = useRouter();
@@ -804,7 +806,7 @@ export default function StudentsPage() {
   const [rawClassSections, setRawClassSections] = useState<ClassSectionRow[]>([]);
   const [studentsByClass, setStudentsByClass] = useState<Record<string, Student[]>>({});
   const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
-  const [selectedClass, setSelectedClass] = useState<string | null>(null);
+  const [selectedClass, setSelectedClass] = useState<string | null>(ALL_KEY);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -847,9 +849,13 @@ export default function StudentsPage() {
           setSelectedLevel(sorted[0].id);
           const first = mappedClasses.find((c) => c.level.id === sorted[0].id) || mappedClasses[0];
           if (first) setSelectedClass(first.id);
+          else setSelectedClass(ALL_KEY);
+        } else {
+          setSelectedClass(ALL_KEY);
         }
       }).catch((err) => {
         console.error("Failed to load levels/classes from Supabase:", err);
+        setSelectedClass(ALL_KEY);
       });
       return;
     }
@@ -908,13 +914,14 @@ export default function StudentsPage() {
     });
   }, [user?.id, authLoading]);
 
-  // Load students for selected class
+  // Load students for selected class (or all students when classId === ALL_KEY)
   const loadStudents = useCallback(async (classId: string | null) => {
     if (!classId) return;
     setLoading(true);
     try {
       if (isSupabaseConfigured() && user?.school_id) {
-        const data = await supabaseStudentService.listSchoolStudents(user.school_id, classId, search || null);
+        const sectionId = classId === ALL_KEY ? null : classId;
+        const data = await supabaseStudentService.listSchoolStudents(user.school_id, sectionId, search || null);
         setStudentsByClass((prev) => ({ ...prev, [classId]: data }));
       } else {
         const res = await students.list({ classId, limit: 100, search: search || undefined });
@@ -951,11 +958,11 @@ export default function StudentsPage() {
     searchRef.current = setTimeout(() => loadStudents(selectedClass), 300);
   }, [selectedClass, search, loadStudents]);
 
+  const isAllView = selectedClass === ALL_KEY;
   const currentClassStudents = selectedClass ? (studentsByClass[selectedClass] ?? []) : [];
   const currentLevelClasses = selectedLevel ? classes.filter((c) => c.level.id === selectedLevel) : [];
   const selectedClassObj = classes.find((c) => c.id === selectedClass);
-  // Admins can always manage; teachers can manage when a class is selected (backend enforces fine-grained permission)
-  const canManageStudents = !!selectedClassObj && (isManagementRole(user?.role) || user?.role === 'TEACHER');
+  const canManageStudents = (!!selectedClassObj || isAllView) && (isManagementRole(user?.role) || user?.role === 'TEACHER');
   const isClassTeacher = canManageStudents; // kept for prop compatibility
   const totalSelected = classes.reduce((acc, c) => {
     const n = studentsByClass[c.id]?.length ?? (c._count?.students ?? 0);
@@ -1004,6 +1011,12 @@ export default function StudentsPage() {
       <div className="flex flex-col md:flex-row h-[calc(100dvh-4rem)]">
         {/* ── Mobile class picker ───────────────────────────────────── */}
         <div className="md:hidden flex overflow-x-auto gap-2 p-3 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
+          <button
+            onClick={() => { setSelectedClass(ALL_KEY); setSelectedLevel(null); }}
+            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition ${isAllView ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600"}`}
+          >
+            All
+          </button>
           {classes.map((cls) => (
             <button
               key={cls.id}
@@ -1019,6 +1032,15 @@ export default function StudentsPage() {
         <div className="hidden md:block w-56 flex-shrink-0 border-r border-gray-100 dark:border-gray-800 overflow-y-auto">
           <div className="p-4">
             <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Classes</h2>
+            <button
+              onClick={() => { setSelectedClass(ALL_KEY); setSelectedLevel(null); }}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-semibold mb-1 transition ${isAllView ? "bg-blue-600/10 text-blue-700 dark:text-blue-400" : "text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 dark:text-gray-400"}`}
+            >
+              <span>All Students</span>
+              <span className={`text-xs font-normal ${isAllView ? "text-blue-600/70" : "text-gray-400"}`}>
+                {studentsByClass[ALL_KEY]?.length ?? "—"}
+              </span>
+            </button>
             {levels.map((level) => {
               const levelClasses = classes.filter((c) => c.level.id === level.id);
               const isLevelOpen = selectedLevel === level.id;
@@ -1064,7 +1086,7 @@ export default function StudentsPage() {
               {selectedClass && (
                 <div>
                   <h1 className="text-sm md:text-base font-bold text-gray-800 dark:text-gray-100 truncate">
-                    {levels.find((l) => l.id === selectedLevel)?.name} — Class {classes.find((c) => c.id === selectedClass)?.name}
+                    {isAllView ? "All Students" : `${levels.find((l) => l.id === selectedLevel)?.name} — Class ${classes.find((c) => c.id === selectedClass)?.name}`}
                   </h1>
                   <p className="text-xs text-gray-400">{currentClassStudents.length} students</p>
                 </div>

@@ -5,15 +5,22 @@ import {
   Building2, Calendar, Check, AlertCircle, Clock, ShieldCheck
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
-import { structure, Level, Class, StaffMember, Teacher, teachers } from "@/lib/api";
 import {
   supabaseSchoolService,
   supabaseAcademicService,
+  supabaseStaffService,
   AcademicYearRow,
   AcademicTermRow,
   SchoolSettingsRow,
+  EducationLevelRow,
+  ClassSectionRow,
 } from "@/lib/supabase/services";
-import { isSupabaseConfigured } from "@/lib/supabase/client";
+import { getSafeBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
+
+type LocalLevel = EducationLevelRow & { description?: string | null; _count?: { classes?: number; students?: number } };
+type LocalClass = ClassSectionRow & { level: { id: string; name: string }; academic_year?: string | null; _count?: { students?: number } };
+type LocalStaffMember = { id: string; first_name: string; last_name: string; email: string; role: string; is_active: boolean; last_login?: string | null; employee_code?: string };
+type LocalTeacher = { id: string; user: { first_name: string; last_name: string; email: string }; employee_code: string; role: string; subjects_taught: Array<{ class_id: string; class_name: string; subject: string }> };
 import { useAuth } from "@/context/AuthContext";
 import { isManagementRole } from "@/lib/roles";
 import { useToast } from "@/context/ToastContext";
@@ -46,8 +53,6 @@ function CreateLevelModal({
           displayOrder: 1,
           framework: "REB CBC",
         });
-      } else {
-        await structure.createLevel({ name: form.name, description: form.description || undefined });
       }
       onSuccess();
       onClose();
@@ -90,7 +95,7 @@ function CreateClassModal({
   onClose,
   onSuccess,
 }: {
-  levels: Level[];
+  levels: LocalLevel[];
   schoolId?: string;
   academicYears?: AcademicYearRow[];
   onClose: () => void;
@@ -112,8 +117,6 @@ function CreateClassModal({
           sectionCode: code,
           name: form.name.trim(),
         });
-      } else {
-        await structure.createClass(form);
       }
       onSuccess();
       onClose();
@@ -160,12 +163,8 @@ function CreateStaffModal({ onClose, onSuccess }: { onClose: () => void; onSucce
   const [loading, setLoading] = useState(false);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
-    try {
-      await structure.createStaff(form);
-      onSuccess(); onClose();
-    } catch (err) { alert(err instanceof Error ? err.message : "Error"); }
-    finally { setLoading(false); }
+    alert("New staff accounts must be created by a super admin via the Workers page. Contact your school administrator.");
+    onClose();
   }
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
@@ -235,16 +234,12 @@ function CreateAcademicYearModal({
     setLoading(true);
     setError("");
     try {
-      if (isSupabaseConfigured()) {
-        await supabaseSchoolService.createAcademicYear({
-          schoolId,
-          name,
-          startDate,
-          endDate,
-        });
-      } else {
-        await structure.createClass({ name: "Demo Year", level_id: "l1", academic_year: name });
-      }
+      await supabaseSchoolService.createAcademicYear({
+        schoolId,
+        name,
+        startDate,
+        endDate,
+      });
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -461,9 +456,9 @@ function AssignClassesModal({
   onClose,
   onSuccess,
 }: {
-  teacher: Teacher;
-  classes: Class[];
-  levels: Level[];
+  teacher: LocalTeacher;
+  classes: LocalClass[];
+  levels: LocalLevel[];
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -493,16 +488,8 @@ function AssignClassesModal({
   }
 
   async function save() {
-    setLoading(true);
-    try {
-      await teachers.update(teacher.id, { subjects_taught: list });
-      onSuccess();
-      onClose();
-    } catch (e: any) {
-      alert(e?.message || "Failed to update assignments");
-    } finally {
-      setLoading(false);
-    }
+    alert("Teacher subject assignments require a backend admin operation. Please contact your system administrator.");
+    onClose();
   }
 
   return (
@@ -579,10 +566,10 @@ export default function SettingsPage() {
   const [tab, setTab] = useState<SettingsTab>("levels");
 
   // Core data states
-  const [levels, setLevels] = useState<Level[]>([]);
-  const [classes, setClasses] = useState<Class[]>([]);
-  const [staff, setStaff] = useState<StaffMember[]>([]);
-  const [teachersList, setTeachersList] = useState<Teacher[]>([]);
+  const [levels, setLevels] = useState<LocalLevel[]>([]);
+  const [classes, setClasses] = useState<LocalClass[]>([]);
+  const [staff, setStaff] = useState<LocalStaffMember[]>([]);
+  const [teachersList, setTeachersList] = useState<LocalTeacher[]>([]);
   const [academicYears, setAcademicYears] = useState<AcademicYearRow[]>([]);
   const [academicTerms, setAcademicTerms] = useState<AcademicTermRow[]>([]);
   const [schoolSettings, setSchoolSettings] = useState<SchoolSettingsRow | null>(null);
@@ -603,48 +590,85 @@ export default function SettingsPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [actionYearId, setActionYearId] = useState<string | null>(null);
   const [actionTermId, setActionTermId] = useState<string | null>(null);
-  const [assignTeacher, setAssignTeacher] = useState<Teacher | null>(null);
+  const [assignTeacher, setAssignTeacher] = useState<LocalTeacher | null>(null);
   const [togglingStaff, setTogglingStaff] = useState<string | null>(null);
 
   async function loadAll() {
     setLoading(true);
-    const targetSchoolId = activeSchool?.id || user?.school_id || "00000000-0000-0000-0000-000000000001";
+    const targetSchoolId = activeSchool?.id || user?.school_id;
+    if (!targetSchoolId) { setLoading(false); return; }
     try {
-      const [l, c, s, tList] = await Promise.all([
-        structure.levels(),
-        structure.classes(),
-        isManagementRole(user?.role) ? structure.staff() : Promise.resolve({ success: true, data: [] as StaffMember[] }),
-        isManagementRole(user?.role) ? teachers.list() : Promise.resolve({ success: true, data: [] as Teacher[] }),
-      ]);
-      setLevels(l.data);
-      setClasses(c.data);
-      setStaff(s.data);
-      setTeachersList(tList.data);
+      const nameParts = (name: string) => {
+        const idx = (name ?? "").trim().indexOf(" ");
+        return idx === -1 ? { first: (name ?? "").trim(), last: "" } : { first: (name ?? "").trim().slice(0, idx), last: (name ?? "").trim().slice(idx + 1) };
+      };
 
-      // Try fetching Supabase academic years & settings if configured
-      if (isSupabaseConfigured()) {
-        try {
-          const [years, terms, settings] = await Promise.all([
-            supabaseSchoolService.listAcademicYears(targetSchoolId),
-            supabaseSchoolService.listAcademicTerms(targetSchoolId),
-            supabaseSchoolService.getSchoolSettings(targetSchoolId),
-          ]);
-          setAcademicYears(years);
-          setAcademicTerms(terms);
-          if (settings) {
-            setSchoolSettings(settings);
-            setSettingsForm({
-              timezone: settings.timezone || "Africa/Kigali",
-              locale: settings.locale || "en-RW",
-              currency: settings.default_currency || "RWF",
-              framework: settings.curriculum_framework || "REB CBC",
-              dayStart: settings.school_day_start || "08:00",
-              weekStartsOn: settings.week_starts_on || 1,
-            });
-          }
-        } catch (supaErr) {
-          console.warn("Supabase settings query skipped or blocked:", supaErr);
-        }
+      const [lvlRows, clsRows, staffRows, years, terms, settings] = await Promise.all([
+        supabaseAcademicService.listEducationLevels(targetSchoolId),
+        supabaseAcademicService.listClassSections(targetSchoolId),
+        isManagementRole(user?.role) ? supabaseStaffService.listStaffMembers(targetSchoolId) : Promise.resolve([]),
+        supabaseSchoolService.listAcademicYears(targetSchoolId),
+        supabaseSchoolService.listAcademicTerms(targetSchoolId),
+        supabaseSchoolService.getSchoolSettings(targetSchoolId),
+      ]);
+
+      const mappedLevels: LocalLevel[] = lvlRows.map((l) => ({ ...l }));
+      setLevels(mappedLevels);
+
+      const levelMap: Record<string, string> = {};
+      lvlRows.forEach((l) => { levelMap[l.id] = l.name; });
+      const yearMap: Record<string, string> = {};
+      years.forEach((y) => { yearMap[y.id] = y.name; });
+      const mappedClasses: LocalClass[] = clsRows.map((c) => ({
+        ...c,
+        level: { id: c.education_level_id, name: levelMap[c.education_level_id] ?? "" },
+        academic_year: yearMap[c.academic_year_id] ?? c.academic_year_id,
+      }));
+      setClasses(mappedClasses);
+
+      if (isManagementRole(user?.role)) {
+        const allStaff = staffRows as any[];
+        const mappedStaff: LocalStaffMember[] = allStaff.map((r) => {
+          const { first, last } = nameParts(r.legal_name ?? "");
+          return {
+            id: r.staff_record_id,
+            first_name: first,
+            last_name: last,
+            email: r.primary_email ?? "",
+            role: r.primary_role_category ?? "",
+            is_active: r.employment_status === "active",
+            employee_code: r.staff_number ?? "",
+          };
+        });
+        setStaff(mappedStaff);
+
+        const mappedTeachers: LocalTeacher[] = allStaff
+          .filter((r) => r.primary_role_category === "TEACHER")
+          .map((r) => {
+            const { first, last } = nameParts(r.legal_name ?? "");
+            return {
+              id: r.staff_record_id,
+              user: { first_name: first, last_name: last, email: r.primary_email ?? "" },
+              employee_code: r.staff_number ?? "",
+              role: "TEACHER",
+              subjects_taught: [],
+            };
+          });
+        setTeachersList(mappedTeachers);
+      }
+
+      setAcademicYears(years);
+      setAcademicTerms(terms);
+      if (settings) {
+        setSchoolSettings(settings);
+        setSettingsForm({
+          timezone: settings.timezone || "Africa/Kigali",
+          locale: settings.locale || "en-RW",
+          currency: settings.default_currency || "RWF",
+          framework: settings.curriculum_framework || "REB CBC",
+          dayStart: settings.school_day_start || "08:00",
+          weekStartsOn: settings.week_starts_on || 1,
+        });
       }
     } catch (err) {
       console.error(err);
@@ -738,16 +762,30 @@ export default function SettingsPage() {
 
   async function deleteLevel(id: string) {
     if (!confirm("Delete this level? All classes inside will be deleted.")) return;
+    const schoolId = activeSchool?.id || user?.school_id;
     setDeleting(id);
-    try { await structure.deleteLevel(id); await loadAll(); }
+    try {
+      const client = getSafeBrowserClient();
+      if (!client || !schoolId) throw new Error("Not connected");
+      const { error } = await client.from("education_levels").delete().eq("id", id).eq("school_id", schoolId);
+      if (error) throw new Error(error.message);
+      await loadAll();
+    }
     catch (err) { alert(err instanceof Error ? err.message : "Error"); }
     finally { setDeleting(null); }
   }
 
   async function deleteClass(id: string) {
     if (!confirm("Delete this class?")) return;
+    const schoolId = activeSchool?.id || user?.school_id;
     setDeleting(id);
-    try { await structure.deleteClass(id); await loadAll(); }
+    try {
+      const client = getSafeBrowserClient();
+      if (!client || !schoolId) throw new Error("Not connected");
+      const { error } = await client.from("class_sections").delete().eq("id", id).eq("school_id", schoolId);
+      if (error) throw new Error(error.message);
+      await loadAll();
+    }
     catch (err) { alert(err instanceof Error ? err.message : "Error"); }
     finally { setDeleting(null); }
   }
@@ -757,10 +795,14 @@ export default function SettingsPage() {
       alert("You cannot deactivate or modify your own active status to prevent accidental lockout.");
       return;
     }
+    const schoolId = activeSchool?.id || user?.school_id;
+    if (!schoolId) return;
     setTogglingStaff(id);
     try {
-      const r = await structure.toggleStaff(id);
-      setStaff((s) => s.map((x) => x.id === id ? { ...x, is_active: r.data.is_active } : x));
+      const current = staff.find((s) => s.id === id);
+      const newStatus = current?.is_active ? "suspended" : "active";
+      await supabaseStaffService.updateStaffStatus(schoolId, id, newStatus, `Toggled by admin`);
+      setStaff((s) => s.map((x) => x.id === id ? { ...x, is_active: !x.is_active } : x));
     } catch (err) { alert(err instanceof Error ? err.message : "Error"); }
     finally { setTogglingStaff(null); }
   }

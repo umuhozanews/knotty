@@ -9,14 +9,29 @@ import {
   ShieldCheck
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
-import { workers, WorkerItem, WorkerStats } from "@/lib/api";
 import { supabaseStaffService } from "@/lib/supabase/services";
-import { isSupabaseConfigured } from "@/lib/supabase/client";
+import { getSafeBrowserClient } from "@/lib/supabase/client";
+
+type LocalWorkerItem = {
+  id: string; // staff_record_id
+  person_id: string;
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  email: string;
+  phone: string;
+  role: string;
+  department: string;
+  job_title: string;
+  employee_code: string;
+  is_active: boolean;
+  status: string;
+};
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 
 // ─── Role Labels ──────────────────────────────────────────────────────────────
-export const ROLE_LABELS: Record<string, string> = {
+const ROLE_LABELS: Record<string, string> = {
   TEACHER: "Teacher",
   CANTEEN: "Cantinier",
   BURSAR: "Bursar",
@@ -75,7 +90,7 @@ function WorkerModal({
   onClose,
   onSuccess,
 }: {
-  existing?: WorkerItem | null;
+  existing?: LocalWorkerItem | null;
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -148,38 +163,20 @@ function WorkerModal({
     setSaving(true);
     try {
       if (existing) {
-        await workers.update(existing.id, {
-          first_name: form.first_name.trim(),
-          last_name: form.last_name.trim(),
-          phone: form.phone.trim() || undefined,
-          role: form.role,
-          department: form.department.trim(),
-          job_title: form.job_title.trim(),
-        });
-        show("Worker updated successfully", "success");
+        const client = getSafeBrowserClient();
+        if (!client) throw new Error("Not connected");
+        const { error } = await client
+          .from("staff_records")
+          .update({ primary_role_category: form.role })
+          .eq("id", existing.id);
+        if (error) throw new Error(error.message);
+        show("Worker role updated successfully", "success");
         onSuccess();
         onClose();
       } else {
-        const created = await workers.create({
-          first_name: form.first_name.trim(),
-          last_name: form.last_name.trim(),
-          email: form.email.trim().toLowerCase(),
-          phone: form.phone.trim() || undefined,
-          role: form.role,
-          department: form.department.trim(),
-          job_title: form.job_title.trim(),
-          employee_code: form.employee_code.trim() || undefined,
-          password: form.password || "Staff@2024",
-        });
-        show("New worker registered successfully", "success");
-        setCredentials({
-          name: `${form.first_name} ${form.last_name}`,
-          email: form.email.trim().toLowerCase(),
-          password: form.password || "Staff@2024",
-          code: created.data.employee_code || "Generated",
-          role: form.role,
-        });
-        onSuccess();
+        setError("New staff accounts must be created by a super admin. Please contact your school administrator.");
+        setSaving(false);
+        return;
       }
     } catch (err: any) {
       setError(err?.message || "Failed to save worker record");
@@ -457,7 +454,7 @@ function StaffBadgeModal({
   schoolName,
   onClose,
 }: {
-  worker: WorkerItem;
+  worker: LocalWorkerItem;
   schoolName: string;
   onClose: () => void;
 }) {
@@ -528,8 +525,8 @@ export default function WorkersPage() {
   const { show } = useToast();
 
   const [loading, setLoading] = useState(true);
-  const [workerList, setWorkerList] = useState<WorkerItem[]>([]);
-  const [stats, setStats] = useState<WorkerStats>({
+  const [workerList, setWorkerList] = useState<LocalWorkerItem[]>([]);
+  const [stats, setStats] = useState({
     total_workers: 0,
     total_teachers: 0,
     total_cantiniers: 0,
@@ -544,61 +541,87 @@ export default function WorkersPage() {
 
   // Modal States
   const [showAddModal, setShowAddModal] = useState(false);
-  const [editingWorker, setEditingWorker] = useState<WorkerItem | null>(null);
-  const [badgeWorker, setBadgeWorker] = useState<WorkerItem | null>(null);
+  const [editingWorker, setEditingWorker] = useState<LocalWorkerItem | null>(null);
+  const [badgeWorker, setBadgeWorker] = useState<LocalWorkerItem | null>(null);
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
 
-  // Load Workers from Backend API
+  // Load Workers from Supabase
   const fetchWorkers = useCallback(async () => {
+    const schoolId = activeSchool?.id || user?.school_id;
+    if (!schoolId) return;
     setLoading(true);
     try {
-      const res = await workers.list({
-        role: selectedRole === "ALL" ? undefined : selectedRole,
-        status: selectedStatus === "ALL" ? undefined : selectedStatus,
-        search: search.trim() || undefined,
-        limit: 100,
+      const rows = await supabaseStaffService.listStaffMembers(schoolId) as any[];
+      const nameParts = (name: string) => {
+        const idx = (name ?? "").trim().indexOf(" ");
+        return idx === -1 ? { first: (name ?? "").trim(), last: "" } : { first: (name ?? "").trim().slice(0, idx), last: (name ?? "").trim().slice(idx + 1) };
+      };
+      let mapped: LocalWorkerItem[] = rows.map((r) => {
+        const { first, last } = nameParts(r.legal_name ?? "");
+        return {
+          id: r.staff_record_id,
+          person_id: r.person_id,
+          first_name: first,
+          last_name: last,
+          full_name: r.legal_name ?? "",
+          email: r.primary_email ?? "",
+          phone: r.primary_phone ?? "",
+          role: r.primary_role_category ?? "",
+          department: "",
+          job_title: "",
+          employee_code: r.staff_number ?? "",
+          is_active: r.employment_status === "active",
+          status: r.employment_status ?? "",
+        };
       });
-      if (res.data) {
-        setWorkerList(res.data);
+      if (selectedRole !== "ALL") mapped = mapped.filter((w) => w.role === selectedRole);
+      if (selectedStatus === "ACTIVE") mapped = mapped.filter((w) => w.is_active);
+      if (selectedStatus === "INACTIVE") mapped = mapped.filter((w) => !w.is_active);
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        mapped = mapped.filter((w) =>
+          w.full_name.toLowerCase().includes(q) ||
+          w.email.toLowerCase().includes(q) ||
+          w.employee_code.toLowerCase().includes(q)
+        );
       }
-      if (res.stats) {
-        setStats(res.stats);
-      }
+      setWorkerList(mapped);
+      const all = rows;
+      setStats({
+        total_workers: all.length,
+        total_teachers: all.filter((r: any) => r.primary_role_category === "TEACHER").length,
+        total_cantiniers: all.filter((r: any) => r.primary_role_category === "CANTEEN").length,
+        total_support: all.filter((r: any) => !["TEACHER", "CANTEEN"].includes(r.primary_role_category)).length,
+        active_workers: all.filter((r: any) => r.employment_status === "active").length,
+      });
     } catch (err: any) {
       console.error("Error loading workers:", err);
       show("Could not load workers list", "error");
     } finally {
       setLoading(false);
     }
-  }, [selectedRole, selectedStatus, search, show]);
+  }, [selectedRole, selectedStatus, search, show, activeSchool?.id, user?.school_id]);
 
   useEffect(() => {
     fetchWorkers();
   }, [fetchWorkers]);
 
-  const handleToggleStatus = async (worker: WorkerItem) => {
+  const handleToggleStatus = async (worker: LocalWorkerItem) => {
+    const schoolId = activeSchool?.id || user?.school_id;
+    if (!schoolId) return;
     setDeactivatingId(worker.id);
     try {
       const newStatus = !worker.is_active;
-      const targetSchoolId = user?.school_id;
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-      if (isSupabaseConfigured() && targetSchoolId && uuidRegex.test(targetSchoolId) && uuidRegex.test(worker.id)) {
-        try {
-          await supabaseStaffService.updateStaffStatus(
-            targetSchoolId,
-            worker.id,
-            newStatus ? "active" : "suspended",
-            newStatus ? "Reactivated by admin" : "Suspended by admin"
-          );
-        } catch (supaErr) {
-          console.warn("Supabase staff status update fallback:", supaErr);
-        }
-      }
-      await workers.update(worker.id, { is_active: newStatus });
+      await supabaseStaffService.updateStaffStatus(
+        schoolId,
+        worker.id,
+        newStatus ? "active" : "suspended",
+        newStatus ? "Reactivated by admin" : "Suspended by admin"
+      );
       setWorkerList((prev) =>
         prev.map((w) =>
           w.id === worker.id
-            ? { ...w, is_active: newStatus, status: newStatus ? "ACTIVE" : "INACTIVE" }
+            ? { ...w, is_active: newStatus, status: newStatus ? "active" : "suspended" }
             : w
         )
       );

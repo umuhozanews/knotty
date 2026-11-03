@@ -7,11 +7,28 @@ import {
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import VirtualCardTap from "@/components/VirtualCardTap";
-import { canteen, cards, CardScanResult, CanteenItem, CanteenTransaction, CanteenProduct } from "@/lib/api";
+import { supabaseCanteenService, CardHolderResult, CanteenTransactionRow } from "@/lib/supabase/services";
 import { useNFC } from "@/hooks/useNFC";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
 import { isManagementRole } from "@/lib/roles";
+
+type ScannedCardLocal = {
+  card_number: string;
+  card_assignment_id: string;
+  wallet_balance: number;
+  daily_limit?: number | null;
+  student: { id: string; name: string; class: string; student_code: string; photo: string | null };
+};
+function toScannedCard(r: CardHolderResult): ScannedCardLocal {
+  return {
+    card_number: r.card_number,
+    card_assignment_id: r.card_assignment_id,
+    wallet_balance: r.wallet_balance,
+    daily_limit: null,
+    student: { id: r.student_id, name: r.legal_name, class: r.class_name, student_code: r.admission_number, photo: r.profile_photo_path ?? null },
+  };
+}
 
 function playAudioTone(type: "success" | "error") {
   if (typeof window === "undefined") return;
@@ -131,11 +148,12 @@ const DEFAULT_MENU_ITEMS: MenuItem[] = [
   { id: "mandazi_big", name: "Mandazi (Big)",  price: 300,  img: "/canteen/amandazi.png",   cat: "Bread",  stock_qty: null },
 ];
 type CartMap = Record<string, number>;
-type PayResult = { student: CardScanResult["student"]; total: number; new_balance: number };
+type PayResult = { student: ScannedCardLocal["student"]; total: number; new_balance: number };
 
 /* ── Add Product Modal ─────────────────────────────────────────── */
-function AddProductModal({ onClose, onCreated }: { onClose: () => void; onCreated: (p: CanteenProduct) => void }) {
+function AddProductModal({ onClose, onCreated }: { onClose: () => void; onCreated: (p: import("@/lib/supabase/services").CanteenProductRow) => void }) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [stock, setStock] = useState("");
@@ -147,7 +165,6 @@ function AddProductModal({ onClose, onCreated }: { onClose: () => void; onCreate
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] ?? null;
-    setPhoto(f);
     if (f) setPreview(URL.createObjectURL(f));
     else setPreview(null);
   }
@@ -155,19 +172,15 @@ function AddProductModal({ onClose, onCreated }: { onClose: () => void; onCreate
   async function submit() {
     const p = parseFloat(price);
     if (!name.trim() || !p || p <= 0) { toast("Name and valid price required", "error"); return; }
+    if (!user?.school_id) { toast("No school selected", "error"); return; }
     const parsedStock = stock.trim() ? parseInt(stock.trim(), 10) : null;
     setSaving(true);
     try {
-      const chosenPhotoUrl = photo ? undefined : (selectedPreset || getRealFoodPhoto(name, category));
-      const res = await canteen.createProduct({
-        name,
-        price: p,
-        category,
-        photo,
-        photo_url: chosenPhotoUrl,
-        stock_qty: parsedStock,
+      const chosenPhotoUrl = selectedPreset || getRealFoodPhoto(name, category);
+      const res = await supabaseCanteenService.createProduct(user.school_id, {
+        name, price: p, category, photo_url: chosenPhotoUrl, stock_qty: parsedStock,
       });
-      onCreated(res.data);
+      onCreated(res);
       toast(`${name} added to menu`, "success");
       onClose();
     } catch (err) {
@@ -283,9 +296,10 @@ function RestockModal({
 }: {
   product: MenuItem;
   onClose: () => void;
-  onUpdated: (p: CanteenProduct) => void;
+  onUpdated: (p: import("@/lib/supabase/services").CanteenProductRow) => void;
 }) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [qty, setQty] = useState("20");
   const [saving, setSaving] = useState(false);
 
@@ -295,10 +309,11 @@ function RestockModal({
       toast("Please enter a valid positive quantity", "error");
       return;
     }
+    if (!user?.school_id) { toast("No school selected", "error"); return; }
     setSaving(true);
     try {
-      const res = await canteen.restockProduct(product.id, q);
-      onUpdated(res.data);
+      const res = await supabaseCanteenService.restockProduct(user.school_id, product.id, q);
+      onUpdated(res);
       toast(`Added +${q} to ${product.name} stock`, "success");
       onClose();
     } catch (err) {
@@ -366,26 +381,20 @@ export default function CanteenPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const loadProducts = useCallback(() => {
-    canteen.listProducts().then((r) => {
-      setApiProducts(r.data.map((p) => {
+    if (!user?.school_id) return;
+    supabaseCanteenService.listProducts(user.school_id).then((rows) => {
+      setApiProducts(rows.map((p) => {
         const photo = resolveImgUrl(p.photo_url) || getRealFoodPhoto(p.name, p.category);
-        return {
-          id: p.id,
-          name: p.name,
-          price: p.price,
-          img: photo,
-          cat: p.category,
-          stock_qty: p.stock_qty,
-          fromApi: true,
-        };
+        return { id: p.id, name: p.name, price: p.price, img: photo, cat: p.category, stock_qty: p.stock_qty, fromApi: true };
       }));
     }).catch(() => {});
-  }, []);
+  }, [user?.school_id]);
 
   async function handleDeleteProduct(id: string) {
+    if (!user?.school_id) return;
     setDeletingId(id);
     try {
-      await canteen.deleteProduct(id);
+      await supabaseCanteenService.deleteProduct(user.school_id, id);
       setApiProducts((prev) => prev.filter((p) => p.id !== id));
       setCart((c) => { const next = { ...c }; delete next[id]; return next; });
       toast("Product removed", "success");
@@ -440,27 +449,27 @@ export default function CanteenPage() {
   const [cardInput, setCardInput] = useState("");
   const [scanLoading, setScanLoading] = useState(false);
   const [payResult, setPayResult] = useState<PayResult | null>(null);
-  const [scannedCard, setScannedCard] = useState<CardScanResult | null>(null);
+  const [scannedCard, setScannedCard] = useState<ScannedCardLocal | null>(null);
   const [fastMode, setFastMode] = useState(false);
   const [submittingPayment, setSubmittingPayment] = useState(false);
   const [studentPhotoError, setStudentPhotoError] = useState(false);
   const [payPhotoError, setPayPhotoError] = useState(false);
   const processingRef = useRef(false);
 
-  async function executePurchase(cardNumber: string, studentInfo: CardScanResult["student"]) {
+  async function executePurchase(card: ScannedCardLocal) {
     setSubmittingPayment(true);
+    if (!user?.school_id) { toast("No school selected", "error"); setSubmittingPayment(false); return; }
     try {
-      const items: CanteenItem[] = cartItems.map(({ id, name, price, quantity }) => ({ id, name, price, quantity }));
-      const res = await canteen.purchase(cardNumber, items);
+      const items = cartItems.map(({ id, name, price, quantity }) => ({ product_id: id, name, price, qty: quantity }));
+      const res = await supabaseCanteenService.purchase(user.school_id, card.card_assignment_id, items, total);
       playAudioTone("success");
       setPayPhotoError(false);
-      const paidTotal = (res as any).total_amount ?? res.transaction?.total_amount ?? total;
-      setPayResult({ student: studentInfo, total: paidTotal, new_balance: res.new_balance });
+      setPayResult({ student: card.student, total, new_balance: res.new_balance });
       setScannedCard(null);
       setCart({});
       setPaying(false);
       loadReport();
-      toast(`Paid ${res.transaction.total_amount.toLocaleString()} RWF · Balance: ${res.new_balance.toLocaleString()} RWF`, "success");
+      toast(`Paid ${total.toLocaleString()} RWF · Balance: ${res.new_balance.toLocaleString()} RWF`, "success");
     } catch (err) {
       playAudioTone("error");
       toast(err instanceof Error ? err.message : "Payment failed", "error");
@@ -470,33 +479,29 @@ export default function CanteenPage() {
     }
   }
 
-  async function handlePayment(cardNum: string, isNFC = false) {
+  async function handlePayment(cardNum: string, _isNFC = false) {
     if (!cardNum.trim() || processingRef.current || total === 0) return;
+    if (!user?.school_id) { toast("No school selected", "error"); return; }
     processingRef.current = true;
     setScanLoading(true);
     try {
-      const scanRes = isNFC
-        ? await cards.scanNFC(cardNum)
-        : await cards.scan(cardNum.trim());
-      const balance = scanRes.data.wallet_balance;
+      const holder = await supabaseCanteenService.lookupCardHolder(user.school_id, cardNum.trim());
+      if (!holder) throw new Error("Card not found or not active");
+      if (holder.is_frozen) throw new Error("This card is frozen");
+      const balance = holder.wallet_balance;
       if (balance < total) {
         playAudioTone("error");
         toast(`Insufficient — ${balance.toLocaleString()} RWF available, need ${total.toLocaleString()} RWF`, "error");
         processingRef.current = false;
         return;
       }
-      if (scanRes.data.daily_limit && total > scanRes.data.daily_limit) {
-        playAudioTone("error");
-        toast(`Order exceeds daily limit of ${scanRes.data.daily_limit.toLocaleString()} RWF`, "error");
-        processingRef.current = false;
-        return;
-      }
       stopListen();
+      const scanned = toScannedCard(holder);
       if (fastMode) {
-        await executePurchase(scanRes.data.card_number, scanRes.data.student);
+        await executePurchase(scanned);
       } else {
         setStudentPhotoError(false);
-        setScannedCard(scanRes.data);
+        setScannedCard(scanned);
       }
     } catch (err) {
       playAudioTone("error");
@@ -509,7 +514,9 @@ export default function CanteenPage() {
 
   // Keep a ref to the latest handlePayment so the NFC callback is never stale
   const payHandlerRef = useRef(handlePayment);
-  payHandlerRef.current = handlePayment;
+  useEffect(() => {
+    payHandlerRef.current = handlePayment;
+  }, [handlePayment]);
 
   function startPaying() {
     if (total === 0) return;
@@ -533,20 +540,28 @@ export default function CanteenPage() {
 
   /* ── Daily report ──────────────────────────────────────────── */
   const [report, setReport] = useState<{
-    transactions: CanteenTransaction[];
+    transactions: CanteenTransactionRow[];
     total_revenue: number;
     transaction_count: number;
-    items_summary?: { name: string; quantity: number; revenue: number }[];
   } | null>(null);
   const [reportLoading, setReportLoading] = useState(true);
 
   const loadReport = useCallback(() => {
+    if (!user?.school_id) return;
     setReportLoading(true);
-    canteen.dailyReport()
-      .then((r) => setReport(r as typeof report))
+    supabaseCanteenService.listTransactions(user.school_id, 50)
+      .then((rows) => {
+        const today = new Date().toLocaleDateString("en-CA");
+        const todayRows = rows.filter((r) => r.created_at.startsWith(today));
+        setReport({
+          transactions: todayRows,
+          total_revenue: todayRows.reduce((s, r) => s + r.total_amount, 0),
+          transaction_count: todayRows.length,
+        });
+      })
       .catch(console.error)
       .finally(() => setReportLoading(false));
-  }, []);
+  }, [user?.school_id]);
 
   useEffect(() => {
     if (!authLoading) {
@@ -647,7 +662,7 @@ export default function CanteenPage() {
                 Cancel
               </button>
               <button
-                onClick={() => executePurchase(scannedCard.card_number, scannedCard.student)}
+                onClick={() => executePurchase(scannedCard)}
                 disabled={submittingPayment}
                 className="flex-2 py-3 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-1.5 transition shadow-sm"
                 style={{ background: "#FF7A22" }}
@@ -1094,25 +1109,6 @@ export default function CanteenPage() {
                     <p className="text-xs text-center text-gray-300 py-2">No sales yet today</p>
                   )}
 
-                  {/* Items sold breakdown */}
-                  {!reportLoading && report && report.items_summary && report.items_summary.length > 0 && (
-                    <div className="mb-2 rounded-xl overflow-hidden" style={{ background: "#F5F5F5" }}>
-                      <p className="text-[10px] font-semibold px-2 pt-1.5 pb-1" style={{ color: "#666" }}>ITEMS SOLD TODAY</p>
-                      <div className="max-h-24 overflow-y-auto px-2 pb-1.5 space-y-1">
-                        {report.items_summary.map((item) => (
-                          <div key={item.name} className="flex items-center justify-between">
-                            <span className="text-xs truncate" style={{ color: "#121212" }}>
-                              {item.name} <span className="text-gray-400">×{item.quantity}</span>
-                            </span>
-                            <span className="text-xs font-semibold ml-2 flex-shrink-0" style={{ color: "#FF7A22" }}>
-                              {item.revenue.toLocaleString()}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
                   {/* Per-student transactions */}
                   {!reportLoading && report && report.transactions.length > 0 && (
                     <div className="space-y-1 max-h-28 overflow-y-auto">
@@ -1120,10 +1116,10 @@ export default function CanteenPage() {
                         <div key={t.id} className="flex items-center justify-between py-0.5">
                           <div className="flex-1 min-w-0">
                             <p className="text-xs truncate" style={{ color: "#121212" }}>
-                              {t.student?.user?.first_name} {t.student?.user?.last_name}
+                              Student
                             </p>
                             <p className="text-[10px] text-gray-400">
-                              {new Date(t.transaction_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                              {new Date(t.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                             </p>
                           </div>
                           <span className="text-xs font-bold text-red-500 ml-2">

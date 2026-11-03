@@ -2,8 +2,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Search, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
-import { students, Student } from "@/lib/api";
-import { getStoredStudents } from "@/lib/demo";
+import type { Student } from "@/lib/api";
+import { supabaseStudentService } from "@/lib/supabase/services/studentService";
+import { useAuth } from "@/context/AuthContext";
 
 function ScoreBadge({ score, total }: { score: number; total: number }) {
   const pct = (score / total) * 100;
@@ -31,8 +32,8 @@ function Avatar({ student, index }: { student: Student; index: number }) {
 
 export default function StudentTable() {
   const router = useRouter();
-  const [data, setData] = useState<Student[]>([]);
-  const [total, setTotal] = useState(0);
+  const { user } = useAuth();
+  const [allData, setAllData] = useState<Student[]>([]);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
@@ -40,39 +41,29 @@ export default function StudentTable() {
   const limit = 5;
 
   const fetchStudents = useCallback(async () => {
+    const schoolId = user?.school_id;
+    if (!schoolId) return;
     setLoading(true);
     try {
-      const res = await students.list({ page, limit, search: query || undefined });
-      if (res.data && res.data.length > 0) {
-        setData(res.data);
-        setTotal(res.pagination.total);
-      } else {
-        const filtered = getStoredStudents().filter((s) =>
-          !query || `${s.user.first_name} ${s.user.last_name}`.toLowerCase().includes(query.toLowerCase())
-        );
-        setData(filtered);
-        setTotal(filtered.length);
-      }
+      const results = await supabaseStudentService.listSchoolStudents(schoolId, null, query || null);
+      setAllData(results);
     } catch {
-      const filtered = getStoredStudents().filter((s) =>
-        !query || `${s.user.first_name} ${s.user.last_name}`.toLowerCase().includes(query.toLowerCase())
-      );
-      setData(filtered);
-      setTotal(filtered.length);
+      setAllData([]);
     } finally {
       setLoading(false);
     }
-  }, [page, query]);
+  }, [user?.school_id, query]);
 
   useEffect(() => { fetchStudents(); }, [fetchStudents]);
 
-  // debounce search
   useEffect(() => {
     const t = setTimeout(() => { setQuery(search); setPage(1); }, 400);
     return () => clearTimeout(t);
   }, [search]);
 
+  const total = allData.length;
   const pages = Math.ceil(total / limit);
+  const data = allData.slice((page - 1) * limit, page * limit);
 
   return (
     <div className="bg-white rounded-2xl p-5 shadow-sm">

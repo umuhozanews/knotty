@@ -66,7 +66,7 @@ export default function CanteenDashboard() {
       {/* Recent transactions */}
       <div className="bg-white rounded-2xl shadow-sm p-4">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-semibold text-gray-700">Today's Transactions</p>
+          <p className="text-sm font-semibold text-gray-700">Today&apos;s Transactions</p>
           <Link href="/canteen" className="text-xs text-blue-600 hover:underline flex items-center gap-1">
             View all <ChevronRight size={12} />
           </Link>

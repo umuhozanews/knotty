@@ -8,7 +8,8 @@ import {
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import VirtualCardTap from "@/components/VirtualCardTap";
-import { library, LibraryBorrowRecord, LibraryBook } from "@/lib/api";
+import type { LibraryBorrowRecord, LibraryBook } from "@/lib/api";
+import { supabaseLibraryService } from "@/lib/supabase/services";
 import { useNFC } from "@/hooks/useNFC";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
@@ -72,7 +73,7 @@ type StudentInfo = {
 type BookOption = { id: string; title: string; author?: string | null; isbn?: string | null; location?: string | null; available_copies?: number; total_copies?: number; category?: string | null };
 
 export default function LibraryPage() {
-  const { loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const { startListen, stopListen, listening, isSupported, error: nfcError } = useNFC();
 
@@ -178,39 +179,42 @@ export default function LibraryPage() {
 
   /* ── Data load ─────────────────────────────────────────────── */
   const loadHome = useCallback(async () => {
+    if (!user?.school_id) return;
     setLoading(true);
     try {
-      const [statsRes, borrowsRes] = await Promise.all([
-        library.stats().catch(() => null),
-        library.schoolBorrows({ status: "active", limit: 50 }).catch(() => ({ data: [] })),
+      const [statsData, borrowsData] = await Promise.all([
+        supabaseLibraryService.getStats(user.school_id).catch(() => null),
+        supabaseLibraryService.listSchoolBorrows(user.school_id, "active", 50).catch(() => []),
       ]);
-      if (statsRes?.data) setStats(s => ({ ...s, ...statsRes.data }));
-      setRecentBorrows(borrowsRes.data);
+      if (statsData) setStats(s => ({ ...s, ...statsData }));
+      setRecentBorrows(borrowsData);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => { if (!authLoading) loadHome(); }, [authLoading, loadHome]);
 
   /* ── Load catalog ──────────────────────────────────────────── */
   const loadCatalog = useCallback(async (searchQuery = catalogSearch, category = catalogCategory) => {
+    if (!user?.school_id) return;
     setCatalogLoading(true);
     try {
-      const res = await library.books({
-        search: searchQuery.trim() || undefined,
-        category: category !== "All" ? category : undefined,
-        limit: 100,
-      });
-      setCatalogBooks(res.data);
+      const books = await supabaseLibraryService.listBooks(
+        user.school_id,
+        searchQuery.trim() || null,
+        category !== "All" ? category : null,
+        100,
+      );
+      setCatalogBooks(books);
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to load catalog", "error");
     } finally {
       setCatalogLoading(false);
     }
-  }, [catalogSearch, catalogCategory, toast]);
+  }, [user, catalogSearch, catalogCategory, toast]);
 
   useEffect(() => {
     if (tab === "catalog") {
@@ -222,9 +226,11 @@ export default function LibraryPage() {
     setShowFinesModal(true);
     setFinesLoading(true);
     try {
-      const res = await library.overdueReport(1, 50).catch(() => null);
-      if (res?.data && res.data.length > 0) {
-        setFinesRecords(res.data);
+      const records = user?.school_id
+        ? await supabaseLibraryService.listOverdueBorrows(user.school_id, 50).catch(() => null)
+        : null;
+      if (records && records.length > 0) {
+        setFinesRecords(records);
       } else {
         const computed = recentBorrows
           .filter(b => new Date(b.due_at) < new Date())
@@ -250,7 +256,8 @@ export default function LibraryPage() {
   async function handleWaiveFine(borrowId: string) {
     setWaivingFineId(borrowId);
     try {
-      await library.waiveFine(borrowId);
+      if (!user?.school_id) return;
+      await supabaseLibraryService.waiveFine(user.school_id, borrowId);
       toast("Fine waived successfully", "success");
       setFinesRecords(prev => prev.filter(r => r.id !== borrowId));
       setStats(s => ({ ...s, pendingFees: Math.max(0, s.pendingFees - 200) }));
@@ -271,44 +278,39 @@ export default function LibraryPage() {
 
   /* ── Return-tab card lookup ────────────────────────────────── */
   async function lookupCard(query: string) {
-    if (!query.trim()) return;
+    if (!query.trim() || !user?.school_id) return;
     setLoadingStudent(true);
     setStudent(null);
     setStudentBorrows([]);
     setStudentHistoryList([]);
     setShowLendForm(false);
     try {
-      const res = await library.lookupStudent(query.trim());
-      const s = res.data;
+      const s = await supabaseLibraryService.lookupStudent(user.school_id, query.trim());
       setStudent({
         id: s.id,
         name: s.name,
         studentClass: s.class,
         card_number: s.card_number ?? query.trim(),
-        wallet_balance: (s as any).wallet_balance ?? 0,
+        wallet_balance: 0,
         student_code: s.student_code,
         photo: s.photo,
-        is_active: (s as any).is_active ?? true,
-        is_frozen: (s as any).is_frozen ?? false,
+        is_active: s.is_active,
+        is_frozen: s.is_frozen,
         has_card: s.has_card,
       });
       playChime();
-      const historyRes = await library.studentHistory(s.id, 1, 30).catch(() => ({ data: [] }));
-      setStudentBorrows(historyRes.data.filter((b: LibraryBorrowRecord) => !b.returned_at));
-      setStudentHistoryList(historyRes.data.filter((b: LibraryBorrowRecord) => Boolean(b.returned_at)));
+      const history = await supabaseLibraryService.studentBorrowHistory(user.school_id, s.id, 30).catch(() => []);
+      setStudentBorrows(history.filter((b: LibraryBorrowRecord) => !b.returned_at));
+      setStudentHistoryList(history.filter((b: LibraryBorrowRecord) => Boolean(b.returned_at)));
     } catch (err) {
       // If student lookup failed, check if this is a book copy tag or barcode scanned to return
       try {
-        const retRes = await library.returnBook({ copy_tag: query.trim() });
+        const ret = await supabaseLibraryService.returnBook({ schoolId: user.school_id, copyTag: query.trim() });
         playChime();
-        const bkTitle = retRes.data.record?.copy?.book?.title ?? "Book";
-        const stdUser = retRes.data.record?.student?.user;
-        const stdName = stdUser ? `${stdUser.first_name} ${stdUser.last_name}` : "Student";
-        const fine = retRes.data.fine_amount;
         toast(
-          fine > 0
-            ? `"${bkTitle}" returned for ${stdName}! Overdue fine: ${fine.toLocaleString()} RWF ${retRes.data.fine_charged_to_wallet ? "(deducted from card wallet)" : ""}`
-            : `"${bkTitle}" returned successfully for ${stdName}!`,
+          ret.fineAmount > 0
+            ? `Book returned! Overdue fine: ${ret.fineAmount.toLocaleString()} RWF${ret.fineChargedToWallet ? " (deducted from card wallet)" : ""}`
+            : "Book returned successfully!",
           "success"
         );
         loadHome();
@@ -325,7 +327,7 @@ export default function LibraryPage() {
 
   /* ── Modal student lookup ──────────────────────────────────── */
   async function lookupModalStudent(query: string) {
-    if (!query.trim()) return;
+    if (!query.trim() || !user?.school_id) return;
     setLookingUpModalStudent(true);
     setModalStudent(null);
     if (!selectedBook) {
@@ -333,18 +335,17 @@ export default function LibraryPage() {
       setBookResults([]);
     }
     try {
-      const res = await library.lookupStudent(query.trim());
-      const s = res.data;
+      const s = await supabaseLibraryService.lookupStudent(user.school_id, query.trim());
       setModalStudent({
         id: s.id,
         name: s.name,
         studentClass: s.class,
         card_number: s.card_number ?? query.trim(),
-        wallet_balance: (s as any).wallet_balance ?? 0,
+        wallet_balance: 0,
         student_code: s.student_code,
         photo: s.photo,
-        is_active: (s as any).is_active ?? true,
-        is_frozen: (s as any).is_frozen ?? false,
+        is_active: s.is_active,
+        is_frozen: s.is_frozen,
         has_card: s.has_card,
       });
       playChime();
@@ -359,18 +360,19 @@ export default function LibraryPage() {
 
   /* ── Renew loan ────────────────────────────────────────────── */
   async function handleRenew(borrowId: string) {
+    if (!user?.school_id) return;
     setRenewingId(borrowId);
     try {
-      const res = await library.renewBorrow(borrowId, 14);
+      const dueAt = await supabaseLibraryService.renewBorrow(user.school_id, borrowId, 14);
       playChime();
-      const newDue = new Date(res.data.due_at).toLocaleDateString("en-RW", { day: "numeric", month: "short", year: "numeric" });
+      const newDue = new Date(dueAt).toLocaleDateString("en-RW", { day: "numeric", month: "short", year: "numeric" });
       toast(`Loan renewed successfully! New return deadline: ${newDue}`, "success");
       if (student?.id) {
-        const historyRes = await library.studentHistory(student.id, 1, 30).catch(() => ({ data: [] }));
-        setStudentBorrows(historyRes.data.filter((b: LibraryBorrowRecord) => !b.returned_at));
-        setStudentHistoryList(historyRes.data.filter((b: LibraryBorrowRecord) => Boolean(b.returned_at)));
+        const history = await supabaseLibraryService.studentBorrowHistory(user.school_id, student.id, 30).catch(() => []);
+        setStudentBorrows(history.filter((b: LibraryBorrowRecord) => !b.returned_at));
+        setStudentHistoryList(history.filter((b: LibraryBorrowRecord) => Boolean(b.returned_at)));
       }
-      library.schoolBorrows({ status: "active", limit: 50 }).then(r => setRecentBorrows(r.data)).catch(() => {});
+      supabaseLibraryService.listSchoolBorrows(user.school_id, "active", 50).then(r => setRecentBorrows(r)).catch(() => {});
     } catch (err) {
       playErrorTone();
       toast(err instanceof Error ? err.message : "Renewal failed", "error");
@@ -386,10 +388,11 @@ export default function LibraryPage() {
       setBookCheckResults([]);
       return;
     }
+    if (!user?.school_id) return;
     setBookCheckLoading(true);
     try {
-      const res = await library.books({ search: q.trim(), limit: 12 });
-      setBookCheckResults(res.data);
+      const books = await supabaseLibraryService.listBooks(user.school_id, q.trim(), null, 12);
+      setBookCheckResults(books);
     } catch {
       setBookCheckResults([]);
     } finally {
@@ -409,18 +412,19 @@ export default function LibraryPage() {
 
   /* ── Return ────────────────────────────────────────────────── */
   async function handleReturn(borrowId: string) {
+    if (!user?.school_id) return;
     setReturning(borrowId);
     try {
-      const res = await library.returnBook({ borrow_id: borrowId });
-      const fine = res.data.fine_amount;
+      const ret = await supabaseLibraryService.returnBook({ schoolId: user.school_id, borrowId });
+      const fine = ret.fineAmount;
       toast(fine > 0
-        ? `Returned — fine ${fine.toLocaleString()} RWF ${res.data.fine_charged_to_wallet ? "deducted from card" : "(settle manually)"}`
+        ? `Returned — fine ${fine.toLocaleString()} RWF ${ret.fineChargedToWallet ? "deducted from card" : "(settle manually)"}`
         : "Book returned successfully!", "success");
       playChime();
       if (student?.id) {
-        const borrows = await library.studentHistory(student.id, 1, 30).catch(() => ({ data: [] }));
-        setStudentBorrows(borrows.data.filter((b: LibraryBorrowRecord) => !b.returned_at));
-        setStudentHistoryList(borrows.data.filter((b: LibraryBorrowRecord) => Boolean(b.returned_at)));
+        const history = await supabaseLibraryService.studentBorrowHistory(user.school_id, student.id, 30).catch(() => []);
+        setStudentBorrows(history.filter((b: LibraryBorrowRecord) => !b.returned_at));
+        setStudentHistoryList(history.filter((b: LibraryBorrowRecord) => Boolean(b.returned_at)));
       }
       setStats(s => ({ ...s, activeMembers: Math.max(0, s.activeMembers - 1) }));
       setRecentBorrows(prev => prev.filter(b => b.id !== borrowId));
@@ -435,27 +439,23 @@ export default function LibraryPage() {
 
   /* ── Quick Return by Book Copy Tag ──────────────────────────── */
   async function handleQuickReturn(copyTag: string) {
-    if (!copyTag.trim()) return;
+    if (!copyTag.trim() || !user?.school_id) return;
     setReturningTag(true);
     try {
-      const res = await library.returnBook({ copy_tag: copyTag.trim() });
+      const ret = await supabaseLibraryService.returnBook({ schoolId: user.school_id, copyTag: copyTag.trim() });
       playChime();
-      const bkTitle = res.data.record?.copy?.book?.title ?? "Book";
-      const stdUser = res.data.record?.student?.user;
-      const stdName = stdUser ? `${stdUser.first_name} ${stdUser.last_name}` : "Student";
-      const fine = res.data.fine_amount;
       toast(
-        fine > 0
-          ? `"${bkTitle}" returned for ${stdName}! Overdue fine: ${fine.toLocaleString()} RWF ${res.data.fine_charged_to_wallet ? "(deducted from card wallet)" : ""}`
-          : `"${bkTitle}" returned successfully for ${stdName}!`,
+        ret.fineAmount > 0
+          ? `Book returned! Overdue fine: ${ret.fineAmount.toLocaleString()} RWF${ret.fineChargedToWallet ? " (deducted from card wallet)" : ""}`
+          : "Book returned successfully!",
         "success"
       );
       setReturnTagInput("");
       loadHome();
       if (student?.id) {
-        const borrows = await library.studentHistory(student.id, 1, 30).catch(() => ({ data: [] }));
-        setStudentBorrows(borrows.data.filter((b: LibraryBorrowRecord) => !b.returned_at));
-        setStudentHistoryList(borrows.data.filter((b: LibraryBorrowRecord) => Boolean(b.returned_at)));
+        const history = await supabaseLibraryService.studentBorrowHistory(user.school_id, student.id, 30).catch(() => []);
+        setStudentBorrows(history.filter((b: LibraryBorrowRecord) => !b.returned_at));
+        setStudentHistoryList(history.filter((b: LibraryBorrowRecord) => Boolean(b.returned_at)));
       }
     } catch (err) {
       playErrorTone();
@@ -467,10 +467,11 @@ export default function LibraryPage() {
 
   /* ── Book search ───────────────────────────────────────────── */
   async function searchBooks(q: string) {
+    if (!user?.school_id) return;
     setSearchingBook(true);
     try {
-      const res = await library.books({ search: q.trim() || undefined, limit: 12 });
-      setBookResults(res.data as unknown as BookOption[]);
+      const books = await supabaseLibraryService.listBooks(user.school_id, q.trim() || null, null, 12);
+      setBookResults(books as unknown as BookOption[]);
     } catch {
       setBookResults([]);
     } finally {
@@ -480,15 +481,14 @@ export default function LibraryPage() {
 
   /* ── Lend (panel, used from return-tab) ────────────────────── */
   async function handleLend() {
-    if (!student || !selectedBook) return;
+    if (!student || !selectedBook || !user?.school_id) return;
     setLending(true);
     try {
-      await library.borrowBook({
-        book_id: selectedBook.id,
-        student_id: student.id,
-        card_number: student.card_number,
-        student_code: student.student_code,
-        due_days: dueDays,
+      await supabaseLibraryService.borrowBook({
+        schoolId: user.school_id,
+        bookId: selectedBook.id,
+        studentId: student.id,
+        dueDays,
       });
       playChime();
       toast(`"${selectedBook.title}" lent to ${student.name}. Due in ${dueDays} days.`, "success");
@@ -496,9 +496,9 @@ export default function LibraryPage() {
       setSelectedBook(null);
       setBookSearch("");
       setBookResults([]);
-      const borrows = await library.studentHistory(student.id, 1, 30).catch(() => ({ data: [] }));
-      setStudentBorrows(borrows.data.filter((b: LibraryBorrowRecord) => !b.returned_at));
-      setStudentHistoryList(borrows.data.filter((b: LibraryBorrowRecord) => Boolean(b.returned_at)));
+      const history = await supabaseLibraryService.studentBorrowHistory(user.school_id, student.id, 30).catch(() => []);
+      setStudentBorrows(history.filter((b: LibraryBorrowRecord) => !b.returned_at));
+      setStudentHistoryList(history.filter((b: LibraryBorrowRecord) => Boolean(b.returned_at)));
       setStats(s => ({ ...s, activeMembers: s.activeMembers + 1 }));
       loadHome();
     } catch (err) {
@@ -511,15 +511,14 @@ export default function LibraryPage() {
 
   /* ── Lend (modal) ──────────────────────────────────────────── */
   async function handleModalLend() {
-    if (!modalStudent || !selectedBook) return;
+    if (!modalStudent || !selectedBook || !user?.school_id) return;
     setLending(true);
     try {
-      await library.borrowBook({
-        book_id: selectedBook.id,
-        student_id: modalStudent.id,
-        card_number: modalStudent.card_number,
-        student_code: modalStudent.student_code,
-        due_days: dueDays,
+      await supabaseLibraryService.borrowBook({
+        schoolId: user.school_id,
+        bookId: selectedBook.id,
+        studentId: modalStudent.id,
+        dueDays,
       });
       playChime();
       toast(`"${selectedBook.title}" lent to ${modalStudent.name}. Due in ${dueDays} days.`, "success");
@@ -529,8 +528,7 @@ export default function LibraryPage() {
       setBookResults([]);
       setStats(s => ({ ...s, activeMembers: s.activeMembers + 1 }));
       loadHome();
-      // Refresh overview list
-      library.schoolBorrows({ status: "active", limit: 50 }).then(r => setRecentBorrows(r.data)).catch(() => {});
+      supabaseLibraryService.listSchoolBorrows(user.school_id, "active", 50).then(r => setRecentBorrows(r)).catch(() => {});
     } catch (err) {
       playErrorTone();
       toast(err instanceof Error ? err.message : "Lending failed", "error");
@@ -545,13 +543,15 @@ export default function LibraryPage() {
     if (!bookForm.title || !bookForm.book_number) return;
     setSavingBook(true);
     try {
-      await library.createBook({
+      if (!user?.school_id) throw new Error("Not authenticated");
+      await supabaseLibraryService.createBook({
+        schoolId: user.school_id,
         title: bookForm.title,
         author: bookForm.author || "Unknown",
         isbn: bookForm.book_number,
-        category: bookForm.category || undefined,
-        total_copies: bookForm.total_copies,
-        location: bookForm.location || undefined,
+        category: bookForm.category || null,
+        totalCopies: bookForm.total_copies,
+        location: bookForm.location || null,
       });
       setBookSaved(true);
       const addedCopies = bookForm.total_copies;

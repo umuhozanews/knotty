@@ -1,8 +1,17 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { myAccount, AttendanceRecord } from "@/lib/api";
+import { getSafeBrowserClient } from "@/lib/supabase/client";
 import DashboardShell from "@/components/DashboardShell";
+
+type AttendanceRecord = {
+  id: string;
+  student_id: string;
+  date: string;
+  status: string;
+  check_in_time: string | null;
+  check_out_time: string | null;
+};
 import { Loader2, CheckCircle, XCircle, Clock, MinusCircle } from "lucide-react";
 
 const STATUS: Record<string, { label: string; color: string; icon: React.ElementType; dot: string }> = {
@@ -13,14 +22,45 @@ const STATUS: Record<string, { label: string; color: string; icon: React.Element
 };
 
 export default function MyAttendancePage() {
-  const { loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (authLoading) return;
-    myAccount.attendance(1, 60).then((r) => setRecords(r.data as AttendanceRecord[])).catch(console.error).finally(() => setLoading(false));
-  }, [authLoading]);
+    if (authLoading || !user) return;
+    const client = getSafeBrowserClient();
+    if (!client) { setLoading(false); return; }
+    const schoolId = user.school_id;
+    if (!schoolId) { setLoading(false); return; }
+
+    async function load() {
+      try {
+        const { data: profileRows } = await client!.rpc("get_my_student_profile", { p_school_id: schoolId });
+        const profile = (profileRows as any)?.[0];
+        if (!profile?.student_id) return;
+        const { data: rows } = await client!
+          .from("attendance_records")
+          .select("id, student_id, attendance_date, status, check_in_time, check_out_time")
+          .eq("school_id", schoolId)
+          .eq("student_id", profile.student_id)
+          .order("attendance_date", { ascending: false })
+          .limit(60);
+        setRecords((rows || []).map((r: any) => ({
+          id: r.id,
+          student_id: r.student_id,
+          date: r.attendance_date,
+          status: (r.status || "").toUpperCase(),
+          check_in_time: r.check_in_time,
+          check_out_time: r.check_out_time,
+        })));
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, [authLoading, user]);
 
   const summary = { PRESENT: 0, ABSENT: 0, LATE: 0, EXCUSED: 0 };
   records.forEach((r) => { if (r.status in summary) summary[r.status as keyof typeof summary]++; });

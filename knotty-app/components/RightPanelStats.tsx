@@ -2,13 +2,32 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { MoreHorizontal, ArrowUpRight } from "lucide-react";
-import { schools, DashboardStats } from "@/lib/api";
+import { getSafeBrowserClient } from "@/lib/supabase/client";
+
+type LocalStats = { total_students: number; present_today: number; low_balance_cards: number; fee_collected: number; canteen_revenue_today: number };
 
 export default function RightPanelStats({ schoolId }: { schoolId: string }) {
-  const [data, setData] = useState<DashboardStats | null>(null);
+  const [data, setData] = useState<LocalStats | null>(null);
 
   useEffect(() => {
-    schools.stats(schoolId).then((r) => setData(r.data)).catch(console.error);
+    const client = getSafeBrowserClient();
+    if (!client || !schoolId) return;
+
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    Promise.all([
+      client.from("student_records").select("*", { count: "exact", head: true }).eq("school_id", schoolId).eq("status", "active"),
+      client.from("attendance_records").select("*", { count: "exact", head: true }).eq("school_id", schoolId).eq("attendance_date", todayStr).eq("status", "present"),
+      client.from("card_assignments").select("*", { count: "exact", head: true }).eq("school_id", schoolId).eq("status", "active").lt("wallet_balance", 500),
+    ]).then(([students, present, lowBalance]) => {
+      setData({
+        total_students: students.count ?? 0,
+        present_today: present.count ?? 0,
+        low_balance_cards: lowBalance.count ?? 0,
+        fee_collected: 0,
+        canteen_revenue_today: 0,
+      });
+    }).catch(() => {});
   }, [schoolId]);
 
   const attendancePct = data

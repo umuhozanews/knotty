@@ -3,8 +3,9 @@ import { Menu, Search, Sun, Moon, Bell, X, User, Wifi, Building2, ChevronDown, C
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useRouter, usePathname } from "next/navigation";
-import { useState, useEffect, useRef, useCallback } from "react";
-import { students, notifications as notifApi, Student, Notification } from "@/lib/api";
+import { useState, useEffect, useRef } from "react";
+import type { Student } from "@/lib/api";
+import { supabaseStudentService } from "@/lib/supabase/services/studentService";
 import { useNFC } from "@/hooks/useNFC";
 import NFCStudentModal, { NFCMode } from "@/components/NFCStudentModal";
 import { isManagementRole } from "@/lib/roles";
@@ -73,36 +74,31 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const searchRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  type LocalNotif = { id: string; title: string; message: string; created_at: string; is_read: boolean };
+
   // Notifications
   const [notifOpen, setNotifOpen] = useState(false);
-  const [notifs, setNotifs] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifs] = useState<LocalNotif[]>([]);
+  const [unreadCount] = useState(0);
   const notifRef = useRef<HTMLDivElement>(null);
 
   const today = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
   const title = Object.entries(PAGE_TITLES).find(([k]) => pathname === k || pathname.startsWith(k + "/"))?.[1] ?? "IshuriHUB";
 
-  const loadNotifs = useCallback(() => {
-    notifApi.list().then((r) => {
-      setNotifs(r.data as Notification[]);
-      setUnreadCount((r.data as Notification[]).filter((n) => !n.is_read).length);
-    }).catch(() => {});
-  }, []);
-
-  useEffect(() => { loadNotifs(); }, [loadNotifs]);
-
   useEffect(() => {
     if (!query.trim()) { setSearchResults([]); return; }
+    const schoolId = user?.school_id;
+    if (!schoolId) return;
     const t = setTimeout(async () => {
       setSearching(true);
       try {
-        const r = await students.list({ search: query, limit: 6 });
-        setSearchResults(r.data);
+        const results = await supabaseStudentService.listSchoolStudents(schoolId, null, query);
+        setSearchResults(results.slice(0, 6));
       } catch { /* ignore */ }
       finally { setSearching(false); }
     }, 300);
     return () => clearTimeout(t);
-  }, [query]);
+  }, [query, user?.school_id]);
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -122,11 +118,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     if (searchOpen && searchInputRef.current) searchInputRef.current.focus();
   }, [searchOpen]);
 
-  async function markRead(id: string) {
-    await notifApi.markRead(id).catch(() => {});
-    setNotifs((n) => n.map((x) => x.id === id ? { ...x, is_read: true } : x));
-    setUnreadCount((c) => Math.max(0, c - 1));
-  }
+  function markRead(_id: string) { /* notifications not yet wired to Supabase */ }
 
   function handleLogout() { logout(); router.replace("/login"); }
 
@@ -321,7 +313,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
 
         {/* Notifications */}
         <div ref={notifRef} className="relative">
-          <button onClick={() => { setNotifOpen((v) => !v); if (!notifOpen) loadNotifs(); }}
+          <button onClick={() => setNotifOpen((v) => !v)}
             className="relative w-8 h-8 md:w-9 md:h-9 bg-white rounded-full flex items-center justify-center hover:bg-gray-50 transition">
             <Bell size={16} className="text-gray-500" />
             {unreadCount > 0 && (

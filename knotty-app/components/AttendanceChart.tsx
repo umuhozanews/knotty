@@ -5,8 +5,9 @@ import {
   Tooltip, ResponsiveContainer,
 } from "recharts";
 import { Calendar } from "lucide-react";
-import { schools, AttendanceTrendPoint } from "@/lib/api";
-import { DEMO_TREND } from "@/lib/demo";
+import { getSafeBrowserClient } from "@/lib/supabase/client";
+
+type TrendPoint = { date: string; present: number; absence: number };
 
 interface TooltipProps {
   active?: boolean;
@@ -25,13 +26,38 @@ function CustomTooltip({ active, payload }: TooltipProps) {
 }
 
 export default function AttendanceChart({ schoolId }: { schoolId: string }) {
-  const [data, setData] = useState<AttendanceTrendPoint[]>([]);
+  const [data, setData] = useState<TrendPoint[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    schools.trend(schoolId, 9)
-      .then((r) => setData(r.data))
-      .catch(() => { setData(DEMO_TREND); })
+    const client = getSafeBrowserClient();
+    if (!client || !schoolId) { setLoading(false); return; }
+
+    const nineAgo = new Date();
+    nineAgo.setDate(nineAgo.getDate() - 8);
+    const fromDate = nineAgo.toISOString().split("T")[0];
+
+    Promise.resolve(
+      client
+        .from("attendance_records")
+        .select("attendance_date, status")
+        .eq("school_id", schoolId)
+        .gte("attendance_date", fromDate)
+        .order("attendance_date")
+    ).then(({ data: records }) => {
+      const map = new Map<string, { present: number; absence: number }>();
+      for (const r of records ?? []) {
+        const d = r.attendance_date as string;
+        const entry = map.get(d) ?? { present: 0, absence: 0 };
+        if (r.status === "present") entry.present++;
+        else entry.absence++;
+        map.set(d, entry);
+      }
+      const trend: TrendPoint[] = Array.from(map.entries())
+        .map(([date, counts]) => ({ date: date.slice(5), ...counts }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+      setData(trend);
+    }).catch(() => {})
       .finally(() => setLoading(false));
   }, [schoolId]);
 
@@ -82,7 +108,7 @@ export default function AttendanceChart({ schoolId }: { schoolId: string }) {
       )}
 
       {!loading && peak === 0 && (
-        <p className="text-center text-xs text-gray-400 -mt-2">No attendance data yet — run the seed and mark some attendance.</p>
+        <p className="text-center text-xs text-gray-400 -mt-2">No attendance data yet.</p>
       )}
     </div>
   );

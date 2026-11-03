@@ -7,12 +7,18 @@ import {
 import DashboardShell from "@/components/DashboardShell";
 import KnottyCard from "@/components/KnottyCard";
 import VirtualCardTap from "@/components/VirtualCardTap";
-import {
-  attendance, cards, structure, Class,
-  AttendanceTodaySummary, CardScanFull, AttendanceSettings,
-} from "@/lib/api";
-import { supabaseAttendanceService } from "@/lib/supabase/services";
-import { isSupabaseConfigured } from "@/lib/supabase/client";
+import { supabaseAttendanceService, supabaseCanteenService, supabaseAcademicService } from "@/lib/supabase/services";
+import { getSafeBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
+type CardScanFull = {
+  card_number: string; wallet_balance: number; daily_limit: number | null;
+  issued_at: string; expires_at: string; is_frozen: boolean;
+  today_attendance: string | null; tap_out_available_at: string | null;
+  check_in_time: string | null; check_out_time: string | null;
+  student: { id: string; name: string; class: string; student_code: string; photo: string | null; school_name: string; school_logo: string | null };
+};
+
+type AttendanceSettings = { tap_out_after_minutes: number; school_start_time: string };
+type Class = { id: string; name: string; section_code?: string; level?: { name: string } | null };
 import { useAuth } from "@/context/AuthContext";
 import { useNFC } from "@/hooks/useNFC";
 import { useToast } from "@/context/ToastContext";
@@ -233,142 +239,135 @@ export default function AttendancePage() {
   const [pdfLoading, setPdfLoading] = useState(false);
 
   async function downloadAttendancePDF() {
-    if (!selectedClass) { toast("Select a class first", "error"); return; }
-    setPdfLoading(true);
-    try {
-      const url = await attendance.downloadPDF(selectedClass, date);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `attendance_${selectedClass}_${date}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
-      toast("PDF downloaded", "success");
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "PDF download failed", "error");
-    } finally {
-      setPdfLoading(false);
-    }
+    toast("PDF export not available yet", "info");
   }
 
   const loadTodaySummary = useCallback((classId?: string) => {
-    attendance.todaySummary(classId).then((r) => {
-      setTodaySummary(r?.summary || { PRESENT: 0, ABSENT: 0, LATE: 0, EXCUSED: 0 });
-      setTotalToday(r?.total || 0);
-      if (r?.recent) {
-        const logs: ScanLogEntry[] = r.recent.map((rec: any) => ({
-          id: rec.id || Math.random().toString(),
-          name: `${rec.student?.user?.first_name || ''} ${rec.student?.user?.last_name || ''}`.trim() || 'Unknown Student',
-          className: rec.student?.class?.name || "",
-          studentCode: rec.student?.student_code || "",
-          cardNumber: rec.student?.card?.card_number || "",
-          action: rec.check_out_time ? "TAP_OUT" : "TAP_IN",
-          status: rec.status,
-          time: fmtTime(rec.check_out_time || rec.check_in_time),
-          rawTime: rec.check_out_time || rec.check_in_time,
-          photo: rec.student?.user?.profile_photo || null,
-        }));
-        setScanLog(logs);
-      }
+    if (!activeSchool?.id) return;
+    const today = new Date().toLocaleDateString("en-CA");
+    supabaseAttendanceService.listAttendance({ schoolId: activeSchool.id, date: today }).then((rows) => {
+      const filtered = classId ? rows : rows;
+      const summary = { PRESENT: 0, ABSENT: 0, LATE: 0, EXCUSED: 0 };
+      filtered.forEach((r) => {
+        const k = r.status.toUpperCase() as keyof typeof summary;
+        if (k in summary) summary[k]++;
+      });
+      setTodaySummary(summary);
+      setTotalToday(filtered.length);
     }).catch(() => {});
-  }, []);
+  }, [activeSchool?.id]);
 
   useEffect(() => {
-    if (authLoading) return;
-    structure.classes().then((r) => setClasses(r.data)).catch(console.error);
-    attendance.getSettings().then((r) => setSettings(r.data)).catch(() => {});
-  }, [authLoading]);
+    if (authLoading || !activeSchool?.id) return;
+    supabaseAcademicService.listClassSections(activeSchool.id).then((rows) => {
+      setClasses(rows.map((r) => ({ id: r.id, name: r.name, section_code: r.section_code })));
+    }).catch(console.error);
+    const client = getSafeBrowserClient();
+    if (client) {
+      Promise.resolve(client.from("school_settings").select("school_day_start").eq("school_id", activeSchool.id).single())
+        .then(({ data }) => {
+          if (data) setSettings((s) => ({ ...s, school_start_time: data.school_day_start?.slice(0, 5) ?? "08:30" }));
+        }).catch(() => {});
+    }
+  }, [authLoading, activeSchool?.id]);
 
   useEffect(() => {
     loadTodaySummary(selectedClass);
   }, [selectedClass, loadTodaySummary]);
 
   useEffect(() => {
-    if (!selectedClass) {
+    if (!selectedClass || !activeSchool?.id) {
       setClassStudents([]);
       return;
     }
     setLoadingStudents(true);
+    const client = getSafeBrowserClient();
+    if (!client) { setLoadingStudents(false); return; }
     Promise.all([
-      structure.classStudents(selectedClass),
-      attendance.byClass(selectedClass, date),
-    ])
-      .then(([studRes, attRes]) => {
-        const studs = studRes.data as ClassStudent[];
-        setClassStudents(studs);
-        setSubmitted(false);
-        // Pre-fill existing attendance records for the day; default new students to PRESENT
-        const existing: Record<string, AttStatus> = {};
-        const attRecords = (attRes.data as Array<{ student_id: string; status: AttStatus }>) ?? [];
-        attRecords.forEach((r) => { existing[r.student_id] = r.status; });
-        const defaults: Record<string, AttStatus> = {};
-        studs.forEach((s) => { defaults[s.id] = existing[s.id] ?? "PRESENT"; });
-        setStatuses(defaults);
-      })
-      .catch(() => {
-        structure.classStudents(selectedClass).then((r) => {
-          const studs = r.data as ClassStudent[];
-          setClassStudents(studs);
-          setSubmitted(false);
-          const defaults: Record<string, AttStatus> = {};
-          studs.forEach((s) => { defaults[s.id] = "PRESENT"; });
-          setStatuses(defaults);
-        }).catch(console.error);
-      })
-      .finally(() => setLoadingStudents(false));
-  }, [selectedClass, date]);
+      client.from("student_class_placements")
+        .select("enrollment_id, student_enrollments!inner(student_id, student_records!inner(id, admission_number, profile_photo_path))")
+        .eq("class_section_id", selectedClass)
+        .eq("school_id", activeSchool.id)
+        .eq("status", "active"),
+      supabaseAttendanceService.listAttendance({ schoolId: activeSchool.id, date }),
+    ]).then(([placementRes, attRows]) => {
+      const placements = (placementRes.data || []) as any[];
+      const studs: ClassStudent[] = placements.map((p: any) => {
+        const enrollment = p.student_enrollments;
+        const sr = enrollment?.student_records;
+        return {
+          id: sr?.id ?? enrollment?.student_id ?? p.enrollment_id,
+          student_code: sr?.admission_number ?? "",
+          user: { first_name: "", last_name: "", profile_photo: sr?.profile_photo_path ?? null },
+          card: null,
+        };
+      }).filter((s: ClassStudent) => s.id);
+      setClassStudents(studs);
+      setSubmitted(false);
+      const existing: Record<string, AttStatus> = {};
+      attRows.filter((r) => r.status).forEach((r) => { existing[r.student_id] = r.status.toUpperCase() as AttStatus; });
+      const defaults: Record<string, AttStatus> = {};
+      studs.forEach((s) => { defaults[s.id] = existing[s.id] ?? "PRESENT"; });
+      setStatuses(defaults);
+    }).catch(console.error).finally(() => setLoadingStudents(false));
+  }, [selectedClass, date, activeSchool?.id]);
 
   async function executeScan(cardNumber: string) {
+    if (!activeSchool?.id) return;
     setCardLoading(true);
     setCardData(null);
     setTapResult(null);
     setGlowColor(null);
-
-    const scanOptions = {
-      type: scanType,
-      date,
-      tapInStart,
-      tapInEnd,
-      tapOutStart,
-      tapOutEnd,
-      classId: selectedClass,
-    };
-
     try {
-      const res = await attendance.scan(cardNumber, scanOptions);
-      const rec = res.data;
-      const action = rec.action ?? "TAP_IN";
+      const holder = await supabaseCanteenService.lookupCardHolder(activeSchool.id, cardNumber.trim());
+      if (!holder) throw new Error("Card not found");
+      if (holder.is_frozen) throw new Error("Card is frozen");
 
-      const fresh = await cards.scan(cardNumber);
-      setCardData(fresh.data);
+      const idempotencyKey = `${holder.student_id}-${Date.now()}`;
+      const tapResult = await supabaseAttendanceService.recordVirtualStudentTap({
+        schoolId: activeSchool.id,
+        studentId: holder.student_id,
+        idempotencyKey,
+      }) as any;
+
+      const action: TapAction = tapResult?.action === "TAP_OUT" ? "TAP_OUT" : "TAP_IN";
+      const cardDataLocal: CardScanFull = {
+        card_number: cardNumber,
+        wallet_balance: holder.wallet_balance,
+        daily_limit: null,
+        issued_at: "",
+        expires_at: "",
+        is_frozen: holder.is_frozen,
+        today_attendance: null,
+        tap_out_available_at: tapResult?.tap_out_available_at ?? null,
+        check_in_time: tapResult?.check_in_time ?? new Date().toISOString(),
+        check_out_time: tapResult?.check_out_time ?? null,
+        student: { id: holder.student_id, name: holder.legal_name, class: holder.class_name, student_code: holder.admission_number, photo: holder.profile_photo_path ?? null, school_name: activeSchool.name, school_logo: null },
+      };
+      setCardData(cardDataLocal);
       setGlowColor(ACTION_CFG[action].glow);
       setTapResult({
         action,
-        message:
-          action === "TAP_IN"
-            ? `Tapped in at ${fmtTime(rec.check_in_time)}.`
-            : action === "TAP_OUT"
-            ? `Tapped out at ${fmtTime(rec.check_out_time)}.`
-            : "Already tapped out for today.",
+        message: action === "TAP_IN"
+          ? `Tapped in at ${fmtTime(cardDataLocal.check_in_time)}.`
+          : `Tapped out at ${fmtTime(cardDataLocal.check_out_time ?? new Date().toISOString())}.`,
       });
 
-      const name = fresh.data.student.name;
       const logEntry: ScanLogEntry = {
-        id: rec.id || Date.now().toString(),
-        name,
-        className: fresh.data.student.class,
-        studentCode: fresh.data.student.student_code,
-        cardNumber: cardNumber,
+        id: tapResult?.id || Date.now().toString(),
+        name: holder.legal_name,
+        className: holder.class_name,
+        studentCode: holder.admission_number,
+        cardNumber,
         action,
-        status: rec.status,
-        time: fmtTime(action === "TAP_OUT" ? (rec.check_out_time || new Date().toISOString()) : (rec.check_in_time || new Date().toISOString())),
+        status: action === "TAP_IN" ? "PRESENT" : "PRESENT",
+        time: fmtTime(new Date().toISOString()),
         rawTime: new Date().toISOString(),
-        photo: fresh.data.student.photo,
+        photo: holder.profile_photo_path ?? null,
       };
-      setScanLog((l) => [logEntry, ...l.filter(x => x.id !== logEntry.id).slice(0, 99)]);
+      setScanLog((l) => [logEntry, ...l.filter((x) => x.id !== logEntry.id).slice(0, 99)]);
       loadTodaySummary(selectedClass);
-      toast(`${name} — ${ACTION_CFG[action].label}`, action === "TAP_IN" ? "success" : "info");
+      toast(`${holder.legal_name} — ${ACTION_CFG[action].label}`, action === "TAP_IN" ? "success" : "info");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Scan failed";
       setGlowColor("red");
@@ -378,88 +377,10 @@ export default function AttendancePage() {
     }
   }
 
-  async function lookupCard(num: string, isNfc = false) {
+  async function lookupCard(num: string, _isNfc = false) {
     const n = num.trim();
     if (!n) return;
-    setCardLoading(true);
-    setCardData(null);
-    setTapResult(null);
-    setGlowColor(null);
-
-    const scanOptions = {
-      type: scanType,
-      date,
-      tapInStart,
-      tapInEnd,
-      tapOutStart,
-      tapOutEnd,
-      classId: selectedClass,
-    };
-
-    if (n.startsWith("eyJ") || n.startsWith("KS:")) {
-      try {
-        const res = await attendance.scanSecure(n, scanOptions);
-        const rec = res.data;
-        const action = rec.action ?? "TAP_IN";
-        const card_number = rec.card_number;
-        if (!card_number) {
-          throw new Error("No card number returned from secure scan.");
-        }
-
-        // Fetch fresh card detail for visual presentation
-        const fresh = await cards.scan(card_number);
-        setCardData(fresh.data);
-        setGlowColor(ACTION_CFG[action].glow);
-        setTapResult({
-          action,
-          message:
-            action === "TAP_IN"
-              ? `Tapped in at ${fmtTime(rec.check_in_time)}.`
-              : action === "TAP_OUT"
-              ? `Tapped out at ${fmtTime(rec.check_out_time)}.`
-              : "Already tapped out for today.",
-        });
-
-        const name = `${fresh.data.student.name}`;
-        const logEntry: ScanLogEntry = {
-          id: rec.id || Date.now().toString(),
-          name,
-          className: fresh.data.student.class,
-          studentCode: fresh.data.student.student_code,
-          cardNumber: card_number,
-          action,
-          status: rec.status,
-          time: fmtTime(action === "TAP_OUT" ? (rec.check_out_time || new Date().toISOString()) : (rec.check_in_time || new Date().toISOString())),
-          rawTime: new Date().toISOString(),
-          photo: fresh.data.student.photo,
-        };
-        setScanLog((l) => [logEntry, ...l.filter(x => x.id !== logEntry.id).slice(0, 99)]);
-        loadTodaySummary(selectedClass);
-        toast(`${name} — ${ACTION_CFG[action].label} (Secure Pass)`, action === "TAP_IN" ? "success" : "info");
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Secure Scan failed";
-        setGlowColor("red");
-        toast(msg, "error");
-      } finally {
-        setCardLoading(false);
-      }
-      return;
-    }
-
-    try {
-      if (isNfc) {
-        // Resolve NFC UID → card number, then run attendance scan
-        const res = await (cards.scanNFC(n) as unknown as Promise<{ success: boolean; data: CardScanFull }>);
-        if (res.data.card_number) await executeScan(res.data.card_number);
-      } else {
-        // Regular card number — go straight to attendance scan
-        await executeScan(n);
-      }
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Card not found", "error");
-    } finally {
-      setCardLoading(false);
-    }
+    await executeScan(n);
   }
 
   async function doTap() {
@@ -468,61 +389,8 @@ export default function AttendancePage() {
     setTapLoading(true);
     setTapResult(null);
     await new Promise((r) => setTimeout(r, 120));
-
-    const scanOptions = {
-      type: scanType,
-      date,
-      tapInStart,
-      tapInEnd,
-      tapOutStart,
-      tapOutEnd,
-      classId: selectedClass,
-    };
-
     try {
-      const res = await attendance.scan(cardData.card_number, scanOptions);
-      const rec = res.data;
-      const action = rec.action ?? "TAP_IN";
-
-      setGlowColor(ACTION_CFG[action].glow);
-      setTapResult({
-        action,
-        message:
-          action === "TAP_IN"
-            ? `Tapped in at ${fmtTime(rec.check_in_time)}.`
-            : action === "TAP_OUT"
-            ? `Tapped out at ${fmtTime(rec.check_out_time)}.`
-            : "Already tapped out for today.",
-      });
-
-      const fresh = await cards.scan(cardData.card_number);
-      setCardData(fresh.data);
-
-      const logEntry: ScanLogEntry = {
-        id: rec.id || Date.now().toString(),
-        name: cardData.student.name,
-        className: cardData.student.class,
-        studentCode: cardData.student.student_code,
-        cardNumber: cardData.card_number,
-        action,
-        status: rec.status,
-        time: fmtTime(action === "TAP_OUT" ? (rec.check_out_time || new Date().toISOString()) : (rec.check_in_time || new Date().toISOString())),
-        rawTime: new Date().toISOString(),
-        photo: cardData.student.photo,
-      };
-      setScanLog((l) => [logEntry, ...l.filter(x => x.id !== logEntry.id).slice(0, 99)]);
-      loadTodaySummary(selectedClass);
-      toast(`${cardData.student.name} — ${ACTION_CFG[action].label}`, action === "TAP_IN" ? "success" : "info");
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Tap failed";
-      const isBlocked = msg.toLowerCase().includes("tap-out") || msg.toLowerCase().includes("come back");
-      if (isBlocked) {
-        setGlowColor("orange");
-        setTapResult({ action: "BLOCKED", message: msg });
-      } else {
-        setGlowColor("red");
-        toast(msg, "error");
-      }
+      await executeScan(cardData.card_number);
     } finally {
       setTapping(false);
       setTapLoading(false);
@@ -634,13 +502,25 @@ export default function AttendancePage() {
   }
 
   async function handleBulkSubmit() {
-    if (!selectedClass) return;
+    if (!selectedClass || !activeSchool?.id) return;
     const records = classStudents.map((s) => ({ student_id: s.id, status: statuses[s.id] ?? "ABSENT" }));
     setSubmitting(true);
     try {
-      const res = await attendance.bulk(selectedClass, records);
+      const today = new Date().toLocaleDateString("en-CA");
+      let count = 0;
+      for (const r of records) {
+        try {
+          await supabaseAttendanceService.recordStudentAttendance({
+            schoolId: activeSchool.id,
+            studentId: r.student_id,
+            attendanceDate: today,
+            status: r.status.toLowerCase() as "present" | "absent" | "late" | "excused",
+          });
+          count++;
+        } catch { /* skip already-recorded */ }
+      }
       setSubmitted(true);
-      toast(`Attendance saved — ${res.count} students marked`, "success");
+      toast(`Attendance saved — ${count} students marked`, "success");
       loadTodaySummary(selectedClass);
     } catch (err) {
       toast(err instanceof Error ? err.message : "Submit failed", "error");
@@ -650,10 +530,16 @@ export default function AttendancePage() {
   }
 
   async function saveSettings() {
+    if (!activeSchool?.id) return;
     setSavingSettings(true);
     try {
-      const res = await attendance.updateSettings(settings);
-      setSettings(res.data);
+      const client = getSafeBrowserClient();
+      if (!client) throw new Error("Not connected");
+      const { error } = await client
+        .from("school_settings")
+        .update({ school_day_start: settings.school_start_time + ":00" })
+        .eq("school_id", activeSchool.id);
+      if (error) throw new Error(error.message);
       toast("Settings saved", "success");
       setShowSettings(false);
     } catch (err) {

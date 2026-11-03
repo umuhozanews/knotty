@@ -140,6 +140,7 @@ type RawTables = {
           membership_id: string;
           person_id: string;
           role_key: string;
+          status: "active" | "revoked";
           assigned_by_membership_id: string;
           assigned_by_person_id: string;
           assigned_reason: string;
@@ -151,6 +152,7 @@ type RawTables = {
           membership_id: string;
           person_id: string;
           role_key: string;
+          status?: "active" | "revoked";
           assigned_by_membership_id: string;
           assigned_by_person_id: string;
           assigned_reason: string;
@@ -162,6 +164,7 @@ type RawTables = {
           membership_id?: string;
           person_id?: string;
           role_key?: string;
+          status?: "active" | "revoked";
           assigned_by_membership_id?: string;
           assigned_by_person_id?: string;
           assigned_reason?: string;
@@ -447,6 +450,7 @@ type RawTables = {
           stage: "nursery" | "primary" | "lower_secondary" | "upper_secondary" | "tvet";
           display_order: number;
           curriculum_framework: string | null;
+          is_active: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -778,6 +782,7 @@ type RawTables = {
           revoked_at: string | null;
           issued_by_membership_id: string | null;
           issued_by_person_id: string | null;
+          wallet_balance: number;
           created_at: string;
           updated_at: string;
         };
@@ -815,6 +820,111 @@ type RawTables = {
           created_at?: string;
           updated_at?: string;
         };
+      };
+      wallet_transactions: {
+        Row: {
+          id: string; school_id: string; card_assignment_id: string; student_id: string;
+          amount: number; type: "topup" | "purchase" | "refund" | "adjustment";
+          description: string | null; reference_id: string | null;
+          created_by_person_id: string | null; created_at: string;
+        };
+        Insert: {
+          id?: string; school_id: string; card_assignment_id: string; student_id: string;
+          amount: number; type: "topup" | "purchase" | "refund" | "adjustment";
+          description?: string | null; reference_id?: string | null;
+          created_by_person_id?: string | null; created_at?: string;
+        };
+        Update: { id?: string; amount?: number; description?: string | null; };
+      };
+      canteen_products: {
+        Row: {
+          id: string; school_id: string; name: string; price: number; category: string;
+          photo_url: string | null; stock_qty: number | null; is_active: boolean;
+          created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; school_id: string; name: string; price: number; category?: string;
+          photo_url?: string | null; stock_qty?: number | null; is_active?: boolean;
+          created_at?: string; updated_at?: string;
+        };
+        Update: {
+          name?: string; price?: number; category?: string; photo_url?: string | null;
+          stock_qty?: number | null; is_active?: boolean; updated_at?: string;
+        };
+      };
+      canteen_transactions: {
+        Row: {
+          id: string; school_id: string; student_id: string;
+          card_assignment_id: string | null; items: unknown; total_amount: number;
+          wallet_balance_before: number | null; wallet_balance_after: number | null;
+          status: "completed" | "refunded" | "failed"; created_at: string;
+        };
+        Insert: {
+          id?: string; school_id: string; student_id: string;
+          card_assignment_id?: string | null; items?: unknown; total_amount: number;
+          wallet_balance_before?: number | null; wallet_balance_after?: number | null;
+          status?: "completed" | "refunded" | "failed"; created_at?: string;
+        };
+        Update: { status?: "completed" | "refunded" | "failed"; };
+      };
+      fee_structures: {
+        Row: {
+          id: string; school_id: string; name: string; amount: number;
+          applies_to: string[]; is_active: boolean; created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; school_id: string; name: string; amount: number;
+          applies_to?: string[]; is_active?: boolean; created_at?: string; updated_at?: string;
+        };
+        Update: {
+          name?: string; amount?: number; applies_to?: string[];
+          is_active?: boolean; updated_at?: string;
+        };
+      };
+      fee_invoices: {
+        Row: {
+          id: string; school_id: string; student_id: string; fee_structure_id: string | null;
+          title: string; total_amount: number; amount_paid: number; due_date: string | null;
+          status: "pending" | "partial" | "paid" | "overdue" | "cancelled";
+          created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; school_id: string; student_id: string; fee_structure_id?: string | null;
+          title: string; total_amount: number; amount_paid?: number; due_date?: string | null;
+          status?: "pending" | "partial" | "paid" | "overdue" | "cancelled";
+          created_at?: string; updated_at?: string;
+        };
+        Update: {
+          title?: string; total_amount?: number; amount_paid?: number;
+          due_date?: string | null;
+          status?: "pending" | "partial" | "paid" | "overdue" | "cancelled"; updated_at?: string;
+        };
+      };
+      fee_payments: {
+        Row: {
+          id: string; school_id: string; invoice_id: string; student_id: string;
+          amount: number; channel: "CASH" | "MOMO" | "BANK" | "WALLET";
+          phone: string | null; notes: string | null; created_by_person_id: string | null; created_at: string;
+        };
+        Insert: {
+          id?: string; school_id: string; invoice_id: string; student_id: string;
+          amount: number; channel?: "CASH" | "MOMO" | "BANK" | "WALLET";
+          phone?: string | null; notes?: string | null; created_by_person_id?: string | null; created_at?: string;
+        };
+        Update: { notes?: string | null; };
+      };
+      notifications: {
+        Row: {
+          id: string; school_id: string; recipient_person_id: string; title: string;
+          body: string | null; type: "info" | "warning" | "success" | "payment" | "attendance" | "discipline";
+          is_read: boolean; reference_type: string | null; reference_id: string | null; created_at: string;
+        };
+        Insert: {
+          id?: string; school_id: string; recipient_person_id: string; title: string;
+          body?: string | null; type?: "info" | "warning" | "success" | "payment" | "attendance" | "discipline";
+          is_read?: boolean; reference_type?: string | null; reference_id?: string | null; created_at?: string;
+        };
+        Update: { is_read?: boolean; };
       };
     };
 
@@ -1156,8 +1266,484 @@ export type Database = {
           assigned_at: string;
         }[];
       };
+      list_school_students: {
+        Args: {
+          p_school_id: string;
+          p_class_section_id?: string | null;
+          p_search?: string | null;
+        };
+        Returns: {
+          student_id: string;
+          admission_number: string;
+          legal_name: string;
+          date_of_birth: string | null;
+          gender: string | null;
+          nationality: string | null;
+          student_status: string;
+          admission_date: string | null;
+          profile_photo_path: string | null;
+          primary_email: string | null;
+          primary_phone: string | null;
+          class_section_id: string | null;
+          class_section_name: string | null;
+          education_level_id: string | null;
+          education_level_name: string | null;
+          card_assignment_id: string | null;
+          card_number: string | null;
+          card_status: string | null;
+        }[];
+      };
+      list_library_books: {
+        Args: {
+          p_school_id: string;
+          p_search?: string | null;
+          p_category?: string | null;
+          p_limit?: number;
+        };
+        Returns: {
+          book_id: string;
+          title: string;
+          author: string;
+          isbn: string | null;
+          category: string | null;
+          location: string | null;
+          total_copies: number;
+          available_copies: number;
+          created_at: string;
+        }[];
+      };
+      get_library_stats: {
+        Args: { p_school_id: string };
+        Returns: {
+          total_books: number;
+          total_copies: number;
+          active_borrows: number;
+          overdue_borrows: number;
+          pending_fees: number;
+        }[];
+      };
+      list_school_borrows: {
+        Args: { p_school_id: string; p_status?: string; p_limit?: number };
+        Returns: LibraryBorrowRow[];
+      };
+      lookup_library_student: {
+        Args: { p_school_id: string; p_identifier: string };
+        Returns: {
+          student_id: string;
+          legal_name: string;
+          class_name: string;
+          card_number: string | null;
+          admission_number: string;
+          profile_photo_path: string | null;
+          is_card_active: boolean;
+          is_card_frozen: boolean;
+        }[];
+      };
+      student_borrow_history: {
+        Args: { p_school_id: string; p_student_id: string; p_limit?: number };
+        Returns: LibraryBorrowRow[];
+      };
+      list_overdue_borrows: {
+        Args: { p_school_id: string; p_limit?: number };
+        Returns: (LibraryBorrowRow & { days_overdue: number; accrued_fine: number })[];
+      };
+      create_library_book: {
+        Args: {
+          p_school_id: string;
+          p_title: string;
+          p_author?: string;
+          p_isbn?: string | null;
+          p_category?: string | null;
+          p_location?: string | null;
+          p_total_copies?: number;
+        };
+        Returns: string;
+      };
+      borrow_book: {
+        Args: {
+          p_school_id: string;
+          p_book_id: string;
+          p_student_id: string;
+          p_due_days?: number;
+        };
+        Returns: string;
+      };
+      return_book: {
+        Args: {
+          p_school_id: string;
+          p_borrow_id?: string | null;
+          p_copy_tag?: string | null;
+        };
+        Returns: { borrow_id: string; fine_amount: number; fine_charged_to_wallet: boolean }[];
+      };
+      renew_borrow: {
+        Args: { p_school_id: string; p_borrow_id: string; p_extra_days?: number };
+        Returns: string;
+      };
+      waive_library_fine: {
+        Args: { p_school_id: string; p_borrow_id: string };
+        Returns: void;
+      };
+      list_school_discipline: {
+        Args: { p_school_id: string; p_search?: string | null; p_limit?: number };
+        Returns: {
+          record_id: string;
+          type: string;
+          title: string;
+          description: string | null;
+          action_taken: string | null;
+          severity: string;
+          status: string;
+          marks_deducted: number;
+          parent_notified: boolean;
+          recorded_at: string;
+          student_id: string;
+          student_name: string;
+          student_code: string;
+          recorder_name: string;
+        }[];
+      };
+      list_student_discipline: {
+        Args: { p_school_id: string; p_student_id: string; p_limit?: number };
+        Returns: {
+          record_id: string;
+          type: string;
+          title: string;
+          description: string | null;
+          action_taken: string | null;
+          severity: string;
+          status: string;
+          marks_deducted: number;
+          parent_notified: boolean;
+          recorded_at: string;
+          recorder_name: string;
+        }[];
+      };
+      create_discipline_record: {
+        Args: {
+          p_school_id: string;
+          p_student_id: string;
+          p_type: string;
+          p_title: string;
+          p_description?: string | null;
+          p_action_taken?: string | null;
+          p_severity?: string;
+          p_marks_deducted?: number;
+        };
+        Returns: string;
+      };
+      update_discipline_record: {
+        Args: {
+          p_school_id: string;
+          p_record_id: string;
+          p_marks_deducted?: number | null;
+          p_action_taken?: string | null;
+          p_status?: string | null;
+          p_parent_notified?: boolean | null;
+        };
+        Returns: void;
+      };
+      get_discipline_stats: {
+        Args: { p_school_id: string };
+        Returns: { total: number; open_count: number; resolved_count: number; serious_count: number }[];
+      };
+      list_school_health_records: {
+        Args: { p_school_id: string; p_limit?: number };
+        Returns: {
+          record_id: string;
+          type: string;
+          title: string;
+          description: string | null;
+          treatment_given: string | null;
+          severity: string;
+          follow_up_required: boolean;
+          resolved_at: string | null;
+          recorded_at: string;
+          student_id: string;
+          student_name: string;
+          student_code: string;
+          recorder_name: string;
+        }[];
+      };
+      list_student_health_records: {
+        Args: { p_school_id: string; p_student_id: string };
+        Returns: {
+          record_id: string;
+          type: string;
+          title: string;
+          description: string | null;
+          treatment_given: string | null;
+          severity: string;
+          follow_up_required: boolean;
+          resolved_at: string | null;
+          recorded_at: string;
+          recorder_name: string;
+        }[];
+      };
+      create_health_record: {
+        Args: {
+          p_school_id: string;
+          p_student_id: string;
+          p_type: string;
+          p_title: string;
+          p_description?: string | null;
+          p_treatment_given?: string | null;
+          p_severity?: string;
+          p_follow_up_required?: boolean;
+        };
+        Returns: string;
+      };
+      get_medical_profile: {
+        Args: { p_school_id: string; p_student_id: string };
+        Returns: {
+          profile_id: string;
+          blood_type: string | null;
+          allergies: string[];
+          chronic_conditions: string[];
+          emergency_contact_phone: string;
+          updated_at: string;
+        }[];
+      };
+      upsert_medical_profile: {
+        Args: {
+          p_school_id: string;
+          p_student_id: string;
+          p_blood_type?: string | null;
+          p_allergies?: string[];
+          p_chronic_conditions?: string[];
+          p_emergency_contact_phone?: string;
+        };
+        Returns: string;
+      };
+      list_student_clinic_visits: {
+        Args: { p_school_id: string; p_student_id: string; p_limit?: number };
+        Returns: {
+          visit_id: string;
+          visit_datetime: string;
+          presenting_complaint: string;
+          treatment_notes: string | null;
+          follow_up_required: boolean;
+          recorder_name: string;
+          medications: {
+            id: string;
+            medication_name: string;
+            dosage: string;
+            administered_at: string;
+          }[];
+        }[];
+      };
+      create_clinic_visit: {
+        Args: {
+          p_school_id: string;
+          p_student_id: string;
+          p_presenting_complaint: string;
+          p_treatment_notes?: string | null;
+          p_follow_up_required?: boolean;
+          p_medications?: { medication_name: string; dosage: string }[];
+        };
+        Returns: string;
+      };
+      get_health_stats: {
+        Args: { p_school_id: string };
+        Returns: {
+          total_records: number;
+          follow_up_pending: number;
+          visits_today: number;
+          visits_this_week: number;
+        }[];
+      };
+      lookup_card_holder: {
+        Args: { p_school_id: string; p_card_number: string };
+        Returns: {
+          card_assignment_id: string;
+          card_number: string;
+          student_id: string;
+          legal_name: string;
+          class_name: string;
+          education_level_name: string;
+          admission_number: string;
+          profile_photo_path: string | null;
+          wallet_balance: number;
+          card_status: string;
+          is_frozen: boolean;
+        }[];
+      };
+      top_up_wallet: {
+        Args: { p_school_id: string; p_card_assignment_id: string; p_amount: number; p_description?: string };
+        Returns: number;
+      };
+      canteen_purchase: {
+        Args: { p_school_id: string; p_card_assignment_id: string; p_items: unknown; p_total: number };
+        Returns: { transaction_id: string; new_balance: number };
+      };
+      pay_fee_invoice: {
+        Args: { p_school_id: string; p_invoice_id: string; p_amount: number; p_channel?: string; p_phone?: string | null };
+        Returns: void;
+      };
+      list_school_staff_members: {
+        Args: { p_school_id: string };
+        Returns: {
+          staff_record_id: string;
+          person_id: string;
+          staff_number: string;
+          employment_status: string;
+          primary_role_category: string;
+          started_on: string;
+          legal_name: string;
+          profile_photo_path: string | null;
+          primary_email: string | null;
+          primary_phone: string | null;
+        }[];
+      };
+      get_my_student_profile: {
+        Args: { p_school_id: string };
+        Returns: {
+          student_id: string;
+          admission_number: string;
+          legal_name: string;
+          date_of_birth: string | null;
+          gender: string | null;
+          nationality: string | null;
+          student_status: string;
+          profile_photo_path: string | null;
+          primary_email: string | null;
+          primary_phone: string | null;
+          class_section_id: string | null;
+          class_section_name: string | null;
+          education_level_name: string | null;
+          card_assignment_id: string | null;
+          card_number: string | null;
+          card_status: string | null;
+          wallet_balance: number;
+        }[];
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };
 };
+
+export interface LibraryBorrowRow {
+  borrow_id: string;
+  borrowed_at: string;
+  due_at: string;
+  returned_at: string | null;
+  fine_amount: number;
+  fine_waived: boolean;
+  renewed_count: number;
+  student_id: string;
+  student_first: string;
+  student_last: string;
+  student_code: string;
+  copy_id: string;
+  copy_tag: string;
+  book_id: string;
+  book_title: string;
+  book_author: string;
+  book_location: string | null;
+  book_isbn: string | null;
+}
+
+type RawLibraryTables = {
+  library_books: {
+    Row: {
+      id: string;
+      school_id: string;
+      title: string;
+      author: string;
+      isbn: string | null;
+      category: string | null;
+      location: string | null;
+      description: string | null;
+      total_copies: number;
+      created_at: string;
+    };
+    Insert: {
+      id?: string;
+      school_id: string;
+      title: string;
+      author?: string;
+      isbn?: string | null;
+      category?: string | null;
+      location?: string | null;
+      description?: string | null;
+      total_copies?: number;
+      created_at?: string;
+    };
+    Update: {
+      title?: string;
+      author?: string;
+      isbn?: string | null;
+      category?: string | null;
+      location?: string | null;
+      description?: string | null;
+      total_copies?: number;
+    };
+  };
+  library_book_copies: {
+    Row: {
+      id: string;
+      book_id: string;
+      school_id: string;
+      copy_tag: string;
+      status: "available" | "borrowed" | "lost" | "damaged" | "withdrawn";
+      condition: string | null;
+      notes: string | null;
+      created_at: string;
+    };
+    Insert: {
+      id?: string;
+      book_id: string;
+      school_id: string;
+      copy_tag: string;
+      status?: "available" | "borrowed" | "lost" | "damaged" | "withdrawn";
+      condition?: string | null;
+      notes?: string | null;
+      created_at?: string;
+    };
+    Update: {
+      status?: "available" | "borrowed" | "lost" | "damaged" | "withdrawn";
+      condition?: string | null;
+      notes?: string | null;
+    };
+  };
+  library_borrow_records: {
+    Row: {
+      id: string;
+      school_id: string;
+      student_id: string;
+      copy_id: string;
+      borrowed_at: string;
+      due_at: string;
+      returned_at: string | null;
+      fine_amount: number;
+      fine_waived: boolean;
+      renewed_count: number;
+      notes: string | null;
+      created_at: string;
+    };
+    Insert: {
+      id?: string;
+      school_id: string;
+      student_id: string;
+      copy_id: string;
+      borrowed_at?: string;
+      due_at: string;
+      returned_at?: string | null;
+      fine_amount?: number;
+      fine_waived?: boolean;
+      renewed_count?: number;
+      notes?: string | null;
+      created_at?: string;
+    };
+    Update: {
+      returned_at?: string | null;
+      fine_amount?: number;
+      fine_waived?: boolean;
+      renewed_count?: number;
+      notes?: string | null;
+    };
+  };
+};
+
+export type { RawLibraryTables };

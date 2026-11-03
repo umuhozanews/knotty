@@ -3,8 +3,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, Users, ClipboardCheck, CreditCard, ShoppingCart,
-  Banknote, FileText, AlertTriangle, Settings, LogOut, ChevronRight,
-  Heart, BookOpen, User, CalendarDays, GraduationCap, Wallet, X, Library, Shield,
+  Banknote, AlertTriangle, Settings, LogOut, ChevronRight,
+  Heart, User, CalendarDays, Wallet, X, Library,
   UserCheck, Building2, Smartphone, Activity,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
@@ -20,10 +20,7 @@ const ALL_NAV = [
   { icon: UserCheck,       label: "Workers",      href: "/workers",       roles: ["ADMIN","BURSAR","DISCIPLINE","TEACHER","LIBRARIAN","NURSE"] },
   { icon: Building2,       label: "Schools Hub",  href: "/schools",       roles: ["ADMIN","TEACHER","BURSAR","DISCIPLINE","LIBRARIAN"] },
   { icon: ClipboardCheck,  label: "Attendance",   href: "/attendance",    roles: ["ADMIN","TEACHER","DISCIPLINE","BURSAR","NURSE","LIBRARIAN"] },
-  { icon: Shield,          label: "Gate Access",  href: "/gate-access",   roles: ["ADMIN","DISCIPLINE","TEACHER","BURSAR"] },
   { icon: Library,         label: "Library",      href: "/library",       roles: ["ADMIN","TEACHER","LIBRARIAN","STUDENT","BURSAR","DISCIPLINE","NURSE","CANTEEN","PARENT"] },
-  { icon: BookOpen,        label: "Materials",    href: "/materials",     roles: ["ADMIN","TEACHER","LIBRARIAN","STUDENT"] },
-  { icon: FileText,        label: "Reports",      href: "/reports",       roles: ["ADMIN","TEACHER","BURSAR","DISCIPLINE","LIBRARIAN"] },
   { icon: AlertTriangle,   label: "Discipline",   href: "/discipline",    roles: ["ADMIN","TEACHER","DISCIPLINE","BURSAR"] },
   { icon: Heart,           label: "Health",       href: "/health",        roles: ["ADMIN","NURSE","TEACHER","DISCIPLINE"] },
   { icon: CreditCard,      label: "Cards",        href: "/cards",         roles: ["ADMIN","BURSAR","TEACHER","DISCIPLINE","CANTEEN"] },
@@ -35,7 +32,6 @@ const ALL_NAV = [
   { icon: LayoutDashboard, label: "My Dashboard", href: "/",              roles: ["STUDENT", "PARENT"] },
   { icon: User,            label: "My Profile",   href: "/my-profile",    roles: ["STUDENT", "ADMIN"] },
   { icon: CalendarDays,    label: "My Attendance",href: "/my-attendance", roles: ["STUDENT", "ADMIN"] },
-  { icon: GraduationCap,   label: "My Reports",   href: "/my-reports",    roles: ["STUDENT", "ADMIN"] },
   { icon: Wallet,          label: "My Card",      href: "/my-card",       roles: ["STUDENT", "ADMIN"] },
 ];
 

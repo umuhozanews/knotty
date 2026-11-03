@@ -135,4 +135,17 @@ export const supabaseStaffService = {
 
     if (error) throw new Error(error.message);
   },
+
+  /**
+   * List all staff members with person info (name, email, phone, photo).
+   */
+  async listStaffMembers(schoolId: string) {
+    const client = getSafeBrowserClient();
+    if (!client) throw new Error("Supabase is not configured");
+    const { data, error } = await client.rpc("list_school_staff_members", {
+      p_school_id: schoolId,
+    });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
 };

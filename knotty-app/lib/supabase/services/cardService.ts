@@ -159,4 +159,36 @@ export const supabaseCardService = {
     if (error) throw new Error(error.message);
     return data || [];
   },
+
+  /**
+   * Top up a card's wallet balance.
+   */
+  async topUpWallet(schoolId: string, cardAssignmentId: string, amount: number): Promise<number> {
+    const client = getSafeBrowserClient();
+    if (!client) throw new Error("Supabase is not configured");
+
+    const { data, error } = await client.rpc("top_up_wallet", {
+      p_school_id: schoolId,
+      p_card_assignment_id: cardAssignmentId,
+      p_amount: amount,
+    });
+
+    if (error) throw new Error(error.message);
+    return data as number;
+  },
+
+  /**
+   * Link an NFC UID to a card by updating the card_identifiers table.
+   * This is a simplified version - in production use the issue-card edge function.
+   */
+  async lookupCardHolder(schoolId: string, cardNumber: string) {
+    const client = getSafeBrowserClient();
+    if (!client) throw new Error("Supabase is not configured");
+    const { data, error } = await client.rpc("lookup_card_holder", {
+      p_school_id: schoolId,
+      p_card_number: cardNumber,
+    });
+    if (error) throw new Error(error.message);
+    return data?.[0] ?? null;
+  },
 };

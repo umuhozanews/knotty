@@ -3,27 +3,34 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, Loader2, CreditCard, Calendar, Wallet, AlertTriangle,
-  Heart, FileText, Plus, Download, CheckCircle, XCircle, Clock,
-  User, BookOpen, ShoppingBag, Snowflake, ThermometerSnowflake,
-  X, Activity, Trash2, Nfc
+  Heart, Plus, CheckCircle, XCircle, Clock,
+  User, ShoppingBag, Snowflake, ThermometerSnowflake,
+  X, Activity, Nfc
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import VirtualCardTap from "@/components/VirtualCardTap";
+import type { HealthRecord, DisciplineRecord } from "@/lib/api";
 import {
-  students, cards, attendance, discipline, health, reports, fees, canteen,
-  FullProfile, WalletTransaction, FeePayment, CanteenTransaction, AcademicReport, ConsentRecord
-} from "@/lib/api";
+  supabaseHealthService,
+  supabaseDisciplineService,
+  supabaseCardService,
+  supabaseCanteenService,
+  supabaseFeesService,
+  supabaseAttendanceService,
+} from "@/lib/supabase/services";
+import type { CanteenTransactionRow } from "@/lib/supabase/services/canteenService";
+import type { FeeInvoiceRow } from "@/lib/supabase/services/feesService";
+import { getSafeBrowserClient } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 import { isManagementRole } from "@/lib/roles";
 
-type Tab = "overview" | "attendance" | "wallet" | "reports" | "health" | "discipline" | "fees" | "canteen" | "consent";
+type Tab = "overview" | "attendance" | "wallet" | "health" | "discipline" | "fees" | "canteen" | "consent";
 
 const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
   { key: "overview",    label: "Overview",    icon: User },
   { key: "attendance",  label: "Attendance",  icon: Calendar },
   { key: "wallet",      label: "Wallet",      icon: Wallet },
-  { key: "reports",     label: "Reports",     icon: BookOpen },
   { key: "health",      label: "Health",      icon: Heart },
   { key: "discipline",  label: "Discipline",  icon: AlertTriangle },
   { key: "fees",        label: "Fees",        icon: CreditCard },
@@ -40,16 +47,66 @@ const STATUS_COLOR: Record<string, string> = {
 
 const inp = "w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500 dark:bg-gray-800 dark:text-gray-100";
 
-// ─── Add Health Modal ─────────────────────────────────────────────────────────
-function AddHealthModal({ studentId, onClose, onSuccess }: { studentId: string; onClose: () => void; onSuccess: () => void }) {
+type LocalCard = {
+  id: string;
+  card_number: string;
+  wallet_balance: number;
+  is_frozen: boolean;
+  is_active: boolean;
+};
+
+type LocalAttendance = {
+  id: string;
+  status: string;
+  date: string;
+  check_in_time: string | null;
+  check_out_time: string | null;
+  note: string | null;
+};
+
+type LocalProfile = {
+  user: { first_name: string; last_name: string; email: string; phone: string | null; profile_photo: string | null };
+  student_code: string;
+  date_of_birth: string | null;
+  gender: string | null;
+  nationality: string | null;
+  level: { name: string } | null;
+  class: { name: string } | null;
+  card: LocalCard | null;
+  attendances: LocalAttendance[];
+  health: HealthRecord[];
+  discipline: DisciplineRecord[];
+};
+
+type LocalWalletTxn = {
+  id: string;
+  type: string;
+  description: string | null;
+  amount: number;
+  created_at: string;
+};
+
+// ─── Add Health Modal ────────────────────────────────────────────────────────
+function AddHealthModal({ studentId, schoolId, onClose, onSuccess }: { studentId: string; schoolId: string; onClose: () => void; onSuccess: () => void }) {
   const [form, setForm] = useState({ type: "ILLNESS", title: "", description: "", treatment_given: "", severity: "LOW", follow_up_required: false });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    try { await health.create({ ...form, student_id: studentId }); onSuccess(); onClose(); }
-    catch (err) { setError(err instanceof Error ? err.message : "Error"); }
+    try {
+      await supabaseHealthService.create(schoolId, {
+        student_id: studentId,
+        type: form.type,
+        title: form.title,
+        description: form.description || undefined,
+        treatment_given: form.treatment_given || undefined,
+        severity: form.severity as "LOW" | "MEDIUM" | "HIGH",
+        follow_up_required: form.follow_up_required,
+      });
+      onSuccess();
+      onClose();
+    } catch (err) { setError(err instanceof Error ? err.message : "Error"); }
     finally { setLoading(false); }
   }
   return (
@@ -103,16 +160,9 @@ function AddHealthModal({ studentId, onClose, onSuccess }: { studentId: string; 
   );
 }
 
-// ─── Add Discipline Modal ─────────────────────────────────────────────────────
-function AddDisciplineModal({ studentId, onClose, onSuccess }: { studentId: string; onClose: () => void; onSuccess: () => void }) {
-  const [form, setForm] = useState({
-    type: "WARNING",
-    title: "",
-    description: "",
-    action_taken: "",
-    severity: "MINOR",
-    marks_deducted: 1
-  });
+// ─── Add Discipline Modal ────────────────────────────────────────────────────
+function AddDisciplineModal({ studentId, schoolId, onClose, onSuccess }: { studentId: string; schoolId: string; onClose: () => void; onSuccess: () => void }) {
+  const [form, setForm] = useState({ type: "WARNING", title: "", description: "", action_taken: "", severity: "MINOR", marks_deducted: 1 });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -125,15 +175,18 @@ function AddDisciplineModal({ studentId, onClose, onSuccess }: { studentId: stri
     e.preventDefault();
     setLoading(true);
     try {
-      await discipline.create({
-        ...form,
+      await supabaseDisciplineService.create(schoolId, {
+        student_id: studentId,
+        type: form.type,
+        title: form.title,
+        description: form.description || undefined,
+        action_taken: form.action_taken || undefined,
+        severity: form.severity as "MINOR" | "MODERATE" | "SERIOUS",
         marks_deducted: Number(form.marks_deducted) || 1,
-        student_id: studentId
       });
       onSuccess();
       onClose();
-    }
-    catch (err) { setError(err instanceof Error ? err.message : "Error"); }
+    } catch (err) { setError(err instanceof Error ? err.message : "Error"); }
     finally { setLoading(false); }
   }
   return (
@@ -163,15 +216,9 @@ function AddDisciplineModal({ studentId, onClose, onSuccess }: { studentId: stri
               <span>Marks To Deduct (out of 40)</span>
               <span className="text-red-500 font-bold">-{form.marks_deducted} marks</span>
             </label>
-            <input
-              type="number"
-              min="1"
-              max="40"
-              required
-              value={form.marks_deducted}
+            <input type="number" min="1" max="40" required value={form.marks_deducted}
               onChange={(e) => setForm({ ...form, marks_deducted: Math.min(40, Math.max(1, Number(e.target.value))) })}
-              className={inp}
-            />
+              className={inp} />
           </div>
           <div>
             <label className="text-xs text-gray-500 mb-1 block">Offense Title *</label>
@@ -198,694 +245,115 @@ function AddDisciplineModal({ studentId, onClose, onSuccess }: { studentId: stri
   );
 }
 
-function RecordConsentModal({ studentId, guardianId, onClose, onSuccess }: { studentId: string; guardianId: string; onClose: () => void; onSuccess: () => void }) {
-  const [form, setForm] = useState({ consent_type: "Medical Care", version: "1.0", document_url: "" });
+// ─── Pay Invoice Modal ───────────────────────────────────────────────────────
+function PayInvoiceModal({ studentId, schoolId, onClose, onSuccess }: { studentId: string; schoolId: string; onClose: () => void; onSuccess: () => void }) {
+  const [invoices, setInvoices] = useState<FeeInvoiceRow[]>([]);
+  const [selectedId, setSelectedId] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("CASH");
+  const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingInvoices, setLoadingInvoices] = useState(true);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    supabaseFeesService.listInvoices(schoolId, { studentId })
+      .then(data => {
+        const pending = data.filter(i => i.status !== "paid" && i.status !== "cancelled");
+        setInvoices(pending);
+        if (pending.length > 0) setSelectedId(pending[0].id);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingInvoices(false));
+  }, [schoolId, studentId]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!selectedId) return;
     setLoading(true);
     try {
-      await students.recordConsent(studentId, {
-        ...form,
-        guardian_id: guardianId,
+      const invoice = invoices.find(i => i.id === selectedId);
+      if (!invoice) throw new Error("Invoice not found");
+      const remaining = invoice.total_amount - invoice.amount_paid;
+      await supabaseFeesService.payInvoice(schoolId, selectedId, {
+        amount: remaining,
+        channel: paymentMethod,
+        phone: paymentMethod === "MOMO" ? phone : undefined,
       });
       onSuccess();
       onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md">
-        <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-800">
-          <h3 className="font-bold text-gray-800 dark:text-gray-100">Record Guardian Consent</h3>
-          <button onClick={onClose}><X size={16} className="text-gray-400" /></button>
-        </div>
-        <form onSubmit={submit} className="p-5 space-y-3">
-          <div>
-            <label className="text-xs text-gray-500 mb-1 block">Consent Type</label>
-            <select value={form.consent_type} onChange={(e) => setForm({ ...form, consent_type: e.target.value })} className={inp}>
-              {["Medical Care", "Media Release", "Field Trip", "Data Processing", "Other"].map((t) => <option key={t}>{t}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 mb-1 block">Version</label>
-            <input required value={form.version} onChange={(e) => setForm({ ...form, version: e.target.value })} className={inp} placeholder="e.g. 1.0" />
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 mb-1 block">Signed Document URL (Optional)</label>
-            <input value={form.document_url} onChange={(e) => setForm({ ...form, document_url: e.target.value })} className={inp} placeholder="e.g. https://example.com/consent.pdf" />
-          </div>
-          {error && <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 rounded-xl px-3 py-2">{error}</p>}
-          <div className="flex gap-3 pt-1">
-            <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600">Cancel</button>
-            <button type="submit" disabled={loading} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-sm text-white font-medium flex items-center justify-center gap-2">
-              {loading && <Loader2 size={13} className="animate-spin" />} Save Consent
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-// ─── Collect Fee Modal ────────────────────────────────────────────────────────
-function CollectFeeModal({ studentId, schoolId, onClose, onSuccess }: { studentId: string; schoolId: string; onClose: () => void; onSuccess: () => void }) {
-  const [form, setForm] = useState({ amount: "", payment_type: "TUITION", payment_method: "CASH", term: "TERM1", academic_year: "2025-2026", phone: "" });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      await fees.pay({ ...form, amount: parseInt(form.amount), student_id: studentId, school_id: schoolId });
-      onSuccess(); onClose();
     } catch (err) { setError(err instanceof Error ? err.message : "Error"); }
     finally { setLoading(false); }
   }
+
+  const selectedInvoice = invoices.find(i => i.id === selectedId);
+
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-800">
-          <h3 className="font-bold text-gray-800 dark:text-gray-100">Collect Fee Payment</h3>
+          <h3 className="font-bold text-gray-800 dark:text-gray-100">Pay Fee Invoice</h3>
           <button onClick={onClose}><X size={16} className="text-gray-400" /></button>
         </div>
-        <form onSubmit={submit} className="p-5 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">Type</label>
-              <select value={form.payment_type} onChange={(e) => setForm({ ...form, payment_type: e.target.value })} className={inp}>
-                {["TUITION", "ACTIVITY", "UNIFORM", "OTHER"].map((t) => <option key={t}>{t}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">Method</label>
-              <select value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })} className={inp}>
-                <option value="CASH">Cash</option>
-                <option value="MOMO">MTN MoMo</option>
-                <option value="BANK_TRANSFER">Bank Transfer</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 mb-1 block">Amount (RWF) *</label>
-            <input type="number" min={0} required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className={inp} placeholder="e.g. 50000" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">Term</label>
-              <select value={form.term} onChange={(e) => setForm({ ...form, term: e.target.value })} className={inp}>
-                {["TERM1", "TERM2", "TERM3"].map((t) => <option key={t}>{t}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">Academic Year</label>
-              <input value={form.academic_year} onChange={(e) => setForm({ ...form, academic_year: e.target.value })} className={inp} />
-            </div>
-          </div>
-          {form.payment_method === "MOMO" && (
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">MoMo Phone</label>
-              <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="250780000000" className={inp} />
-            </div>
-          )}
-          {error && <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 rounded-xl px-3 py-2">{error}</p>}
-          <div className="flex gap-3 pt-1">
-            <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600">Cancel</button>
-            <button type="submit" disabled={loading} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-sm text-white font-medium flex items-center justify-center gap-2">
-              {loading && <Loader2 size={13} className="animate-spin" />} Collect
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-// ─── Create Report Modal ──────────────────────────────────────────────────────
-const DEFAULT_SUBJECTS = [
-  "Mathematics", "Physics", "Chemistry", "Biology",
-  "English", "French", "Kinyarwanda", "History", "Geography",
-  "Computer Science", "Entrepreneurship",
-];
-
-interface SubjectRow {
-  id: number; name: string;
-  cat: string; maxCat: string;
-  exam: string; maxExam: string;
-  remarks: string;
-}
-
-function gradeLabel(pct: number) {
-  if (pct >= 80) return { letter: "A", color: "text-green-600 bg-green-50 dark:bg-green-900/30" };
-  if (pct >= 70) return { letter: "B", color: "text-blue-600 bg-blue-50 dark:bg-blue-900/30" };
-  if (pct >= 60) return { letter: "C", color: "text-orange-500 bg-orange-50 dark:bg-orange-900/30" };
-  if (pct >= 50) return { letter: "D", color: "text-amber-500 bg-amber-50 dark:bg-amber-900/30" };
-  if (pct >= 40) return { letter: "E", color: "text-purple-500 bg-purple-50 dark:bg-purple-900/30" };
-  return { letter: "F", color: "text-red-500 bg-red-50 dark:bg-red-900/30" };
-}
-
-const DECISION_OPTIONS = [
-  { value: "PROMOTED",      label: "Promoted",      color: "bg-green-50 text-green-700 border-green-200" },
-  { value: "SECOND_SITTING", label: "Second Sitting", color: "bg-amber-50 text-amber-700 border-amber-200" },
-  { value: "REPEAT",        label: "Repeat Year",   color: "bg-red-50 text-red-700 border-red-200" },
-];
-
-function numCell(
-  val: string, onChange: (v: string) => void,
-  placeholder: string, cls?: string
-) {
-  return (
-    <input
-      type="text" inputMode="numeric" pattern="[0-9]*"
-      value={val}
-      onChange={(e) => {
-        const v = e.target.value.replace(/[^0-9]/g, "");
-        onChange(v);
-      }}
-      placeholder={placeholder}
-      className={`border border-gray-200 dark:border-gray-700 rounded-lg px-1.5 py-1.5 text-xs text-center outline-none focus:border-blue-500 dark:bg-gray-800 dark:text-gray-100 w-full ${cls ?? ""}`}
-    />
-  );
-}
-
-function CreateReportModal({ studentId, classId, schoolId, onClose, onSuccess }: {
-  studentId: string; classId: string; schoolId: string; onClose: () => void; onSuccess: () => void;
-}) {
-  const [term, setTerm] = useState("TERM1");
-  const [year, setYear] = useState("2025-2026");
-  const [conduct, setConduct] = useState("B");
-  const [position, setPosition] = useState("");
-  const [decision, setDecision] = useState("PROMOTED");
-  const [teacherRemarks, setTeacherRemarks] = useState("");
-  const [principalRemarks, setPrincipalRemarks] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  // Global CAT/Exam max (applies to all rows unless overridden per-row)
-  const [globalMaxCat, setGlobalMaxCat] = useState("30");
-  const [globalMaxExam, setGlobalMaxExam] = useState("70");
-  const [rows, setRows] = useState<SubjectRow[]>(() =>
-    DEFAULT_SUBJECTS.map((name, i) => ({ id: i, name, cat: "", maxCat: "30", exam: "", maxExam: "70", remarks: "" }))
-  );
-  const [customSubject, setCustomSubject] = useState("");
-
-  // Sync global max to all rows when changed
-  function applyGlobalMaxCat(v: string) {
-    setGlobalMaxCat(v);
-    setRows((prev) => prev.map((r) => ({ ...r, maxCat: v })));
-  }
-  function applyGlobalMaxExam(v: string) {
-    setGlobalMaxExam(v);
-    setRows((prev) => prev.map((r) => ({ ...r, maxExam: v })));
-  }
-
-  // A row is "complete" only when BOTH cat AND exam are entered
-  const filledRows = rows.filter((r) => r.name.trim() && r.cat !== "" && r.exam !== "");
-  // Overall % = sum of all marks / sum of all max marks (same formula as per-subject)
-  const totalScore = filledRows.reduce((a, r) => a + Number(r.cat) + Number(r.exam), 0);
-  const totalMax   = filledRows.reduce((a, r) => a + (Number(r.maxCat) || 30) + (Number(r.maxExam) || 70), 0);
-  const avgPct = totalMax > 0 ? Math.round((totalScore / totalMax) * 1000) / 10 : 0;
-  const avgGrade = filledRows.length > 0 ? gradeLabel(avgPct) : null;
-
-  function updateRow(id: number, field: keyof SubjectRow, value: string) {
-    setRows((prev) => prev.map((r) => r.id === id ? { ...r, [field]: value } : r));
-  }
-
-  function removeRow(id: number) {
-    setRows((prev) => prev.filter((r) => r.id !== id));
-  }
-
-  function addCustom() {
-    const name = customSubject.trim();
-    if (!name) return;
-    setRows((prev) => [...prev, { id: Date.now(), name, cat: "", maxCat: globalMaxCat, exam: "", maxExam: globalMaxExam, remarks: "" }]);
-    setCustomSubject("");
-  }
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (filledRows.length === 0) { setError("Enter marks for at least one subject."); return; }
-    setLoading(true);
-    setError("");
-
-    const grades: Record<string, unknown> = Object.fromEntries(
-      filledRows.map((r) => {
-        const cat = Number(r.cat) || 0;
-        const exam = Number(r.exam) || 0;
-        const maxCat = Number(r.maxCat) || 30;
-        const maxExam = Number(r.maxExam) || 70;
-        const total = cat + exam;
-        const maxTotal = maxCat + maxExam;
-        const pct = maxTotal > 0 ? Math.round((total / maxTotal) * 100) : 0;
-        const grade = gradeLabel(pct).letter;
-        return [r.name, { cat, exam, total, max_cat: maxCat, max_exam: maxExam, max_total: maxTotal, percentage: pct, grade, remarks: r.remarks || "" }];
-      })
-    );
-    grades._meta = { decision };
-
-    try {
-      await reports.create({
-        student_id: studentId,
-        class_id: classId,
-        school_id: schoolId,
-        term,
-        academic_year: year,
-        grades,
-        total_marks: totalScore,
-        average: avgPct,
-        position_in_class: position ? Number(position) : null,
-        teacher_remarks: teacherRemarks || null,
-        principal_remarks: principalRemarks || null,
-        conduct_grade: conduct,
-      });
-      onSuccess();
-      onClose();
-    } catch (err) { setError(err instanceof Error ? err.message : "Failed to save report"); }
-    finally { setLoading(false); }
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 pt-4 overflow-y-auto">
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-3xl mb-8">
-
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
-          <div>
-            <h3 className="font-bold text-gray-800 dark:text-gray-100 text-base">Term Report Card</h3>
-            <p className="text-xs text-gray-400 mt-0.5">Enter CAT and Exam marks — totals and grades calculate automatically</p>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition">
-            <X size={16} className="text-gray-400" />
-          </button>
-        </div>
-
-        <form onSubmit={submit}>
-          {/* Meta row */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 px-6 py-4 border-b border-gray-50 dark:border-gray-800">
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Term</label>
-              <select value={term} onChange={(e) => setTerm(e.target.value)} className={inp}>
-                <option value="TERM1">Term 1</option>
-                <option value="TERM2">Term 2</option>
-                <option value="TERM3">Term 3</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Year</label>
-              <input value={year} onChange={(e) => setYear(e.target.value)} className={inp} />
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Conduct</label>
-              <select value={conduct} onChange={(e) => setConduct(e.target.value)} className={inp}>
-                {["A","B","C","D"].map((g) => <option key={g}>{g}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Class Rank</label>
-              <input type="text" inputMode="numeric" pattern="[0-9]*" value={position}
-                onChange={(e) => setPosition(e.target.value.replace(/[^0-9]/g, ""))}
-                placeholder="e.g. 3" className={inp} />
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Decision</label>
-              <select
-                value={decision}
-                onChange={(e) => setDecision(e.target.value)}
-                className={`${inp} font-semibold ${decision === "PROMOTED" ? "text-green-700" : decision === "SECOND_SITTING" ? "text-amber-700" : "text-red-700"}`}
-              >
-                {DECISION_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </div>
-          </div>
-
-          {/* Max marks config */}
-          <div className="flex items-center gap-4 px-6 py-2.5 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
-            <span className="text-xs text-gray-400 font-medium mr-auto">Mark Allocation (global — applies to all subjects)</span>
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-gray-500">Max CAT:</label>
-              <input type="text" inputMode="numeric" pattern="[0-9]*" value={globalMaxCat}
-                onChange={(e) => applyGlobalMaxCat(e.target.value.replace(/[^0-9]/g, ""))}
-                className="w-14 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs text-center outline-none focus:border-blue-500 dark:bg-gray-800" />
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-gray-500">Max Exam:</label>
-              <input type="text" inputMode="numeric" pattern="[0-9]*" value={globalMaxExam}
-                onChange={(e) => applyGlobalMaxExam(e.target.value.replace(/[^0-9]/g, ""))}
-                className="w-14 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs text-center outline-none focus:border-blue-500 dark:bg-gray-800" />
-            </div>
-            <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">
-              Total = {(Number(globalMaxCat) || 0) + (Number(globalMaxExam) || 0)}
-            </span>
-          </div>
-
-          {/* Live average banner */}
-          {filledRows.length > 0 && (
-            <div className={`mx-6 mt-3 flex items-center justify-between px-4 py-2.5 rounded-xl ${avgGrade?.color ?? ""}`}>
-              <div className="flex items-center gap-3">
-                <span className="text-2xl font-bold">{avgGrade?.letter}</span>
-                <div>
-                  <p className="text-sm font-semibold">{avgPct}% overall average</p>
-                  <p className="text-xs opacity-70">{totalScore} / {totalMax} total marks · {filledRows.length} subject{filledRows.length !== 1 ? "s" : ""}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className={`px-3 py-1 rounded-lg border text-xs font-semibold ${
-                  decision === "PROMOTED" ? "bg-green-100 text-green-700 border-green-200" :
-                  decision === "SECOND_SITTING" ? "bg-amber-100 text-amber-700 border-amber-200" :
-                  "bg-red-100 text-red-700 border-red-200"
-                }`}>
-                  {DECISION_OPTIONS.find((d) => d.value === decision)?.label}
-                </div>
-                <div className="w-20 h-2 bg-black/10 rounded-full overflow-hidden">
-                  <div className="h-full rounded-full bg-current opacity-60 transition-all" style={{ width: `${Math.min(avgPct, 100)}%` }} />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Subject rows */}
-          <div className="px-6 py-3 space-y-1.5 max-h-72 overflow-y-auto">
-            {/* Column headers */}
-            <div className="grid grid-cols-[1.6fr_1fr_1fr_0.9fr_0.9fr_0.6fr_1.2fr_28px] gap-1.5 px-1 mb-1">
-              <span className="text-xs text-gray-400 font-medium">Subject</span>
-              <span className="text-xs text-gray-400 font-medium text-center">CAT<span className="opacity-60 ml-0.5 text-[10px]">/{globalMaxCat}</span></span>
-              <span className="text-xs text-gray-400 font-medium text-center">Exam<span className="opacity-60 ml-0.5 text-[10px]">/{globalMaxExam}</span></span>
-              <span className="text-xs text-gray-400 font-medium text-center">Total</span>
-              <span className="text-xs text-gray-400 font-medium text-center">%</span>
-              <span className="text-xs text-gray-400 font-medium text-center">Grade</span>
-              <span className="text-xs text-gray-400 font-medium">Remarks</span>
-              <span />
-            </div>
-
-            {rows.map((row) => {
-              const cat    = row.cat  !== "" ? Number(row.cat)  : null;
-              const exam   = row.exam !== "" ? Number(row.exam) : null;
-              const maxCat  = Number(row.maxCat)  || 30;
-              const maxExam = Number(row.maxExam) || 70;
-              const maxTotal = maxCat + maxExam;
-              const total = (cat ?? 0) + (exam ?? 0);
-              // % and Grade only when BOTH fields are filled
-              const bothFilled = cat !== null && exam !== null;
-              const pct = bothFilled ? Math.round((total / maxTotal) * 100) : null;
-              const grd = pct !== null ? gradeLabel(pct) : null;
-              // Show total once at least one field is filled
-              const anyFilled = cat !== null || exam !== null;
-
-              return (
-                <div key={row.id} className="grid grid-cols-[1.6fr_1fr_1fr_0.9fr_0.9fr_0.6fr_1.2fr_28px] gap-1.5 items-center group">
-                  <input
-                    value={row.name}
-                    onChange={(e) => updateRow(row.id, "name", e.target.value)}
-                    className="border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-blue-500 dark:bg-gray-800 dark:text-gray-100 w-full"
-                    placeholder="Subject name"
-                  />
-                  {/* CAT */}
-                  {numCell(row.cat, (v) => updateRow(row.id, "cat", v), "—")}
-                  {/* Exam */}
-                  {numCell(row.exam, (v) => updateRow(row.id, "exam", v), "—")}
-                  {/* Total — visible as soon as any mark is entered */}
-                  <div className={`rounded-lg px-1.5 py-1.5 text-xs text-center font-semibold border ${anyFilled ? "border-gray-300 text-gray-700 dark:border-gray-600 dark:text-gray-300" : "border-gray-100 text-gray-300 dark:border-gray-800"}`}>
-                    {anyFilled ? total : "—"}
-                  </div>
-                  {/* % — only when BOTH filled */}
-                  <div className={`rounded-lg px-1.5 py-1.5 text-xs text-center font-semibold border ${bothFilled ? (grd?.color ?? "border-gray-200 text-gray-600") : "border-gray-100 text-gray-300 dark:border-gray-800"}`}>
-                    {pct !== null ? `${pct}%` : "—"}
-                  </div>
-                  {/* Grade — only when BOTH filled */}
-                  <div className={`rounded-lg px-1.5 py-1.5 text-xs text-center font-bold border ${grd ? grd.color : "border-gray-100 text-gray-300 dark:border-gray-800"}`}>
-                    {grd ? grd.letter : "—"}
-                  </div>
-                  {/* Remarks */}
-                  <input
-                    value={row.remarks}
-                    onChange={(e) => updateRow(row.id, "remarks", e.target.value)}
-                    className="border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-500 dark:bg-gray-800 dark:text-gray-100 w-full"
-                    placeholder="Note…"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeRow(row.id)}
-                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 text-gray-300 hover:text-red-400 transition opacity-0 group-hover:opacity-100"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Add custom subject */}
-          <div className="px-6 pb-3">
-            <div className="flex items-center gap-2">
-              <input
-                value={customSubject}
-                onChange={(e) => setCustomSubject(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } }}
-                placeholder="Add subject… (press Enter)"
-                className="flex-1 border border-dashed border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500 dark:bg-gray-800 dark:text-gray-400"
-              />
-              <button
-                type="button"
-                onClick={addCustom}
-                disabled={!customSubject.trim()}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-blue-500 text-blue-600 text-sm font-medium hover:bg-blue-50 disabled:opacity-40 transition"
-              >
-                <Plus size={14} /> Add
-              </button>
-            </div>
-          </div>
-
-          {/* Remarks */}
-          <div className="grid grid-cols-2 gap-3 px-6 pb-4">
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Class Teacher's Remarks</label>
-              <textarea
-                value={teacherRemarks}
-                onChange={(e) => setTeacherRemarks(e.target.value)}
-                rows={2}
-                className={`${inp} resize-none`}
-                placeholder="e.g. Excellent student — performs consistently above average."
-              />
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Principal's Remarks</label>
-              <textarea
-                value={principalRemarks}
-                onChange={(e) => setPrincipalRemarks(e.target.value)}
-                rows={2}
-                className={`${inp} resize-none`}
-                placeholder="e.g. Keep up the good work."
-              />
-            </div>
-          </div>
-
-          {error && (
-            <div className="mx-6 mb-4 flex items-center gap-2 bg-red-50 dark:bg-red-900/20 rounded-xl px-3 py-2.5">
-              <X size={13} className="text-red-500 flex-shrink-0" />
-              <p className="text-xs text-red-600">{error}</p>
-            </div>
-          )}
-
-          {/* Actions */}
-          <div className="flex gap-3 px-6 pb-6">
-            <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium hover:bg-gray-50 transition">
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading || filledRows.length === 0}
-              className="flex-1 py-2.5 rounded-xl bg-blue-600 text-sm text-white font-medium hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {loading && <Loader2 size={13} className="animate-spin" />}
-              Save Report{filledRows.length > 0 ? ` (${filledRows.length} subjects)` : ""}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-// ─── Report Detail Card ───────────────────────────────────────────────────────
-type GradeEntry = {
-  cat?: number; exam?: number; total?: number;
-  max_cat?: number; max_exam?: number; max_total?: number;
-  percentage?: number; grade?: string; remarks?: string;
-  // legacy flat format
-  score?: number; max?: number;
-};
-
-function ReportCard({ report, onPublish, onDownload }: { report: AcademicReport; onPublish: () => void; onDownload: () => void }) {
-  const [expanded, setExpanded] = useState(false);
-  const gradesRaw = report.grades as Record<string, GradeEntry>;
-  const meta = (gradesRaw._meta ?? {}) as { decision?: string };
-  const decision = meta.decision ?? null;
-  const gradeEntries = Object.entries(gradesRaw).filter(([k]) => !k.startsWith("_"));
-  const avg = report.average ?? 0;
-  const { letter, color } = gradeLabel(avg);
-
-  const decisionStyle =
-    decision === "PROMOTED" ? "bg-green-50 text-green-700 border border-green-200" :
-    decision === "SECOND_SITTING" ? "bg-amber-50 text-amber-700 border border-amber-200" :
-    decision === "REPEAT" ? "bg-red-50 text-red-700 border border-red-200" : "";
-  const decisionLabel =
-    decision === "PROMOTED" ? "Promoted" :
-    decision === "SECOND_SITTING" ? "2nd Sitting" :
-    decision === "REPEAT" ? "Repeat Year" : null;
-
-  // Detect new CAT/Exam format
-  const isNewFormat = gradeEntries.length > 0 && gradeEntries[0][1].cat !== undefined;
-
-  return (
-    <div className="border border-gray-100 dark:border-gray-800 rounded-2xl overflow-hidden mb-3">
-      {/* Summary row */}
-      <div
-        className="flex items-center gap-4 p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
-        onClick={() => setExpanded((e) => !e)}
-      >
-        {/* Grade badge */}
-        <div className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center flex-shrink-0 font-bold ${color}`}>
-          <span className="text-xl leading-none">{letter}</span>
-          <span className="text-xs opacity-70">{avg.toFixed(1)}%</span>
-        </div>
-
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-gray-800 dark:text-gray-100 text-sm">
-            {report.term.replace("TERM", "Term ")} · {report.academic_year}
-          </p>
-          <div className="flex items-center gap-3 mt-1 flex-wrap">
-            <div className="flex-1 max-w-32 h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-              <div className={`h-full rounded-full ${color.includes("green") ? "bg-green-500" : color.includes("blue") ? "bg-blue-500" : color.includes("orange") ? "bg-orange-500" : color.includes("amber") ? "bg-amber-500" : "bg-red-500"}`}
-                style={{ width: `${Math.min(avg, 100)}%` }} />
-            </div>
-            <span className="text-xs text-gray-400">{report.total_marks} marks</span>
-            {report.position_in_class && <span className="text-xs text-purple-500 font-medium">#{report.position_in_class} in class</span>}
-            {report.conduct_grade && <span className="text-xs text-gray-400">Conduct: <strong>{report.conduct_grade}</strong></span>}
-            <span className="text-xs text-gray-400">{gradeEntries.length} subj.</span>
-            {decisionLabel && (
-              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${decisionStyle}`}>{decisionLabel}</span>
-            )}
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-          <span className={`text-xs px-2 py-0.5 rounded-full ${report.is_published ? "bg-green-50 text-green-600" : "bg-gray-100 dark:bg-gray-800 text-gray-400"}`}>
-            {report.is_published ? "Published" : "Draft"}
-          </span>
-          {!report.is_published && (
-            <button onClick={onPublish} className="text-xs text-blue-500 hover:text-blue-700 px-2 py-1 rounded-lg hover:bg-blue-50 transition">
-              Publish
-            </button>
-          )}
-          <button onClick={onDownload} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 px-2 py-1 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition">
-            <Download size={11} /> PDF
-          </button>
-        </div>
-      </div>
-
-      {/* Expanded grade table */}
-      {expanded && (
-        <div className="border-t border-gray-100 dark:border-gray-800">
-          {gradeEntries.length > 0 ? (
-            <>
-              {/* Column header */}
-              <div className={`grid gap-2 px-4 py-1.5 bg-gray-50 dark:bg-gray-800/50 text-xs text-gray-400 font-medium ${isNewFormat ? "grid-cols-[1fr_52px_52px_52px_44px_36px_1fr]" : "grid-cols-[1fr_80px_44px_44px_1fr]"}`}>
-                <span>Subject</span>
-                {isNewFormat ? <>
-                  <span className="text-center">CAT</span>
-                  <span className="text-center">Exam</span>
-                  <span className="text-center">Total</span>
-                  <span className="text-center">%</span>
-                  <span className="text-center">Grade</span>
-                </> : <>
-                  <span className="text-center">Score</span>
-                  <span className="text-center">%</span>
-                  <span className="text-center">Grade</span>
-                </>}
-                <span>Remarks</span>
-              </div>
-
-              <div className="divide-y divide-gray-50 dark:divide-gray-800">
-                {gradeEntries.map(([subject, g]) => {
-                  const pct = isNewFormat
-                    ? (g.percentage ?? (g.max_total && g.max_total > 0 ? Math.round(((g.total ?? 0) / g.max_total) * 100) : 0))
-                    : (g.max && g.max > 0 ? Math.round(((g.score ?? 0) / g.max) * 100) : 0);
-                  const gradeLetter = isNewFormat ? (g.grade ?? gradeLabel(pct).letter) : gradeLabel(pct).letter;
-                  const { color: c } = gradeLabel(pct);
-                  return (
-                    <div key={subject} className={`grid gap-2 px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/30 items-center ${isNewFormat ? "grid-cols-[1fr_52px_52px_52px_44px_36px_1fr]" : "grid-cols-[1fr_80px_44px_44px_1fr]"}`}>
-                      <span className="text-sm text-gray-700 dark:text-gray-300 truncate">{subject}</span>
-                      {isNewFormat ? <>
-                        <span className="text-xs text-center text-gray-600 dark:text-gray-400">{g.cat ?? "—"}<span className="opacity-40">/{g.max_cat}</span></span>
-                        <span className="text-xs text-center text-gray-600 dark:text-gray-400">{g.exam ?? "—"}<span className="opacity-40">/{g.max_exam}</span></span>
-                        <span className={`text-xs text-center font-semibold ${c.split(" ")[0]}`}>{g.total ?? "—"}</span>
-                        <span className={`text-xs text-center font-semibold ${c.split(" ")[0]}`}>{pct}%</span>
-                        <span className={`text-xs text-center font-bold rounded-lg py-0.5 ${c}`}>{gradeLetter}</span>
-                      </> : <>
-                        <span className={`text-sm font-bold text-center ${c.split(" ")[0]}`}>{g.score} <span className="text-xs text-gray-400 font-normal">/ {g.max}</span></span>
-                        <span className={`text-xs text-center font-semibold ${c.split(" ")[0]}`}>{pct}%</span>
-                        <span className={`text-xs text-center font-bold rounded-lg py-0.5 ${c}`}>{gradeLetter}</span>
-                      </>}
-                      <span className="text-xs text-gray-400 italic truncate">{g.remarks || ""}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
+        <div className="p-5 space-y-3">
+          {loadingInvoices ? (
+            <div className="flex justify-center py-6"><Loader2 className="animate-spin text-blue-600" size={20} /></div>
+          ) : invoices.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-6">No pending fee invoices for this student.</p>
           ) : (
-            <p className="text-sm text-gray-400 text-center py-4">No subject grades recorded</p>
-          )}
-
-          {/* Remarks footer */}
-          {(report.teacher_remarks || report.principal_remarks) && (
-            <div className="grid grid-cols-2 gap-0 border-t border-gray-100 dark:border-gray-800">
-              {report.teacher_remarks && (
-                <div className="px-4 py-3 bg-blue-50 dark:bg-blue-900/20">
-                  <p className="text-xs text-gray-400 mb-0.5">Class Teacher</p>
-                  <p className="text-xs text-blue-700 dark:text-blue-300 italic">"{report.teacher_remarks}"</p>
+            <form onSubmit={submit} className="space-y-3">
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Invoice</label>
+                <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)} className={inp}>
+                  {invoices.map(i => (
+                    <option key={i.id} value={i.id}>
+                      {i.title} — {(i.total_amount - i.amount_paid).toLocaleString()} RWF due
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {selectedInvoice && (
+                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 text-sm">
+                  <p className="text-gray-600 dark:text-gray-300">Amount due: <strong>{(selectedInvoice.total_amount - selectedInvoice.amount_paid).toLocaleString()} RWF</strong></p>
+                  {selectedInvoice.due_date && (
+                    <p className="text-xs text-gray-400 mt-0.5">Due: {new Date(selectedInvoice.due_date).toLocaleDateString("en-GB")}</p>
+                  )}
                 </div>
               )}
-              {report.principal_remarks && (
-                <div className="px-4 py-3 bg-green-50 dark:bg-green-900/20 border-l border-gray-100 dark:border-gray-800">
-                  <p className="text-xs text-gray-400 mb-0.5">Principal</p>
-                  <p className="text-xs text-green-700 dark:text-green-300 italic">"{report.principal_remarks}"</p>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Payment Method</label>
+                <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className={inp}>
+                  <option value="CASH">Cash</option>
+                  <option value="MOMO">MTN MoMo</option>
+                  <option value="BANK">Bank Transfer</option>
+                </select>
+              </div>
+              {paymentMethod === "MOMO" && (
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">MoMo Phone</label>
+                  <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="250780000000" className={inp} />
                 </div>
               )}
-            </div>
+              {error && <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 rounded-xl px-3 py-2">{error}</p>}
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600">Cancel</button>
+                <button type="submit" disabled={loading} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-sm text-white font-medium flex items-center justify-center gap-2">
+                  {loading && <Loader2 size={13} className="animate-spin" />} Pay Now
+                </button>
+              </div>
+            </form>
           )}
-
-          {/* Decision banner */}
-          {decision && (
-            <div className={`px-4 py-2.5 border-t border-gray-100 dark:border-gray-800 flex items-center gap-2 ${
-              decision === "PROMOTED" ? "bg-green-50 dark:bg-green-900/20" :
-              decision === "SECOND_SITTING" ? "bg-amber-50 dark:bg-amber-900/20" :
-              "bg-red-50 dark:bg-red-900/20"
-            }`}>
-              <span className="text-xs text-gray-500">Decision:</span>
-              <span className={`text-sm font-bold ${
-                decision === "PROMOTED" ? "text-green-700" :
-                decision === "SECOND_SITTING" ? "text-amber-700" :
-                "text-red-700"
-              }`}>
-                {decision === "PROMOTED" ? "PROMOTED" : decision === "SECOND_SITTING" ? "SECOND SITTING" : "REPEAT YEAR"}
-              </span>
+          {invoices.length === 0 && !loadingInvoices && (
+            <div className="flex justify-end pt-2">
+              <button onClick={onClose} className="px-4 py-2 rounded-xl border border-gray-200 text-sm text-gray-600">Close</button>
             </div>
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ─── Main Page ───────────────────────────────────────────────────────────────
 export default function StudentProfilePage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -894,77 +362,145 @@ export default function StudentProfilePage() {
   const { show } = useToast();
 
   const filteredTabs = TABS.filter((t) => {
-    if (user?.role === "TEACHER") {
-      return !["wallet", "fees", "canteen"].includes(t.key);
-    }
+    if (user?.role === "TEACHER") return !["wallet", "fees", "canteen"].includes(t.key);
     return true;
   });
-  const [profile, setProfile] = useState<FullProfile | null>(null);
+
+  const [profile, setProfile] = useState<LocalProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("overview");
-  const [walletTxns, setWalletTxns] = useState<WalletTransaction[]>([]);
-  const [feeList, setFeeList] = useState<FeePayment[]>([]);
-  const [canteenList, setCanteenList] = useState<CanteenTransaction[]>([]);
+  const [walletTxns, setWalletTxns] = useState<LocalWalletTxn[]>([]);
+  const [feeList, setFeeList] = useState<FeeInvoiceRow[]>([]);
+  const [canteenList, setCanteenList] = useState<CanteenTransactionRow[]>([]);
   const [tabLoading, setTabLoading] = useState(false);
-  const [modal, setModal] = useState<null | "health" | "discipline" | "fee" | "report">(null);
-  const [consentRecords, setConsentRecords] = useState<ConsentRecord[]>([]);
-  const [showRecordConsentModal, setShowRecordConsentModal] = useState(false);
+  const [modal, setModal] = useState<null | "health" | "discipline" | "fee">(null);
 
-  // Wallet top-up state (inline)
   const [topupAmount, setTopupAmount] = useState("");
   const [toppingUp, setToppingUp] = useState(false);
-
-  // Attendance scan state
   const [scanResult, setScanResult] = useState<{ status: string; name: string } | null>(null);
   const [scanning, setScanning] = useState(false);
-
-  // NFC card assignment state
   const [nfcScanning, setNfcScanning] = useState(false);
   const [nfcError, setNfcError] = useState<string | null>(null);
   const nfcAbortRef = useRef<AbortController | null>(null);
 
   const studentId = params.id;
 
-  const reloadProfile = useCallback(() =>
-    students.fullProfile(studentId).then((r) => setProfile(r.data)).catch(console.error),
-    [studentId]
-  );
+  const loadProfile = useCallback(async () => {
+    if (!user) return;
+    const client = getSafeBrowserClient();
+    if (!client) return;
+    const schoolId = user.school_id;
+
+    try {
+      const { data: rpcData } = await client.rpc("list_school_students", {
+        p_school_id: schoolId,
+        p_class_section_id: null,
+        p_search: null,
+      });
+
+      const row = (rpcData ?? []).find((r: { student_id: string }) => r.student_id === studentId);
+      if (!row) { setLoading(false); return; }
+
+      let walletBalance = 0;
+      if (row.card_assignment_id) {
+        const { data: cardRow } = await client
+          .from("card_assignments")
+          .select("wallet_balance")
+          .eq("id", row.card_assignment_id)
+          .eq("school_id", schoolId)
+          .maybeSingle();
+        walletBalance = cardRow?.wallet_balance ?? 0;
+      }
+
+      const { data: attData } = await client
+        .from("attendance_records")
+        .select("id, attendance_date, status, first_arrived_at, departed_at")
+        .eq("school_id", schoolId)
+        .eq("student_id", studentId)
+        .order("attendance_date", { ascending: false })
+        .limit(365);
+
+      const [health, discipline] = await Promise.all([
+        supabaseHealthService.studentList(schoolId, studentId).catch(() => [] as HealthRecord[]),
+        supabaseDisciplineService.studentList(schoolId, studentId).catch(() => [] as DisciplineRecord[]),
+      ]);
+
+      const nameParts = (row.legal_name ?? "").trim().split(" ");
+      const built: LocalProfile = {
+        user: {
+          first_name: nameParts[0] ?? "",
+          last_name: nameParts.slice(1).join(" "),
+          email: row.primary_email ?? "",
+          phone: row.primary_phone ?? null,
+          profile_photo: row.profile_photo_path ?? null,
+        },
+        student_code: row.admission_number,
+        date_of_birth: row.date_of_birth ?? null,
+        gender: row.gender ?? null,
+        nationality: row.nationality ?? null,
+        level: row.education_level_name ? { name: row.education_level_name } : null,
+        class: row.class_section_name ? { name: row.class_section_name } : null,
+        card: row.card_assignment_id ? {
+          id: row.card_assignment_id,
+          card_number: row.card_number ?? "",
+          wallet_balance: walletBalance,
+          is_frozen: row.card_status === "suspended",
+          is_active: row.card_status === "active",
+        } : null,
+        attendances: (attData ?? []).map((a: { id: string; attendance_date: string; status: string; first_arrived_at: string | null; departed_at: string | null }) => ({
+          id: a.id,
+          status: a.status.toUpperCase(),
+          date: a.attendance_date,
+          check_in_time: a.first_arrived_at,
+          check_out_time: a.departed_at,
+          note: null,
+        })),
+        health,
+        discipline,
+      };
+      setProfile(built);
+    } catch (err) {
+      console.error("Failed to load student profile:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [studentId, user]);
 
   useEffect(() => {
     if (authLoading || !user) return;
-    students.fullProfile(studentId)
-      .then((r) => setProfile(r.data))
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [studentId, authLoading, user]);
+    loadProfile();
+  }, [authLoading, user, loadProfile]);
 
   useEffect(() => {
     if (authLoading || !user) return;
+    const client = getSafeBrowserClient();
+    if (!client) return;
+    const schoolId = user.school_id;
+
     if (tab === "wallet" && profile?.card) {
       setTabLoading(true);
-      cards.transactions(profile.card.id)
-        .then((r) => setWalletTxns(r.data as WalletTransaction[]))
-        .catch(console.error)
-        .finally(() => setTabLoading(false));
+      Promise.resolve(
+        client.from("wallet_transactions")
+          .select("id, type, description, amount, created_at")
+          .eq("school_id", schoolId)
+          .eq("card_assignment_id", profile.card.id)
+          .order("created_at", { ascending: false })
+          .limit(50)
+      ).then(({ data }) => setWalletTxns((data ?? []) as LocalWalletTxn[]))
+       .catch(console.error)
+       .finally(() => setTabLoading(false));
     }
     if (tab === "fees") {
       setTabLoading(true);
-      fees.studentFees(studentId)
-        .then((r) => setFeeList(r.data as FeePayment[]))
+      supabaseFeesService.listInvoices(schoolId, { studentId })
+        .then(data => setFeeList(data))
         .catch(console.error)
         .finally(() => setTabLoading(false));
     }
     if (tab === "canteen") {
       setTabLoading(true);
-      canteen.studentTransactions(studentId)
-        .then((r) => setCanteenList(r.data as CanteenTransaction[]))
-        .catch(console.error)
-        .finally(() => setTabLoading(false));
-    }
-    if (tab === "consent") {
-      setTabLoading(true);
-      students.consent(studentId)
-        .then((r) => setConsentRecords(r.data))
+      supabaseCanteenService.listStudentTransactions(schoolId, studentId, 50)
+        .then(data => setCanteenList(data))
         .catch(console.error)
         .finally(() => setTabLoading(false));
     }
@@ -972,57 +508,82 @@ export default function StudentProfilePage() {
 
   async function handleTopUp(e: React.FormEvent) {
     e.preventDefault();
-    if (!profile?.card) return;
+    if (!profile?.card || !user) return;
     const amt = parseInt(topupAmount, 10);
     if (isNaN(amt) || amt < 100) { show("Minimum top-up is 100 RWF", "error"); return; }
     setToppingUp(true);
     try {
-      await cards.topUpCash(profile.card.id, amt);
+      const newBalance = await supabaseCardService.topUpWallet(user.school_id, profile.card.id, amt);
       show(`${amt.toLocaleString()} RWF added to wallet`, "success");
       setTopupAmount("");
-      await reloadProfile();
-      // Reload wallet transactions
-      cards.transactions(profile.card.id).then((r) => setWalletTxns(r.data as WalletTransaction[])).catch(console.error);
+      setProfile(p => p && p.card ? { ...p, card: { ...p.card, wallet_balance: newBalance } } : p);
+      const client = getSafeBrowserClient();
+      if (client) {
+        const { data } = await client.from("wallet_transactions")
+          .select("id, type, description, amount, created_at")
+          .eq("school_id", user.school_id)
+          .eq("card_assignment_id", profile.card.id)
+          .order("created_at", { ascending: false })
+          .limit(50);
+        setWalletTxns((data ?? []) as LocalWalletTxn[]);
+      }
     } catch (err) {
       show(err instanceof Error ? err.message : "Top-up failed", "error");
     } finally { setToppingUp(false); }
   }
 
-  async function handleCardScan(cardNumber: string) {
-    if (scanning) return;
+  async function handleCardScan(_cardNumber: string) {
+    if (scanning || !user) return;
     setScanning(true);
     setScanResult(null);
     try {
-      const res = await attendance.scan(cardNumber);
+      await supabaseAttendanceService.recordStudentAttendance({
+        schoolId: user.school_id,
+        studentId,
+        attendanceDate: new Date().toISOString().split("T")[0],
+        status: "present",
+      });
       const name = `${profile?.user?.first_name ?? ""} ${profile?.user?.last_name ?? ""}`.trim();
-      setScanResult({ status: (res.data as { status: string }).status, name });
-      show(`Attendance marked: ${(res.data as { status: string }).status}`, "success");
-      await reloadProfile();
+      setScanResult({ status: "PRESENT", name });
+      show("Attendance marked: PRESENT", "success");
+      await loadProfile();
     } catch (err) {
       show(err instanceof Error ? err.message : "Scan failed", "error");
     } finally { setScanning(false); }
   }
 
   async function freezeCard(doFreeze: boolean) {
-    if (!profile?.card) return;
+    if (!profile?.card || !user) return;
     try {
-      if (doFreeze) await cards.freeze(profile.card.id);
-      else await cards.unfreeze(profile.card.id);
+      await supabaseCardService.changeCardStatus(
+        user.school_id, profile.card.id,
+        doFreeze ? "suspended" : "active",
+        doFreeze ? "Frozen from student profile" : "Unfrozen from student profile"
+      );
       show(doFreeze ? "Card frozen" : "Card unfrozen", "success");
-      await reloadProfile();
+      await loadProfile();
     } catch (err) { show(err instanceof Error ? err.message : "Error", "error"); }
   }
 
   async function issueCard() {
+    if (!user) return;
     try {
-      await cards.issue(studentId);
+      const qrToken = typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : Math.random().toString(36).substring(2) + Date.now().toString(36);
+      await supabaseCardService.issueCard({
+        schoolId: user.school_id,
+        holderKind: "student",
+        studentId,
+        identifierKind: "qr_token",
+        identifier: qrToken,
+      });
       show("IshuriHUB Card issued successfully", "success");
-      await reloadProfile();
+      await loadProfile();
     } catch (err) { show(err instanceof Error ? err.message : "Error", "error"); }
   }
 
   async function assignNFC() {
-    // Cancel if already scanning
     if (nfcScanning && nfcAbortRef.current) {
       nfcAbortRef.current.abort();
       nfcAbortRef.current = null;
@@ -1031,7 +592,7 @@ export default function StudentProfilePage() {
     }
     setNfcError(null);
     if (!("NDEFReader" in window)) {
-      setNfcError("Web NFC requires Chrome on Android. Not supported on this device.");
+      setNfcError("Web NFC requires Chrome on Android. NFC card assignment requires a physical attendance device.");
       return;
     }
     setNfcScanning(true);
@@ -1040,23 +601,12 @@ export default function StudentProfilePage() {
     try {
       const ndef = new (window as unknown as { NDEFReader: new () => { scan: (o: { signal: AbortSignal }) => Promise<void>; addEventListener: (e: string, h: (ev: { serialNumber: string }) => void) => void } }).NDEFReader();
       await ndef.scan({ signal: abort.signal });
-      ndef.addEventListener("reading", async ({ serialNumber }) => {
+      ndef.addEventListener("reading", ({ serialNumber }) => {
         abort.abort();
         nfcAbortRef.current = null;
         setNfcScanning(false);
         const nfcUid = serialNumber.toUpperCase().replace(/:/g, "");
-        try {
-          let cardId = profile?.card?.id;
-          if (!cardId) {
-            const res = await cards.issue(studentId);
-            cardId = (res.data as { id: string }).id;
-          }
-          await cards.linkNFC(cardId, nfcUid);
-          show(`NFC card ${profile?.card?.nfc_uid ? "updated" : "assigned"} — UID: ${nfcUid}`, "success");
-          await reloadProfile();
-        } catch (err) {
-          setNfcError(err instanceof Error ? err.message : "Failed to assign NFC card");
-        }
+        setNfcError(`NFC UID detected: ${nfcUid}. To assign this card, configure your hardware attendance device in Settings.`);
       });
     } catch (err) {
       nfcAbortRef.current = null;
@@ -1064,9 +614,9 @@ export default function StudentProfilePage() {
       if (err instanceof Error && err.name !== "AbortError") {
         const msg = err.message.toLowerCase();
         if (msg.includes("setting is disabled") || (msg.includes("disabled") && msg.includes("nfc"))) {
-          setNfcError("NFC setting is disabled on this device. Enable NFC in Settings > Connected devices, or click Simulate NFC UID below.");
+          setNfcError("NFC is disabled on this device. Enable it in Settings > Connected devices.");
         } else if (err.name === "NotAllowedError" || msg.includes("permission")) {
-          setNfcError("NFC permission denied. Allow NFC access in browser settings, or click Simulate NFC UID below.");
+          setNfcError("NFC permission denied. Allow NFC access in browser settings.");
         } else {
           setNfcError(err.message);
         }
@@ -1076,37 +626,10 @@ export default function StudentProfilePage() {
 
   async function simulateAssignNFC() {
     setNfcError(null);
-    const fakeUid = Array.from({ length: 7 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0').toUpperCase()).join("");
-    try {
-      let cardId = profile?.card?.id;
-      if (!cardId) {
-        const res = await cards.issue(studentId);
-        cardId = (res.data as { id: string }).id;
-      }
-      await cards.linkNFC(cardId, fakeUid);
-      show(`Simulated NFC card assigned — UID: ${fakeUid}`, "success");
-      await reloadProfile();
-    } catch (err) {
-      setNfcError(err instanceof Error ? err.message : "Failed to assign NFC UID");
+    if (!profile?.card) {
+      try { await issueCard(); } catch (err) { setNfcError(err instanceof Error ? err.message : "Failed to issue card"); return; }
     }
-  }
-
-  async function publishReport(id: string) {
-    try {
-      await reports.publish(id);
-      show("Report published", "success");
-      await reloadProfile();
-    } catch (err) { show(err instanceof Error ? err.message : "Error", "error"); }
-  }
-
-  async function downloadReport(id: string) {
-    try {
-      const blob = await reports.downloadPDF(id);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = `report-${id}.pdf`; a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) { show(err instanceof Error ? err.message : "PDF failed", "error"); }
+    setNfcError("NFC card assignment requires a physical NFC reader device. Contact your hardware provider to configure an attendance terminal.");
   }
 
   if (loading) {
@@ -1124,7 +647,7 @@ export default function StudentProfilePage() {
         <div className="p-8 text-center text-gray-400">
           <p className="font-semibold text-gray-600 dark:text-gray-300">Student not found</p>
           <p className="text-xs text-gray-400 mt-1">The requested student ID is not registered or unavailable.</p>
-          <button onClick={() => router.push('/students')} className="mt-4 px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-semibold">
+          <button onClick={() => router.push("/students")} className="mt-4 px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-semibold">
             Return to Students Directory
           </button>
         </div>
@@ -1149,48 +672,23 @@ export default function StudentProfilePage() {
     <DashboardShell>
       {/* Modals */}
       {modal === "health" && (
-        <AddHealthModal studentId={studentId} onClose={() => setModal(null)} onSuccess={reloadProfile} />
+        <AddHealthModal studentId={studentId} schoolId={user?.school_id ?? ""} onClose={() => setModal(null)} onSuccess={loadProfile} />
       )}
       {modal === "discipline" && (
-        <AddDisciplineModal studentId={studentId} onClose={() => setModal(null)} onSuccess={reloadProfile} />
+        <AddDisciplineModal studentId={studentId} schoolId={user?.school_id ?? ""} onClose={() => setModal(null)} onSuccess={loadProfile} />
       )}
       {modal === "fee" && (
-        <CollectFeeModal studentId={studentId} schoolId={user?.school_id ?? ""} onClose={() => setModal(null)}
-          onSuccess={() => fees.studentFees(studentId).then((r) => setFeeList(r.data as FeePayment[])).catch(console.error)} />
-      )}
-      {modal === "report" && (
-        <CreateReportModal
-          studentId={studentId}
-          classId={profile.class?.id ?? ""}
-          schoolId={user?.school_id ?? ""}
-          onClose={() => setModal(null)}
-          onSuccess={reloadProfile}
-        />
-      )}
-      {showRecordConsentModal && profile?.parent && (
-        <RecordConsentModal
-          studentId={studentId}
-          guardianId={profile.parent.id || profile.parent_id || ""}
-          onClose={() => setShowRecordConsentModal(false)}
-          onSuccess={() => {
-            setTabLoading(true);
-            students.consent(studentId)
-              .then((r) => setConsentRecords(r.data))
-              .catch(console.error)
-              .finally(() => setTabLoading(false));
-          }}
-        />
+        <PayInvoiceModal studentId={studentId} schoolId={user?.school_id ?? ""} onClose={() => setModal(null)}
+          onSuccess={() => supabaseFeesService.listInvoices(user?.school_id ?? "", { studentId }).then(setFeeList).catch(console.error)} />
       )}
 
       <div className="p-4 space-y-4 max-w-5xl">
-        {/* Back */}
         <button onClick={() => router.back()} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition">
           <ArrowLeft size={15} /> Back to Students
         </button>
 
-        {/* ── Profile Hero ────────────────────────────────────────── */}
+        {/* ── Profile Hero ────────────────────────────────────────────────── */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm overflow-hidden">
-          {/* Black banner */}
           <div className="h-20 bg-[#121212] border-b border-[#dcd9d9]/20" />
           <div className="px-6 pb-5 -mt-10 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div className="flex items-end gap-4">
@@ -1222,7 +720,7 @@ export default function StudentProfilePage() {
                     <div className="text-left sm:text-right">
                       <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Wallet Balance</p>
                       <p className="text-xs font-bold text-blue-600 dark:text-blue-400 mt-0.5">
-                        {profile.card.wallet_balance.toLocaleString()} <span className="text-[10px] font-normal text-blue-500/80 dark:text-blue-400/80">RWF</span>
+                        {profile.card.wallet_balance.toLocaleString()} <span className="text-[10px] font-normal text-blue-500/80">RWF</span>
                       </p>
                     </div>
                   )}
@@ -1237,13 +735,11 @@ export default function StudentProfilePage() {
             </div>
           </div>
 
-          {/* Stats row */}
-          <div className="grid grid-cols-2 md:grid-cols-4 border-t border-gray-100 dark:border-gray-800">
+          <div className="grid grid-cols-2 md:grid-cols-3 border-t border-gray-100 dark:border-gray-800">
             {[
               { label: "Attendance", value: `${attRate}%`, color: attRate >= 75 ? "text-green-600" : "text-red-500", icon: Activity },
               { label: "Days Present", value: attSummary.PRESENT, color: "text-green-600", icon: CheckCircle },
-              { label: "Canteen Spends", value: profile.attendances.length > 0 ? `${profile.attendances.length}d` : "—", color: "text-blue-600", icon: ShoppingBag },
-              { label: "Reports", value: profile.reports.length, color: "text-blue-500", icon: FileText },
+              { label: "Absences", value: attSummary.ABSENT, color: "text-red-500", icon: XCircle },
             ].map(({ label, value, color, icon: Icon }) => (
               <div key={label} className="flex flex-col items-center py-4 border-r border-gray-100 dark:border-gray-800 last:border-0">
                 <Icon size={16} className={`${color} mb-1`} />
@@ -1254,26 +750,22 @@ export default function StudentProfilePage() {
           </div>
         </div>
 
-        {/* ── Tabs ────────────────────────────────────────────────── */}
+        {/* ── Tabs ────────────────────────────────────────────────────────── */}
         <div className="flex gap-1 bg-white dark:bg-gray-900 rounded-2xl p-1.5 shadow-sm overflow-x-auto">
           {filteredTabs.map(({ key, label, icon: Icon }) => (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition whitespace-nowrap ${tab === key ? "bg-blue-50 text-blue-600 dark:bg-orange-900/30" : "text-gray-500 hover:text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}
-            >
+            <button key={key} onClick={() => setTab(key)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition whitespace-nowrap ${tab === key ? "bg-blue-50 text-blue-600 dark:bg-orange-900/30" : "text-gray-500 hover:text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}>
               <Icon size={13} />{label}
             </button>
           ))}
         </div>
 
-        {/* ── Tab Content ─────────────────────────────────────────── */}
+        {/* ── Tab Content ─────────────────────────────────────────────────── */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm p-5">
 
           {/* OVERVIEW */}
           {tab === "overview" && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Personal info */}
               <div>
                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Personal Information</h3>
                 <div className="space-y-0">
@@ -1291,19 +783,8 @@ export default function StudentProfilePage() {
                     </div>
                   ))}
                 </div>
-
-                {/* Parent info */}
-                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 mt-5">Parent / Guardian</h3>
-                {profile.parent ? (
-                  <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 space-y-1.5">
-                    <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{profile.parent.first_name} {profile.parent.last_name}</p>
-                    <p className="text-xs text-gray-500">{profile.parent.phone}</p>
-                    <p className="text-xs text-gray-500">{profile.parent.email}</p>
-                  </div>
-                ) : <p className="text-sm text-gray-400">No parent linked</p>}
               </div>
 
-              {/* Card & Medical */}
               <div className="space-y-5">
                 {/* IshuriHUB Card */}
                 <div>
@@ -1313,9 +794,7 @@ export default function StudentProfilePage() {
                       {[
                         ["Card Number", profile.card.card_number],
                         user?.role !== "TEACHER" ? ["Balance", `${profile.card.wallet_balance.toLocaleString()} RWF`] : null,
-                        ["NFC UID", profile.card.nfc_uid ?? "Not linked"],
                         ["Status", profile.card.is_frozen ? "Frozen" : profile.card.is_active ? "Active" : "Inactive"],
-                        ["Expires", new Date(profile.card.expires_at).toLocaleDateString("en-GB")],
                       ].filter((item): item is [string, string] => item !== null).map(([k, v]) => (
                         <div key={k} className="flex justify-between py-2.5 border-b border-gray-50 dark:border-gray-800 last:border-0">
                           <span className="text-xs text-gray-400">{k}</span>
@@ -1337,30 +816,16 @@ export default function StudentProfilePage() {
                       )}
                       {isManagementRole(user?.role) && (
                         <div className="pt-2">
-                          <button
-                            onClick={assignNFC}
-                            className={`w-full py-2 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 transition ${nfcScanning ? "bg-[#121212] text-white animate-pulse" : profile.card.nfc_uid ? "border border-[#dcd9d9] text-gray-600 hover:bg-gray-50" : "bg-[#121212] text-white hover:bg-black"}`}
-                          >
+                          <button onClick={assignNFC}
+                            className={`w-full py-2 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 transition ${nfcScanning ? "bg-[#121212] text-white animate-pulse" : "border border-[#dcd9d9] text-gray-600 hover:bg-gray-50"}`}>
                             <Nfc size={11} />
-                            {nfcScanning ? "Tap NFC card now… (tap to cancel)" : profile.card.nfc_uid ? "Update NFC Card" : "Assign NFC Card"}
+                            {nfcScanning ? "Tap NFC card now… (tap to cancel)" : "Assign NFC Card"}
                           </button>
                           {nfcError && (
-                            <div className="mt-1.5 bg-red-50 p-2 rounded-lg text-left">
-                              <p className="text-xs text-red-500 mb-1">{nfcError}</p>
-                              <button
-                                type="button"
-                                onClick={simulateAssignNFC}
-                                className="text-[11px] text-blue-600 font-semibold underline hover:text-blue-700"
-                              >
-                                Or assign simulated NFC UID for testing →
-                              </button>
+                            <div className="mt-1.5 bg-amber-50 p-2 rounded-lg">
+                              <p className="text-xs text-amber-700">{nfcError}</p>
                             </div>
                           )}
-                        </div>
-                      )}
-                      {profile.card.qr_code && (
-                        <div className="mt-3 flex justify-center">
-                          <img src={profile.card.qr_code} alt="QR" className="w-28 h-28 object-contain rounded-xl border border-gray-100 dark:border-gray-800 p-2" />
                         </div>
                       )}
                     </div>
@@ -1370,25 +835,16 @@ export default function StudentProfilePage() {
                       <p className="text-sm text-gray-400 mb-3">No card issued yet</p>
                       {isManagementRole(user?.role) && (
                         <div className="flex flex-col gap-2 items-center">
-                          <button
-                            onClick={assignNFC}
-                            className={`flex items-center gap-1.5 text-xs font-medium px-4 py-2 rounded-xl transition ${nfcScanning ? "bg-[#121212] text-white animate-pulse" : "bg-[#121212] text-white hover:bg-black"}`}
-                          >
+                          <button onClick={assignNFC}
+                            className={`flex items-center gap-1.5 text-xs font-medium px-4 py-2 rounded-xl transition ${nfcScanning ? "bg-[#121212] text-white animate-pulse" : "bg-[#121212] text-white hover:bg-black"}`}>
                             <Nfc size={12} />
                             {nfcScanning ? "Tap NFC card now… (tap to cancel)" : "Issue & Assign NFC Card"}
                           </button>
                           <button onClick={issueCard} className="text-xs text-gray-500 underline hover:text-gray-700 transition">Issue card without NFC</button>
                           <button onClick={simulateAssignNFC} className="text-xs text-blue-600 underline hover:text-blue-700 transition">Issue with simulated NFC UID</button>
                           {nfcError && (
-                            <div className="bg-red-50 p-2.5 rounded-lg text-left max-w-xs">
-                              <p className="text-xs text-red-500 mb-1">{nfcError}</p>
-                              <button
-                                type="button"
-                                onClick={simulateAssignNFC}
-                                className="text-[11px] text-blue-600 font-semibold underline hover:text-blue-700"
-                              >
-                                Assign simulated NFC UID instead →
-                              </button>
+                            <div className="bg-amber-50 p-2.5 rounded-lg text-left max-w-xs">
+                              <p className="text-xs text-amber-700">{nfcError}</p>
                             </div>
                           )}
                         </div>
@@ -1425,7 +881,6 @@ export default function StudentProfilePage() {
           {/* ATTENDANCE */}
           {tab === "attendance" && (
             <div>
-              {/* Summary + VirtualTap */}
               <div className="flex items-start justify-between mb-4">
                 <div className="flex gap-3">
                   {(["PRESENT", "ABSENT", "LATE", "EXCUSED"] as const).map((s) => (
@@ -1436,7 +891,7 @@ export default function StudentProfilePage() {
                   ))}
                 </div>
                 <div className="flex flex-col items-end gap-2">
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Attendance Rate: <strong className={attRate >= 75 ? "text-green-600" : "text-red-500"}>{attRate}%</strong></p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Rate: <strong className={attRate >= 75 ? "text-green-600" : "text-red-500"}>{attRate}%</strong></p>
                   {profile.card && (
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-400">Mark attendance:</span>
@@ -1446,7 +901,6 @@ export default function StudentProfilePage() {
                 </div>
               </div>
 
-              {/* Scan result flash */}
               {scanResult && (
                 <div className={`mb-4 flex items-center gap-2 p-3 rounded-xl ${STATUS_COLOR[scanResult.status]}`}>
                   <CheckCircle size={16} />
@@ -1460,25 +914,22 @@ export default function StudentProfilePage() {
                 ) : profile.attendances.map((r) => (
                   <div key={r.id} className="flex items-center justify-between py-2.5 px-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
                     <div className="flex items-center gap-3">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[r.status]}`}>{r.status}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[r.status] || "text-gray-500 bg-gray-100"}`}>{r.status}</span>
                       <span className="text-sm text-gray-600 dark:text-gray-300">
                         {new Date(r.date).toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", year: "numeric" })}
                       </span>
                     </div>
                     <div className="flex items-center gap-4 text-xs text-gray-400">
                       {r.check_in_time && (
-                        <span className="flex items-center gap-1">
-                          <CheckCircle size={10} className="text-green-500" />
+                        <span className="flex items-center gap-1"><CheckCircle size={10} className="text-green-500" />
                           {new Date(r.check_in_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                         </span>
                       )}
                       {r.check_out_time && (
-                        <span className="flex items-center gap-1">
-                          <XCircle size={10} className="text-red-400" />
+                        <span className="flex items-center gap-1"><XCircle size={10} className="text-red-400" />
                           {new Date(r.check_out_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                         </span>
                       )}
-                      {r.note && <span className="italic max-w-32 truncate">{r.note}</span>}
                     </div>
                   </div>
                 ))}
@@ -1489,7 +940,6 @@ export default function StudentProfilePage() {
           {/* WALLET */}
           {tab === "wallet" && (
             <div>
-              {/* Balance card */}
               {profile.card ? (
                 <>
                   <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl p-5 text-white mb-5">
@@ -1502,38 +952,27 @@ export default function StudentProfilePage() {
                       <div className="text-right">
                         <p className="text-xs text-white/60">Card</p>
                         <p className="text-sm font-mono font-medium">{profile.card.card_number}</p>
-                        <p className="text-xs text-white/60 mt-1">{profile.card.is_frozen ? "🔒 Frozen" : "✓ Active"}</p>
+                        <p className="text-xs text-white/60 mt-1">{profile.card.is_frozen ? "Frozen" : "Active"}</p>
                       </div>
                     </div>
                   </div>
 
-                  {/* Inline top-up */}
                   <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 mb-5">
                     <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">Top Up Wallet (Cash)</h3>
                     <div className="flex gap-2 mb-3 flex-wrap">
                       {[1000, 2000, 5000, 10000].map((amt) => (
-                        <button
-                          key={amt}
-                          onClick={() => setTopupAmount(String(amt))}
-                          className={`px-3 py-1.5 rounded-xl text-sm font-medium transition ${topupAmount === String(amt) ? "bg-blue-600 text-white" : "bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-blue-500"}`}
-                        >
+                        <button key={amt} onClick={() => setTopupAmount(String(amt))}
+                          className={`px-3 py-1.5 rounded-xl text-sm font-medium transition ${topupAmount === String(amt) ? "bg-blue-600 text-white" : "bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-blue-500"}`}>
                           {amt.toLocaleString()}
                         </button>
                       ))}
                     </div>
                     <form onSubmit={handleTopUp} className="flex gap-2">
-                      <input
-                        type="number" min={100} value={topupAmount}
-                        onChange={(e) => setTopupAmount(e.target.value)}
-                        placeholder="Enter amount (RWF)"
-                        className={`${inp} flex-1`}
-                      />
-                      <button
-                        type="submit" disabled={toppingUp || !topupAmount}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition disabled:opacity-60 flex items-center gap-2"
-                      >
-                        {toppingUp ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                        Top Up
+                      <input type="number" min={100} value={topupAmount} onChange={(e) => setTopupAmount(e.target.value)}
+                        placeholder="Enter amount (RWF)" className={`${inp} flex-1`} />
+                      <button type="submit" disabled={toppingUp || !topupAmount}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition disabled:opacity-60 flex items-center gap-2">
+                        {toppingUp ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Top Up
                       </button>
                     </form>
                   </div>
@@ -1546,7 +985,6 @@ export default function StudentProfilePage() {
                 </div>
               )}
 
-              {/* Transaction history */}
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">Transaction History</h3>
               {tabLoading ? (
                 <div className="flex justify-center py-8"><Loader2 className="animate-spin text-blue-600" size={20} /></div>
@@ -1557,49 +995,17 @@ export default function StudentProfilePage() {
                   {walletTxns.map((t) => (
                     <div key={t.id} className="flex items-center justify-between py-3 border-b border-gray-50 dark:border-gray-800 last:border-0">
                       <div>
-                        <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{t.description || t.type}</p>
-                        <p className="text-xs text-gray-400">{new Date(t.created_at).toLocaleString()} · {t.source}</p>
+                        <p className="text-sm font-medium text-gray-700 dark:text-gray-200 capitalize">{t.description || t.type}</p>
+                        <p className="text-xs text-gray-400">{new Date(t.created_at).toLocaleString()}</p>
                       </div>
                       <div className="text-right">
-                        <p className={`text-sm font-bold ${t.type === "DEDUCTION" ? "text-red-500" : "text-green-600"}`}>
-                          {t.type === "DEDUCTION" ? "−" : "+"}{t.amount.toLocaleString()} RWF
+                        <p className={`text-sm font-bold ${t.type === "purchase" ? "text-red-500" : "text-green-600"}`}>
+                          {t.type === "purchase" ? "−" : "+"}{t.amount.toLocaleString()} RWF
                         </p>
-                        <p className="text-xs text-gray-400">Balance: {t.balance_after.toLocaleString()}</p>
                       </div>
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-          )}
-
-          {/* REPORTS */}
-          {tab === "reports" && (
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="font-semibold text-gray-700 dark:text-gray-200">Academic Reports</h3>
-                  <p className="text-xs text-gray-400 mt-0.5">Click a report to expand subject grades</p>
-                </div>
-                <button onClick={() => setModal("report")} className="flex items-center gap-1.5 text-sm text-blue-600 border border-blue-500 rounded-xl px-3 py-1.5 hover:bg-blue-50 transition">
-                  <Plus size={14} /> New Report
-                </button>
-              </div>
-              {profile.reports.length === 0 ? (
-                <div className="text-center py-10">
-                  <BookOpen size={36} className="text-gray-200 mx-auto mb-3" />
-                  <p className="text-gray-500 mb-3">No academic reports yet</p>
-                  <button onClick={() => setModal("report")} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition">Create First Report</button>
-                </div>
-              ) : (
-                profile.reports.map((r) => (
-                  <ReportCard
-                    key={r.id}
-                    report={r}
-                    onPublish={() => publishReport(r.id)}
-                    onDownload={() => downloadReport(r.id)}
-                  />
-                ))
               )}
             </div>
           )}
@@ -1661,13 +1067,8 @@ export default function StudentProfilePage() {
                       </div>
                     </div>
                     <div className="w-full h-2.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden mb-2">
-                      <div
-                        className="h-full rounded-full transition-all"
-                        style={{
-                          width: `${marksPct}%`,
-                          background: currentMarks >= 30 ? "#16a34a" : currentMarks >= 20 ? "#d97706" : "#dc2626"
-                        }}
-                      />
+                      <div className="h-full rounded-full transition-all"
+                        style={{ width: `${marksPct}%`, background: currentMarks >= 30 ? "#16a34a" : currentMarks >= 20 ? "#d97706" : "#dc2626" }} />
                     </div>
                     <div className="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400 font-medium">
                       <span>{discList.length} infraction{discList.length !== 1 ? "s" : ""} on record</span>
@@ -1716,25 +1117,30 @@ export default function StudentProfilePage() {
           {tab === "fees" && (
             <div>
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-gray-700 dark:text-gray-200">Fee Payments</h3>
+                <h3 className="font-semibold text-gray-700 dark:text-gray-200">Fee Invoices</h3>
                 <button onClick={() => setModal("fee")} className="flex items-center gap-1.5 text-sm text-blue-600 border border-blue-500 rounded-xl px-3 py-1.5 hover:bg-blue-50 transition">
-                  <Plus size={14} /> Collect Fee
+                  <Plus size={14} /> Pay Invoice
                 </button>
               </div>
               {tabLoading ? (
                 <div className="flex justify-center py-8"><Loader2 className="animate-spin text-blue-600" size={20} /></div>
               ) : feeList.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-10">No fee records</p>
+                <p className="text-sm text-gray-400 text-center py-10">No fee invoices</p>
               ) : (
                 feeList.map((f) => (
                   <div key={f.id} className="flex items-center justify-between py-3 border-b border-gray-50 dark:border-gray-800 last:border-0">
                     <div>
-                      <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{f.payment_type} · {f.term} {f.academic_year}</p>
-                      <p className="text-xs text-gray-400">{f.payment_method} · {new Date(f.created_at).toLocaleDateString()}</p>
+                      <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{f.title}</p>
+                      <p className="text-xs text-gray-400">
+                        {f.due_date ? `Due: ${new Date(f.due_date).toLocaleDateString("en-GB")} · ` : ""}
+                        {new Date(f.created_at).toLocaleDateString()}
+                      </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-bold text-gray-700 dark:text-gray-200">{f.amount.toLocaleString()} RWF</p>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${f.status === "COMPLETED" ? "bg-green-50 text-green-600" : f.status === "PENDING" ? "bg-yellow-50 text-yellow-600" : "bg-red-50 text-red-500"}`}>{f.status}</span>
+                      <p className="text-sm font-bold text-gray-700 dark:text-gray-200">{f.total_amount.toLocaleString()} RWF</p>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${f.status === "paid" ? "bg-green-50 text-green-600" : f.status === "pending" || f.status === "partial" ? "bg-yellow-50 text-yellow-600" : "bg-red-50 text-red-500"}`}>
+                        {f.status}
+                      </span>
                     </div>
                   </div>
                 ))
@@ -1753,19 +1159,23 @@ export default function StudentProfilePage() {
               ) : (
                 <div className="space-y-0">
                   {canteenList.map((t) => {
-                    const items = t.items_purchased as Array<{ name: string; price: number; quantity: number }>;
+                    const items = (t.items as Array<{ name: string; price: number; quantity: number }>) ?? [];
                     return (
                       <div key={t.id} className="py-3 border-b border-gray-50 dark:border-gray-800 last:border-0">
                         <div className="flex items-start justify-between">
                           <div>
                             <p className="text-sm font-medium text-gray-700 dark:text-gray-200">
-                              {items.map((i) => `${i.name}${i.quantity > 1 ? ` ×${i.quantity}` : ""}`).join(", ")}
+                              {items.length > 0
+                                ? items.map((i) => `${i.name}${i.quantity > 1 ? ` ×${i.quantity}` : ""}`).join(", ")
+                                : "Canteen purchase"}
                             </p>
-                            <p className="text-xs text-gray-400 mt-0.5">{new Date(t.transaction_time).toLocaleString()}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">{new Date(t.created_at).toLocaleString()}</p>
                           </div>
                           <div className="text-right">
                             <p className="text-sm font-bold text-red-500">−{t.total_amount.toLocaleString()} RWF</p>
-                            <p className="text-xs text-gray-400">Balance: {t.wallet_balance_after.toLocaleString()}</p>
+                            {t.wallet_balance_after !== null && (
+                              <p className="text-xs text-gray-400">Balance: {t.wallet_balance_after.toLocaleString()}</p>
+                            )}
                           </div>
                         </div>
                         {items.length > 1 && (
@@ -1784,40 +1194,13 @@ export default function StudentProfilePage() {
               )}
             </div>
           )}
-          {/* CONSENT RECORDS */}
+
+          {/* CONSENT */}
           {tab === "consent" && (
-            <div>
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="font-semibold text-gray-700 dark:text-gray-200">Guardian Consent Registry</h3>
-                {(isManagementRole(role) || role === "PARENT") && (
-                  <button onClick={() => setShowRecordConsentModal(true)} className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded-xl font-medium transition flex items-center gap-1">
-                    <Plus size={12} /> Record Consent
-                  </button>
-                )}
-              </div>
-              {tabLoading ? (
-                <div className="flex justify-center py-8"><Loader2 className="animate-spin text-blue-600" size={20} /></div>
-              ) : consentRecords.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-10">No consent records logged for this student.</p>
-              ) : (
-                <div className="space-y-3">
-                  {consentRecords.map((r) => (
-                    <div key={r.id} className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl flex justify-between items-start">
-                      <div className="space-y-1">
-                        <span className="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">{r.consent_type}</span>
-                        <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 mt-1.5">Version: {r.version}</p>
-                        <p className="text-xs text-gray-400">Granted by guardian: {r.guardian?.first_name} {r.guardian?.last_name} ({r.guardian?.email})</p>
-                        <p className="text-xs text-gray-400">Granted at: {new Date(r.granted_at).toLocaleString()}</p>
-                      </div>
-                      {r.document_url && (
-                        <a href={r.document_url} target="_blank" rel="noreferrer" className="text-xs text-blue-500 font-semibold hover:underline">
-                          View Signed Doc
-                        </a>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+            <div className="text-center py-10">
+              <CheckCircle size={32} className="text-gray-200 mx-auto mb-3" />
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Consent records are managed by school administrators.</p>
+              <p className="text-xs text-gray-400 mt-1">Guardian consent collection is available through the admin portal.</p>
             </div>
           )}
         </div>

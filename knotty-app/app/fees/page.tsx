@@ -7,12 +7,26 @@ import {
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import VirtualCardTap from "@/components/VirtualCardTap";
-import { cards, fees, CardScanResult, Invoice, FeeStructure, RefundRequest } from "@/lib/api";
+import { supabaseCanteenService, supabaseFeesService, FeeStructureRow, FeeInvoiceRow } from "@/lib/supabase/services";
+import { getSafeBrowserClient } from "@/lib/supabase/client";
 import { useNFC } from "@/hooks/useNFC";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
 
-type ScannedStudent = CardScanResult["student"];
+type FeeStructure = FeeStructureRow;
+type Invoice = FeeInvoiceRow & {
+  status: string;
+  lines?: Array<{ description?: string | null }>;
+  student?: {
+    user?: { first_name?: string; last_name?: string };
+    class?: { name?: string } | null;
+  };
+};
+type ScannedStudent = { id: string; name: string; class: string; student_code: string; photo: string | null };
+type RefundRequest = {
+  id: string; student_id: string; amount: number; reason: string; created_at: string; status: string;
+  wallet_transaction?: { amount?: number; student?: { user?: { first_name?: string; last_name?: string } } };
+};
 
 const STATUS_STYLE: Record<string, { bg: string; text: string; icon: React.ReactNode }> = {
   PAID:    { bg: "#DCFCE7", text: "#166534", icon: <CheckCircle size={12} /> },
@@ -32,11 +46,17 @@ function PayModal({ invoice, onClose, onSuccess }: {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
+  const { user } = useAuth();
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!user?.school_id) { toast("No school selected", "error"); return; }
     setLoading(true);
     try {
-      await fees.payInvoice({ invoice_id: invoice.id, amount: parseFloat(form.amount), channel: form.channel, phone: form.channel === "MOMO" ? form.phone : undefined });
+      await supabaseFeesService.payInvoice(user.school_id, invoice.id, {
+        amount: parseFloat(form.amount),
+        channel: form.channel,
+        phone: form.channel === "MOMO" ? form.phone : undefined,
+      });
       toast("Payment recorded successfully", "success");
       onSuccess();
       onClose();
@@ -132,18 +152,25 @@ export default function FeesPage() {
   const [genForm, setGenForm]       = useState({ fee_structure_id: "", due_date: "" });
 
   /* ── Card scan ─────────────────────────────────────────────── */
-  async function handleCardScan(cardNum: string, isNFC = false) {
-    if (!cardNum.trim() || processingRef.current) return;
+  async function handleCardScan(cardNum: string, _isNFC = false) {
+    if (!cardNum.trim() || processingRef.current || !user?.school_id) return;
     processingRef.current = true;
     setScanning(true);
     try {
-      const res = isNFC ? await cards.scanNFC(cardNum) : await cards.scan(cardNum.trim());
-      const scanned = res.data.student;
+      const holder = await supabaseCanteenService.lookupCardHolder(user.school_id, cardNum.trim());
+      if (!holder) throw new Error("Card not found");
+      const scanned: ScannedStudent = {
+        id: holder.student_id,
+        name: holder.legal_name,
+        class: holder.class_name,
+        student_code: holder.admission_number,
+        photo: holder.profile_photo_path ?? null,
+      };
       setStudent(scanned);
       setCardInput("");
       setStudentLoading(true);
-      const invRes = await fees.invoices({ studentId: scanned.id });
-      setStudentInvoices(invRes.data);
+      const invoices = await supabaseFeesService.listInvoices(user.school_id, { studentId: holder.student_id });
+      setStudentInvoices(invoices as Invoice[]);
     } catch (err) {
       toast(err instanceof Error ? err.message : "Card not found", "error");
     } finally {
@@ -166,25 +193,24 @@ export default function FeesPage() {
 
   /* ── Load school-wide tab data ─────────────────────────────── */
   const loadTab = useCallback(async () => {
-    if (authLoading) return;
+    if (authLoading || !user?.school_id) return;
     setTabLoading(true);
     try {
       if (activeTab === "overview") {
-        const r = await fees.schoolReport().catch(() => ({ data: null }));
-        if (r?.data) setReport(r.data as typeof report);
+        const r = await supabaseFeesService.getSchoolReport(user.school_id).catch(() => null);
+        if (r) setReport({ total_collected: r.total_collected, pending: r.pending, by_type: r.by_channel.map((c) => ({ payment_type: c.channel, _sum: { amount: c.total }, _count: 0 })) });
       } else if (activeTab === "invoices") {
-        const r = await fees.invoices().catch(() => ({ data: [] }));
-        setAllInvoices(r.data);
+        const rows = await supabaseFeesService.listInvoices(user.school_id).catch(() => []);
+        setAllInvoices(rows as Invoice[]);
       } else if (activeTab === "structures") {
-        const r = await fees.structures().catch(() => ({ data: [] }));
-        setStructures(r.data);
+        const rows = await supabaseFeesService.listStructures(user.school_id).catch(() => []);
+        setStructures(rows);
       } else if (activeTab === "refunds") {
-        const r = await fees.refunds().catch(() => ({ data: [] }));
-        setRefunds(r.data);
+        setRefunds([]);
       }
     } catch { /* ignore */ }
     finally { setTabLoading(false); }
-  }, [activeTab, authLoading]);
+  }, [activeTab, authLoading, user?.school_id]);
 
   useEffect(() => { loadTab(); }, [loadTab]);
 
@@ -199,9 +225,9 @@ export default function FeesPage() {
       {payTarget && (
         <PayModal invoice={payTarget} onClose={() => setPayTarget(null)}
           onSuccess={async () => {
-            if (student) {
-              const r = await fees.invoices({ studentId: student.id });
-              setStudentInvoices(r.data);
+            if (student && user?.school_id) {
+              const rows = await supabaseFeesService.listInvoices(user.school_id, { studentId: student.id });
+              setStudentInvoices(rows as Invoice[]);
             }
             if (activeTab === "invoices") loadTab();
           }} />
@@ -214,7 +240,8 @@ export default function FeesPage() {
             <h3 className="font-bold mb-4" style={{ color: "#121212" }}>New Fee Structure</h3>
             <form onSubmit={async (e) => {
               e.preventDefault();
-              await fees.createStructure({ name: structForm.name, amount: parseFloat(structForm.amount), applies_to: structForm.applies_to ? structForm.applies_to.split(",").map(s => s.trim()) : undefined });
+              if (!user?.school_id) return;
+              await supabaseFeesService.createStructure(user.school_id, { name: structForm.name, amount: parseFloat(structForm.amount), applies_to: structForm.applies_to ? structForm.applies_to.split(",").map((s) => s.trim()) : [] });
               setShowStructureModal(false); setStructForm({ name: "", applies_to: "", amount: "" }); loadTab();
             }} className="space-y-3">
               <div>
@@ -248,7 +275,8 @@ export default function FeesPage() {
             <h3 className="font-bold mb-4" style={{ color: "#121212" }}>Generate Bulk Invoices</h3>
             <form onSubmit={async (e) => {
               e.preventDefault();
-              const r = await fees.generateInvoices(genForm);
+              if (!user?.school_id) return;
+              const r = await supabaseFeesService.generateInvoices(user.school_id, genForm);
               toast(`${r.count} invoices generated`, "success");
               setShowGenModal(false); loadTab();
             }} className="space-y-3">
@@ -408,7 +436,7 @@ export default function FeesPage() {
                                   </span>
                                   {inv.lines?.[0]?.description && <span className="text-xs text-gray-500">{inv.lines[0].description}</span>}
                                 </div>
-                                <p className="text-xs text-gray-400">Due: {new Date(inv.due_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</p>
+                                <p className="text-xs text-gray-400">Due: {inv.due_date ? new Date(inv.due_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</p>
                               </div>
                               <div className="text-right flex-shrink-0">
                                 <p className="text-sm font-bold" style={{ color: "#121212" }}>{invTotal.toLocaleString()} RWF</p>
@@ -553,7 +581,7 @@ export default function FeesPage() {
                                 {s.applies_to?.length ? ` · ${s.applies_to.join(", ")}` : " · All students"}
                               </p>
                             </div>
-                            <button onClick={async () => { if (confirm("Delete?")) { await fees.deleteStructure(s.id); loadTab(); } }}
+                            <button onClick={async () => { if (confirm("Delete?")) { const client = getSafeBrowserClient(); if (client && user?.school_id) { await client.from("fee_structures").update({ is_active: false }).eq("id", s.id).eq("school_id", user.school_id); } loadTab(); } }}
                               className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 flex-shrink-0"><Trash2 size={13} /></button>
                           </div>
                         ))}
@@ -570,17 +598,7 @@ export default function FeesPage() {
                                 <p className="text-xs text-gray-500">{r.reason}</p>
                                 <p className="text-xs font-bold mt-0.5" style={{ color: "#121212" }}>{r.wallet_transaction?.amount?.toLocaleString()} RWF</p>
                               </div>
-                              {r.status === "PENDING" && (
-                                <div className="flex gap-1 flex-shrink-0">
-                                  <button onClick={async () => { await fees.resolveRefund(r.id, "APPROVED"); toast("Refund approved", "success"); loadTab(); }}
-                                    className="px-2 py-1 rounded-lg text-xs font-bold text-white" style={{ background: "#16A34A" }}>Approve</button>
-                                  <button onClick={async () => { await fees.resolveRefund(r.id, "REJECTED"); toast("Refund rejected", "error"); loadTab(); }}
-                                    className="px-2 py-1 rounded-lg text-xs font-bold text-white" style={{ background: "#DC2626" }}>Reject</button>
-                                </div>
-                              )}
-                              {r.status !== "PENDING" && (
-                                <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={r.status === "APPROVED" ? { background: "#DCFCE7", color: "#166534" } : { background: "#FEE2E2", color: "#991B1B" }}>{r.status}</span>
-                              )}
+                              <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={r.status === "APPROVED" ? { background: "#DCFCE7", color: "#166534" } : r.status === "PENDING" ? { background: "#FEF9C3", color: "#854D0E" } : { background: "#FEE2E2", color: "#991B1B" }}>{r.status}</span>
                             </div>
                           </div>
                         ))}

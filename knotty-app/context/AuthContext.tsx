@@ -1,10 +1,30 @@
 "use client";
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
-import { auth, multiSchool, LoginResponse, SchoolItem } from "@/lib/api";
-import { DEMO_SCHOOL_ID } from "@/lib/demo";
 import { isSupabaseConfigured, getSafeBrowserClient } from "@/lib/supabase/client";
 
-type User = LoginResponse["user"];
+type User = {
+  id: string;
+  role: string;
+  school_id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  profile_photo: string | null;
+};
+
+type SchoolItem = {
+  id: string;
+  name: string;
+  code: string;
+  email: string;
+  phone: string | null;
+  address: string | null;
+  subscription_plan: string;
+  student_count: number;
+  worker_count: number;
+  class_count: number;
+  canteen_products_count: number;
+};
 
 interface AuthContextValue {
   user: User | null;
@@ -20,14 +40,28 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function buildSchoolItem(row: { id: string; name: string; code: string; email: string; phone: string | null; address: string | null }): SchoolItem {
+  return {
+    id: row.id,
+    name: row.name,
+    code: row.code ?? "",
+    email: row.email ?? "",
+    phone: row.phone ?? null,
+    address: row.address ?? null,
+    subscription_plan: "PREMIUM",
+    student_count: 0,
+    worker_count: 0,
+    class_count: 0,
+    canteen_products_count: 0,
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
     if (typeof window === "undefined") return null;
     try {
-      const savedDemo = localStorage.getItem("ishuri_demo_user") || localStorage.getItem("knotty_demo_user");
-      if (savedDemo) return JSON.parse(savedDemo);
-      const savedUser = localStorage.getItem("ishuri_user");
-      if (savedUser) return JSON.parse(savedUser);
+      const saved = localStorage.getItem("ishuri_user");
+      if (saved) return JSON.parse(saved);
     } catch {}
     return null;
   });
@@ -35,8 +69,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [activeSchool, setActiveSchool] = useState<SchoolItem | null>(() => {
     if (typeof window === "undefined") return null;
     try {
-      const savedSchool = localStorage.getItem("ishuri_active_school");
-      if (savedSchool) return JSON.parse(savedSchool);
+      const saved = localStorage.getItem("ishuri_active_school");
+      if (saved) return JSON.parse(saved);
     } catch {}
     return null;
   });
@@ -45,42 +79,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const [loading, setLoading] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
-    const token = localStorage.getItem("ishuri_token") || localStorage.getItem("knotty_token");
-    const isDemo = localStorage.getItem("ishuri_demo") === "true" || localStorage.getItem("knotty_demo") === "true";
-    return !!(token || isDemo);
+    return !!localStorage.getItem("ishuri_token");
   });
 
-  const fetchSchools = useCallback(async (currentSchoolId?: string) => {
+  const fetchSchools = useCallback(async (targetSchoolId?: string) => {
+    const schoolId = targetSchoolId || user?.school_id;
+    if (!schoolId) return;
+    if (!isSupabaseConfigured()) return;
+    const client = getSafeBrowserClient();
+    if (!client) return;
+
     try {
-      const res = await multiSchool.list();
-      if (res.data && res.data.length > 0) {
-        setSchoolsList(res.data);
-        const targetId = currentSchoolId || user?.school_id;
-        const matched = res.data.find((s) => s.id === targetId) || res.data[0];
-        setActiveSchool(matched);
-        try {
-          localStorage.setItem("ishuri_active_school", JSON.stringify(matched));
-        } catch {}
+      const { data } = await client
+        .from("schools")
+        .select("id, name, code, email, phone, address")
+        .eq("id", schoolId)
+        .maybeSingle();
+
+      if (data) {
+        const school = buildSchoolItem(data);
+        setSchoolsList([school]);
+        setActiveSchool(school);
+        try { localStorage.setItem("ishuri_active_school", JSON.stringify(school)); } catch {}
       }
-    } catch (_) {
-      const fallbackSchool: SchoolItem = {
-        id: currentSchoolId || user?.school_id || DEMO_SCHOOL_ID,
-        name: "IshuriHUB Model School",
-        code: "KMS",
-        email: "admin@ishurihub.rw",
-        phone: "+250788000001",
-        address: "KG 12 Ave, Kigali, Rwanda",
-        subscription_plan: "PREMIUM",
-        student_count: 53,
-        worker_count: 14,
-        class_count: 12,
-        canteen_products_count: 6,
-      };
-      setSchoolsList([fallbackSchool]);
-      setActiveSchool(fallbackSchool);
-      try {
-        localStorage.setItem("ishuri_active_school", JSON.stringify(fallbackSchool));
-      } catch {}
+    } catch (err) {
+      console.error("Failed to fetch school data:", err);
     }
   }, [user?.school_id]);
 
@@ -102,18 +125,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         client.auth.getSession().then(({ data: { session } }) => {
           if (session?.access_token) {
             localStorage.setItem("ishuri_token", session.access_token);
-            if (session.refresh_token) {
-              localStorage.setItem("ishuri_refresh", session.refresh_token);
-            }
+            if (session.refresh_token) localStorage.setItem("ishuri_refresh", session.refresh_token);
           }
         }).catch(() => {});
 
         const { data: { subscription } } = client.auth.onAuthStateChange(async (event, session) => {
           if ((event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session) {
             localStorage.setItem("ishuri_token", session.access_token);
-            if (session.refresh_token) {
-              localStorage.setItem("ishuri_refresh", session.refresh_token);
-            }
+            if (session.refresh_token) localStorage.setItem("ishuri_refresh", session.refresh_token);
 
             try {
               const { data: personData } = await client
@@ -122,10 +141,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 .eq("auth_user_id", session.user.id)
                 .maybeSingle();
 
-              let role = "STUDENT";
-              let targetSchoolId = DEMO_SCHOOL_ID;
+              let role = "";
+              let targetSchoolId = "";
 
-              if (personData) {
+              if (personData?.status === "active") {
                 const { data: memberData } = await client
                   .from("school_memberships")
                   .select("id, school_id, status")
@@ -137,23 +156,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   targetSchoolId = memberData.school_id;
                   const { data: roleData } = await client
                     .from("school_membership_roles")
-                    .select("role_key")
+                    .select("role_key, status")
                     .eq("membership_id", memberData.id)
+                    .eq("status", "active")
                     .limit(1)
                     .maybeSingle();
 
-                  if (roleData?.role_key) {
-                    role = roleData.role_key;
-                  }
+                  if (roleData?.role_key) role = roleData.role_key;
                 }
               }
 
-              const userMeta = (session.user.user_metadata || {}) as Record<string, any>;
-              const fullName = userMeta.full_name || userMeta.name || "";
+              if (!role || !targetSchoolId) {
+                localStorage.removeItem("ishuri_user");
+                setUser(null);
+                setLoading(false);
+                window.setTimeout(() => { void client.auth.signOut(); }, 0);
+                return;
+              }
+
+              const userMeta = (session.user.user_metadata || {}) as Record<string, unknown>;
+              const fullName = (userMeta.full_name as string) || (userMeta.name as string) || "";
               const nameParts = fullName.split(" ");
-              const firstName = userMeta.first_name || nameParts[0] || session.user.email?.split("@")[0] || "User";
-              const lastName = userMeta.last_name || nameParts.slice(1).join(" ") || "";
-              const profilePhoto = userMeta.avatar_url || userMeta.picture || null;
+              const firstName = (userMeta.first_name as string) || nameParts[0] || session.user.email?.split("@")[0] || "User";
+              const lastName = (userMeta.last_name as string) || nameParts.slice(1).join(" ") || "";
+              const profilePhoto = (userMeta.avatar_url as string) || (userMeta.picture as string) || null;
 
               const loggedUser: User = {
                 id: session.user.id,
@@ -180,153 +206,91 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    const token = localStorage.getItem("ishuri_token") || localStorage.getItem("knotty_token");
-    const refreshToken = localStorage.getItem("ishuri_refresh") || localStorage.getItem("knotty_refresh");
-    if (!token && !refreshToken) { setLoading(false); return; }
+    setLoading(false);
 
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("timeout")), 3000)
-    );
-
-    Promise.race([auth.me(), timeout])
-      .then((res) => {
-        const u = (res as Awaited<ReturnType<typeof auth.me>>).user;
-        setUser(u);
-        try {
-          localStorage.setItem("ishuri_user", JSON.stringify(u));
-        } catch {}
-        fetchSchools(u.school_id);
-      })
-      .catch((err) => {
-        const msg = err instanceof Error ? err.message : "";
-        if (msg.includes("401") || msg.includes("Session expired") || msg.includes("unauthorized") || msg.includes("No token")) {
-          localStorage.removeItem("ishuri_token");
-          localStorage.removeItem("ishuri_refresh");
-          localStorage.removeItem("ishuri_user");
-          localStorage.removeItem("knotty_token");
-          localStorage.removeItem("knotty_refresh");
-          setUser(null);
-        }
-      })
-      .finally(() => setLoading(false));
-
-    return () => {
-      authSubscription?.unsubscribe();
-    };
+    return () => { authSubscription?.unsubscribe(); };
   }, [fetchSchools]);
 
   const login = useCallback(async (email: string, password: string) => {
     const normEmail = email.trim().toLowerCase();
 
-    // 1. If Supabase is configured, try Supabase Auth first
-    if (isSupabaseConfigured()) {
-      const client = getSafeBrowserClient();
-      if (client) {
-        try {
-          const { data, error: supaErr } = await client.auth.signInWithPassword({
-            email: normEmail,
-            password,
-          });
+    if (!isSupabaseConfigured()) throw new Error("Authentication is not configured. Please contact support.");
+    const client = getSafeBrowserClient();
+    if (!client) throw new Error("Failed to initialize auth client.");
 
-          if (!supaErr && data?.user) {
-            // Attempt to resolve person and membership in the database
-            const { data: personData } = await client
-              .from("persons")
-              .select("id, status")
-              .eq("auth_user_id", data.user.id)
-              .maybeSingle();
+    const { data, error: supaErr } = await client.auth.signInWithPassword({ email: normEmail, password });
+    if (supaErr || !data?.user) throw new Error("Invalid email or password. Please check your credentials.");
 
-            if (personData) {
-              const { data: memberData } = await client
-                .from("school_memberships")
-                .select("id, school_id, status")
-                .eq("person_id", personData.id)
-                .eq("status", "active")
-                .maybeSingle();
+    const { data: personData } = await client
+      .from("persons")
+      .select("id, status")
+      .eq("auth_user_id", data.user.id)
+      .maybeSingle();
 
-              const { data: roleData } = memberData
-                ? await client
-                    .from("school_membership_roles")
-                    .select("role_key")
-                    .eq("membership_id", memberData.id)
-                    .limit(1)
-                    .maybeSingle()
-                : { data: null };
+    let role = "";
+    let targetSchoolId = "";
 
-              const role = roleData?.role_key || "ADMIN";
-              const targetSchoolId = memberData?.school_id || DEMO_SCHOOL_ID;
-              const userMeta = (data.user.user_metadata || {}) as Record<string, any>;
+    if (personData?.status === "active") {
+      const { data: memberData } = await client
+        .from("school_memberships")
+        .select("id, school_id, status")
+        .eq("person_id", personData.id)
+        .eq("status", "active")
+        .maybeSingle();
 
-              const loggedUser: User = {
-                id: data.user.id,
-                role,
-                school_id: targetSchoolId,
-                first_name: userMeta.first_name || data.user.email?.split("@")[0] || "User",
-                last_name: userMeta.last_name || "",
-                email: data.user.email || normEmail,
-                profile_photo: null,
-              };
-
-              localStorage.setItem("ishuri_user", JSON.stringify(loggedUser));
-              if (data.session?.access_token) {
-                localStorage.setItem("ishuri_token", data.session.access_token);
-              }
-              if (data.session?.refresh_token) {
-                localStorage.setItem("ishuri_refresh", data.session.refresh_token);
-              }
-              setUser(loggedUser);
-              fetchSchools(targetSchoolId);
-              return;
-            }
-          }
-        } catch (e) {
-          console.warn("Supabase Auth sign-in attempted, checking backend:", e);
-        }
+      if (memberData) {
+        targetSchoolId = memberData.school_id;
+        const { data: roleData } = await client
+          .from("school_membership_roles")
+          .select("role_key, status")
+          .eq("membership_id", memberData.id)
+          .eq("status", "active")
+          .limit(1)
+          .maybeSingle();
+        if (roleData?.role_key) role = roleData.role_key;
       }
     }
 
-    // 2. Fall back to Express API backend login
-    try {
-      const res = await auth.login(normEmail, password);
-      localStorage.setItem("ishuri_token", res.accessToken);
-      localStorage.setItem("ishuri_refresh", res.refreshToken);
-      localStorage.setItem("ishuri_user", JSON.stringify(res.user));
-      setUser(res.user);
-      fetchSchools(res.user.school_id);
-    } catch (err) {
-      console.error("Authentication failed:", err);
-      throw new Error("Invalid email or password. Please check your credentials.");
+    if (!role || !targetSchoolId) {
+      await client.auth.signOut();
+      throw new Error("Your account does not have an active school role. Contact your school administrator.");
     }
+
+    const userMeta = (data.user.user_metadata || {}) as Record<string, unknown>;
+    const loggedUser: User = {
+      id: data.user.id,
+      role,
+      school_id: targetSchoolId,
+      first_name: (userMeta.first_name as string) || data.user.email?.split("@")[0] || "User",
+      last_name: (userMeta.last_name as string) || "",
+      email: data.user.email || normEmail,
+      profile_photo: null,
+    };
+
+    localStorage.setItem("ishuri_user", JSON.stringify(loggedUser));
+    if (data.session?.access_token) localStorage.setItem("ishuri_token", data.session.access_token);
+    if (data.session?.refresh_token) localStorage.setItem("ishuri_refresh", data.session.refresh_token);
+    setUser(loggedUser);
+    fetchSchools(targetSchoolId);
   }, [fetchSchools]);
 
   const loginWithGoogle = useCallback(async () => {
-    if (!isSupabaseConfigured()) {
-      throw new Error("Supabase is not configured. Google Sign-In requires active Supabase credentials.");
-    }
+    if (!isSupabaseConfigured()) throw new Error("Supabase is not configured. Google Sign-In requires active Supabase credentials.");
     const client = getSafeBrowserClient();
-    if (!client) {
-      throw new Error("Failed to initialize Supabase client.");
-    }
+    if (!client) throw new Error("Failed to initialize Supabase client.");
 
-    const redirectTo = typeof window !== "undefined"
-      ? `${window.location.origin}/auth/callback`
-      : undefined;
+    const redirectTo = typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : undefined;
 
     const { data, error } = await client.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo,
         skipBrowserRedirect: true,
-        queryParams: {
-          access_type: "offline",
-          prompt: "consent",
-        },
+        queryParams: { access_type: "offline", prompt: "consent" },
       },
     });
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
     if (data?.url) {
       try {
@@ -338,73 +302,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
       } catch (checkErr) {
-        if (checkErr instanceof Error && checkErr.message.includes("Google Sign-In is not enabled")) {
-          throw checkErr;
-        }
+        if (checkErr instanceof Error && checkErr.message.includes("Google Sign-In is not enabled")) throw checkErr;
       }
-
-      if (typeof window !== "undefined") {
-        window.location.href = data.url;
-      }
+      if (typeof window !== "undefined") window.location.href = data.url;
     }
   }, []);
 
   const switchSchool = useCallback(async (schoolId: string) => {
-    try {
-      const res = await multiSchool.switch(schoolId);
-      localStorage.setItem("ishuri_token", res.accessToken);
-      localStorage.setItem("ishuri_refresh", res.refreshToken);
-      const updatedUser = { ...res.user, profile_photo: res.user.profile_photo ?? null };
-      localStorage.setItem("ishuri_user", JSON.stringify(updatedUser));
+    if (!isSupabaseConfigured()) return;
+    const client = getSafeBrowserClient();
+    if (!client || !user) return;
+
+    const { data } = await client
+      .from("schools")
+      .select("id, name, code, email, phone, address")
+      .eq("id", schoolId)
+      .maybeSingle();
+
+    if (data) {
+      const school = buildSchoolItem(data);
+      const updatedUser = { ...user, school_id: schoolId };
       setUser(updatedUser);
-      setActiveSchool(res.school);
-      localStorage.setItem("ishuri_active_school", JSON.stringify(res.school));
-      // Reload page to re-fetch all datasets under new school
+      setActiveSchool(school);
+      setSchoolsList([school]);
+      try {
+        localStorage.setItem("ishuri_user", JSON.stringify(updatedUser));
+        localStorage.setItem("ishuri_active_school", JSON.stringify(school));
+      } catch {}
       window.location.reload();
-    } catch (err) {
-      // Local fallback switch if in demo mode or offline
-      const matched = schoolsList.find((s) => s.id === schoolId);
-      if (matched && user) {
-        const updatedUser = { ...user, school_id: schoolId };
-        setUser(updatedUser);
-        setActiveSchool(matched);
-        localStorage.setItem("ishuri_demo_user", JSON.stringify(updatedUser));
-        window.location.reload();
-      } else {
-        throw err;
-      }
     }
-  }, [schoolsList, user]);
+  }, [user]);
 
   const logout = useCallback(() => {
-    if (isSupabaseConfigured()) {
-      getSafeBrowserClient()?.auth.signOut().catch(() => {});
-    }
-    auth.logout().catch(() => {});
-    localStorage.removeItem("ishuri_token");
-    localStorage.removeItem("ishuri_refresh");
-    localStorage.removeItem("ishuri_user");
-    localStorage.removeItem("ishuri_active_school");
-    localStorage.removeItem("ishuri_demo");
-    localStorage.removeItem("ishuri_demo_user");
-    localStorage.removeItem("knotty_token");
-    localStorage.removeItem("knotty_refresh");
-    localStorage.removeItem("knotty_demo");
-    localStorage.removeItem("knotty_demo_user");
+    if (isSupabaseConfigured()) getSafeBrowserClient()?.auth.signOut().catch(() => {});
+    ["ishuri_token", "ishuri_refresh", "ishuri_user", "ishuri_active_school", "ishuri_demo",
+     "ishuri_demo_user", "knotty_token", "knotty_refresh", "knotty_demo", "knotty_demo_user"]
+      .forEach(k => { try { localStorage.removeItem(k); } catch {} });
     setUser(null);
     setActiveSchool(null);
   }, []);
 
   return (
     <AuthContext.Provider value={{
-      user,
-      activeSchool,
-      schoolsList,
-      loading,
-      login,
-      loginWithGoogle,
-      logout,
-      switchSchool,
+      user, activeSchool, schoolsList, loading,
+      login, loginWithGoogle, logout, switchSchool,
       refreshSchools: fetchSchools,
     }}>
       {children}

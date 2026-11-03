@@ -1,13 +1,14 @@
 "use client";
 import { useEffect, useState, useRef, useCallback } from "react";
 import {
-  Wifi, WifiOff, Loader2, Heart, Plus, X, CreditCard,
-  AlertCircle, CheckCircle, Clock, Activity, Pill, Calendar,
-  ChevronLeft, ChevronRight, Search,
+  WifiOff, Loader2, Heart, Plus, X, CreditCard,
+  AlertCircle, CheckCircle, Clock, Activity, Pill,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import VirtualCardTap from "@/components/VirtualCardTap";
-import { cards, health, HealthRecord, ClinicVisit, MedicalProfile, CardScanResult } from "@/lib/api";
+import type { HealthRecord, ClinicVisit, MedicalProfile } from "@/lib/api";
+import { supabaseHealthService, supabaseLibraryService } from "@/lib/supabase/services";
 import { useNFC } from "@/hooks/useNFC";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
@@ -22,11 +23,21 @@ const TYPE_LABEL: Record<string, string> = {
   CHECKUP: "Check-up", ALLERGY: "Allergy",
 };
 
-type ScannedStudent = CardScanResult["student"];
+type ScannedStudent = {
+  id: string;
+  name: string;
+  class: string;
+  card_number: string | null;
+  student_code: string;
+  photo: string | null;
+};
 
 /* ── Log Incident Modal ────────────────────────────────────────── */
-function IncidentModal({ student, onClose, onSuccess }: {
-  student: ScannedStudent; onClose: () => void; onSuccess: (r: HealthRecord) => void;
+function IncidentModal({ student, schoolId, onClose, onSuccess }: {
+  student: ScannedStudent;
+  schoolId: string;
+  onClose: () => void;
+  onSuccess: (r: HealthRecord) => void;
 }) {
   const [form, setForm] = useState({ type: "ILLNESS", severity: "LOW", title: "", description: "", treatment_given: "", follow_up_required: false });
   const [loading, setLoading] = useState(false);
@@ -36,9 +47,29 @@ function IncidentModal({ student, onClose, onSuccess }: {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await health.create({ student_id: student.id, ...form });
+      const id = await supabaseHealthService.create(schoolId, {
+        student_id: student.id,
+        type: form.type,
+        severity: form.severity as "LOW" | "MEDIUM" | "HIGH",
+        title: form.title,
+        description: form.description || undefined,
+        treatment_given: form.treatment_given || undefined,
+        follow_up_required: form.follow_up_required,
+      });
+      const now = new Date().toISOString();
+      const rec: HealthRecord = {
+        id,
+        type: form.type,
+        severity: form.severity,
+        title: form.title,
+        description: form.description || null,
+        treatment_given: form.treatment_given || null,
+        follow_up_required: form.follow_up_required,
+        resolved_at: null,
+        recorded_at: now,
+      };
       toast("Health incident logged", "success");
-      onSuccess(res.data);
+      onSuccess(rec);
       onClose();
     } catch (err) { toast(err instanceof Error ? err.message : "Error", "error"); }
     finally { setLoading(false); }
@@ -116,8 +147,11 @@ function IncidentModal({ student, onClose, onSuccess }: {
 }
 
 /* ── Log Clinic Visit Modal ────────────────────────────────────── */
-function VisitModal({ student, onClose, onSuccess }: {
-  student: ScannedStudent; onClose: () => void; onSuccess: (v: ClinicVisit) => void;
+function VisitModal({ student, schoolId, onClose, onSuccess }: {
+  student: ScannedStudent;
+  schoolId: string;
+  onClose: () => void;
+  onSuccess: (v: ClinicVisit) => void;
 }) {
   const [form, setForm] = useState({ presenting_complaint: "", treatment_notes: "", follow_up_required: false });
   const [meds, setMeds] = useState<Array<{ medication_name: string; dosage: string }>>([]);
@@ -135,9 +169,24 @@ function VisitModal({ student, onClose, onSuccess }: {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await health.createVisit(student.id, { ...form, medications: meds });
+      const id = await supabaseHealthService.createVisit(schoolId, student.id, {
+        presenting_complaint: form.presenting_complaint,
+        treatment_notes: form.treatment_notes || undefined,
+        follow_up_required: form.follow_up_required,
+        medications: meds,
+      });
+      const visit: ClinicVisit = {
+        id,
+        student_id: student.id,
+        visit_datetime: new Date().toISOString(),
+        presenting_complaint: form.presenting_complaint,
+        treatment_notes: form.treatment_notes || null,
+        recorded_by_staff_id: "",
+        follow_up_required: form.follow_up_required,
+        medications: meds.map((m) => ({ id: "", student_id: student.id, clinic_visit_id: null, administered_at: new Date().toISOString(), ...m })),
+      };
       toast("Clinic visit logged", "success");
-      onSuccess(res.data);
+      onSuccess(visit);
       onClose();
     } catch (err) { toast(err instanceof Error ? err.message : "Error", "error"); }
     finally { setLoading(false); }
@@ -166,7 +215,6 @@ function VisitModal({ student, onClose, onSuccess }: {
               rows={2} placeholder="What treatment was given…"
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none outline-none focus:border-gray-400" />
           </div>
-          {/* Medications */}
           <div className="rounded-2xl p-3 space-y-2" style={{ background: "#F9F9F9" }}>
             <p className="text-xs font-semibold" style={{ color: "#666" }}>MEDICATIONS DISPENSED ({meds.length})</p>
             {meds.map((m, i) => (
@@ -207,16 +255,14 @@ function VisitModal({ student, onClose, onSuccess }: {
 
 /* ── Main Page ─────────────────────────────────────────────────── */
 export default function HealthPage() {
-  const { loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const { startListen, stopListen, listening, isSupported } = useNFC();
 
-  /* ── Scanner ───────────────────────────────────────────────── */
   const [cardInput, setCardInput]   = useState("");
   const [scanning, setScanning]     = useState(false);
   const processingRef               = useRef(false);
 
-  /* ── Scanned student ───────────────────────────────────────── */
   const [student, setStudent]           = useState<ScannedStudent | null>(null);
   const [profile, setProfile]           = useState<MedicalProfile | null>(null);
   const [incidents, setIncidents]       = useState<HealthRecord[]>([]);
@@ -224,39 +270,42 @@ export default function HealthPage() {
   const [studentTab, setStudentTab]     = useState<"incidents" | "visits">("incidents");
   const [studentLoading, setStudentLoading] = useState(false);
 
-  /* ── Modals ────────────────────────────────────────────────── */
   const [showIncidentModal, setShowIncidentModal] = useState(false);
   const [showVisitModal, setShowVisitModal]       = useState(false);
 
-  /* ── School-wide list ──────────────────────────────────────── */
   const [schoolRecords, setSchoolRecords]   = useState<HealthRecord[]>([]);
   const [schoolPage, setSchoolPage]         = useState(1);
   const [schoolTotal, setSchoolTotal]       = useState(0);
   const [schoolLoading, setSchoolLoading]   = useState(true);
   const LIMIT = 20;
 
-  /* ── Card scan handler ─────────────────────────────────────── */
-  async function handleCardScan(cardNum: string, isNFC = false) {
-    if (!cardNum.trim() || processingRef.current) return;
+  async function handleCardScan(cardNum: string, _isNFC = false) {
+    if (!cardNum.trim() || processingRef.current || !user?.school_id) return;
     processingRef.current = true;
     setScanning(true);
     try {
-      const res = isNFC ? await cards.scanNFC(cardNum) : await cards.scan(cardNum.trim());
-      const scanned = res.data.student;
-      setStudent(scanned);
+      const scanned = await supabaseLibraryService.lookupStudent(user.school_id, cardNum.trim());
+      setStudent({
+        id: scanned.id,
+        name: scanned.name,
+        class: scanned.class,
+        card_number: scanned.card_number,
+        student_code: scanned.student_code,
+        photo: scanned.photo,
+      });
       setCardInput("");
       setStudentTab("incidents");
       setStudentLoading(true);
       const [incRes, visitRes, profRes] = await Promise.allSettled([
-        health.studentList(scanned.id),
-        health.studentVisits(scanned.id),
-        health.getProfile(scanned.id),
+        supabaseHealthService.studentList(user.school_id, scanned.id),
+        supabaseHealthService.studentVisits(user.school_id, scanned.id),
+        supabaseHealthService.getProfile(user.school_id, scanned.id),
       ]);
-      if (incRes.status === "fulfilled")   setIncidents(incRes.value.data);
-      if (visitRes.status === "fulfilled") setVisits(visitRes.value.data);
-      if (profRes.status === "fulfilled")  setProfile(profRes.value.data);
+      if (incRes.status === "fulfilled")   setIncidents(incRes.value);
+      if (visitRes.status === "fulfilled") setVisits(visitRes.value);
+      if (profRes.status === "fulfilled")  setProfile(profRes.value);
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Card not found", "error");
+      toast(err instanceof Error ? err.message : "Student not found", "error");
     } finally {
       setScanning(false);
       processingRef.current = false;
@@ -275,31 +324,38 @@ export default function HealthPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, isSupported]);
 
-  /* ── School-wide records ───────────────────────────────────── */
   const loadSchool = useCallback(async () => {
-    if (authLoading) return;
+    if (!user?.school_id) return;
     setSchoolLoading(true);
     try {
-      const res = await health.schoolRecords({ page: schoolPage, limit: LIMIT });
-      setSchoolRecords(res.data);
-      setSchoolTotal((res.pagination as { total: number }).total ?? res.data.length);
+      const res = await supabaseHealthService.schoolRecords(user.school_id, { page: schoolPage, limit: LIMIT });
+      setSchoolRecords(res);
+      setSchoolTotal(res.length === LIMIT ? schoolPage * LIMIT + 1 : (schoolPage - 1) * LIMIT + res.length);
     } catch { /* ignore */ }
     finally { setSchoolLoading(false); }
-  }, [schoolPage, authLoading]);
+  }, [schoolPage, user?.school_id]);
 
-  useEffect(() => { loadSchool(); }, [loadSchool]);
+  useEffect(() => { if (!authLoading) loadSchool(); }, [loadSchool, authLoading]);
 
   const schoolPages = Math.ceil(schoolTotal / LIMIT);
 
   return (
     <DashboardShell>
       {showIncidentModal && student && (
-        <IncidentModal student={student} onClose={() => setShowIncidentModal(false)}
-          onSuccess={(r) => setIncidents((prev) => [r, ...prev])} />
+        <IncidentModal
+          student={student}
+          schoolId={user?.school_id ?? ""}
+          onClose={() => setShowIncidentModal(false)}
+          onSuccess={(r) => setIncidents((prev) => [r, ...prev])}
+        />
       )}
       {showVisitModal && student && (
-        <VisitModal student={student} onClose={() => setShowVisitModal(false)}
-          onSuccess={(v) => setVisits((prev) => [v, ...prev])} />
+        <VisitModal
+          student={student}
+          schoolId={user?.school_id ?? ""}
+          onClose={() => setShowVisitModal(false)}
+          onSuccess={(v) => setVisits((prev) => [v, ...prev])}
+        />
       )}
 
       <div className="h-full flex flex-col overflow-hidden">
@@ -357,7 +413,6 @@ export default function HealthPage() {
                   </div>
                 </div>
 
-                {/* Medical alerts */}
                 {profile && (
                   <div className="space-y-1.5 mb-3">
                     {profile.blood_type && (
@@ -432,9 +487,7 @@ export default function HealthPage() {
             )}
 
             {student ? (
-              /* Student records panel */
               <div className="bg-white rounded-3xl flex-1 overflow-hidden flex flex-col">
-                {/* Tabs */}
                 <div className="flex gap-1 p-3 border-b border-gray-100 flex-shrink-0">
                   {(["incidents", "visits"] as const).map((tab) => (
                     <button key={tab} onClick={() => setStudentTab(tab)}
@@ -518,7 +571,6 @@ export default function HealthPage() {
                 </div>
               </div>
             ) : (
-              /* School-wide incidents */
               <div className="bg-white rounded-3xl flex-1 overflow-hidden flex flex-col">
                 <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0">
                   <p className="text-sm font-bold" style={{ color: "#121212" }}>Recent Incidents</p>
@@ -542,10 +594,9 @@ export default function HealthPage() {
                               <div className="flex-1">
                                 <div className="flex items-center gap-1.5 mb-1">
                                   <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: sev.bg, color: sev.text }}>{r.severity}</span>
-                                  {(r as HealthRecord & { student?: { user: { first_name: string; last_name: string } } }).student && (
+                                  {r.student && (
                                     <span className="text-xs font-semibold" style={{ color: "#121212" }}>
-                                      {(r as HealthRecord & { student?: { user: { first_name: string; last_name: string } } }).student?.user.first_name}{" "}
-                                      {(r as HealthRecord & { student?: { user: { first_name: string; last_name: string } } }).student?.user.last_name}
+                                      {r.student.user.first_name} {r.student.user.last_name}
                                     </span>
                                   )}
                                 </div>

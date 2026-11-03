@@ -4,7 +4,6 @@ import { X, Loader2, AlertTriangle, BookOpen, ShieldAlert, Wifi, StopCircle, Use
 import { useNFC, NFCResult } from "@/hooks/useNFC";
 import VirtualCardTap from "@/components/VirtualCardTap";
 import { cards, discipline, reports, health, CardScanResult, DisciplineRecord, AcademicReport, HealthRecord } from "@/lib/api";
-
 export type NFCMode = "report" | "discipline" | "health";
 type Phase = "scanning" | "loading" | "found" | "error";
 
@@ -259,7 +258,7 @@ export default function NFCStudentModal({ mode, onClose }: { mode: NFCMode; onCl
                             </div>
                           )}
                           {r.teacher_remarks && (
-                            <p className="text-xs text-gray-500 mt-1 italic">"{r.teacher_remarks}"</p>
+                            <p className="text-xs text-gray-500 mt-1 italic">&quot;{r.teacher_remarks}&quot;</p>
                           )}
                         </div>
                       ))}

@@ -1343,11 +1343,11 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
     const txs = getDemoCanteenTransactions();
     const totalAmount = (body.items || []).reduce((sum: number, it: any) => sum + (it.price * it.quantity), 0);
     
-    let balanceBefore = std.card?.wallet_balance ?? 0;
+    const balanceBefore = std.card?.wallet_balance ?? 0;
     if (balanceBefore < totalAmount) {
       throw new Error(`Insufficient wallet balance (${balanceBefore} RWF). Total cost is ${totalAmount} RWF.`);
     }
-    let balanceAfter = Math.max(0, balanceBefore - totalAmount);
+    const balanceAfter = Math.max(0, balanceBefore - totalAmount);
 
     const stdIdx = students.findIndex((s: any) => s.id === std.id);
     if (stdIdx > -1 && students[stdIdx].card) {
@@ -2635,7 +2635,7 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
         fdClassId = options.body.get("classId") as string || fdClassId;
       }
 
-      let creatorUser = { first_name: "Teacher", last_name: "User" };
+      const creatorUser = { first_name: "Teacher", last_name: "User" };
       if (typeof window !== "undefined") {
         const saved = getDemoStorage("ishuri_demo_user");
         if (saved) {

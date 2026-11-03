@@ -59,7 +59,7 @@ export default function NurseDashboard() {
             <Heart size={17} className="text-blue-600" />
           </div>
           <p className="text-2xl font-bold text-gray-800">{loading ? "—" : today}</p>
-          <p className="text-xs text-gray-400 mt-0.5">Today's incidents</p>
+          <p className="text-xs text-gray-400 mt-0.5">Today&apos;s incidents</p>
         </div>
         <div className="bg-white rounded-2xl shadow-sm p-4">
           <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center mb-3">

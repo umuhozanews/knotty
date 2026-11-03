@@ -1,8 +1,53 @@
 import { getSafeBrowserClient } from "../client";
 import type { Database } from "../database.types";
+import type { Student } from "@/lib/api";
 
 export type StudentRecordRow = Database["public"]["Tables"]["student_records"]["Row"];
 export type StudentRosterItem = Database["public"]["Functions"]["list_student_roster"]["Returns"][number];
+export type StudentRosterAdminItem = Database["public"]["Functions"]["list_school_students"]["Returns"][number];
+
+function splitLegalName(legal: string): { first_name: string; last_name: string } {
+  const trimmed = legal.trim();
+  const idx = trimmed.indexOf(" ");
+  if (idx === -1) return { first_name: trimmed, last_name: "" };
+  return { first_name: trimmed.slice(0, idx), last_name: trimmed.slice(idx + 1) };
+}
+
+function toStudentShape(row: StudentRosterAdminItem): Student {
+  const { first_name, last_name } = splitLegalName(row.legal_name ?? "");
+  return {
+    id: row.student_id,
+    student_code: row.admission_number,
+    gender: row.gender ?? undefined,
+    nationality: row.nationality ?? undefined,
+    date_of_birth: row.date_of_birth ?? undefined,
+    user: {
+      first_name,
+      last_name,
+      email: row.primary_email ?? "",
+      phone: row.primary_phone ?? null,
+      profile_photo: row.profile_photo_path ?? null,
+    },
+    level: row.education_level_id
+      ? { id: row.education_level_id, name: row.education_level_name ?? "" }
+      : null,
+    class: row.class_section_id
+      ? { id: row.class_section_id, name: row.class_section_name ?? "" }
+      : null,
+    card: row.card_assignment_id
+      ? {
+          id: row.card_assignment_id,
+          card_number: row.card_number ?? "",
+          wallet_balance: 0,
+          is_active: row.card_status === "active",
+          is_frozen: row.card_status === "suspended",
+          nfc_uid: null,
+          qr_code: "",
+          expires_at: "",
+        }
+      : null,
+  };
+}
 
 export const supabaseStudentService = {
   /**
@@ -61,6 +106,28 @@ export const supabaseStudentService = {
       studentId: data.student_id,
       activationDelivery: data.activation_delivery ?? "sent",
     };
+  },
+
+  /**
+   * Fetch full student roster with contact, class, level, and card data.
+   * Requires students.read_sensitive (ADMIN, SCHOOL_MANAGER, TEACHER).
+   */
+  async listSchoolStudents(
+    schoolId: string,
+    classSectionId?: string | null,
+    search?: string | null
+  ): Promise<Student[]> {
+    const client = getSafeBrowserClient();
+    if (!client) throw new Error("Supabase is not configured");
+
+    const { data, error } = await client.rpc("list_school_students", {
+      p_school_id: schoolId,
+      p_class_section_id: classSectionId ?? null,
+      p_search: search ?? null,
+    });
+
+    if (error) throw new Error(error.message);
+    return (data ?? []).map(toStudentShape);
   },
 
   /**

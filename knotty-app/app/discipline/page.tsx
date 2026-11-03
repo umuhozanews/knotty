@@ -6,7 +6,8 @@ import {
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import VirtualCardTap from "@/components/VirtualCardTap";
-import { cards, discipline, DisciplineRecord, CardScanResult } from "@/lib/api";
+import type { DisciplineRecord } from "@/lib/api";
+import { supabaseDisciplineService, supabaseLibraryService } from "@/lib/supabase/services";
 import { useNFC } from "@/hooks/useNFC";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
@@ -32,15 +33,24 @@ const DEFAULT_MARKS: Record<string, number> = {
   SERIOUS:  5,
 };
 
-type ScannedStudent = CardScanResult["student"];
+type ScannedStudent = {
+  id: string;
+  name: string;
+  class: string;
+  card_number: string | null;
+  student_code: string;
+  photo: string | null;
+};
 
 /* ── New Offense Modal ─────────────────────────────────────────── */
 function OffenseModal({
   student,
+  schoolId,
   onClose,
   onSuccess,
 }: {
   student: ScannedStudent;
+  schoolId: string;
   onClose: () => void;
   onSuccess: (record: DisciplineRecord) => void;
 }) {
@@ -64,17 +74,31 @@ function OffenseModal({
     if (!form.title.trim()) return;
     setLoading(true);
     try {
-      const res = await discipline.create({
+      const id = await supabaseDisciplineService.create(schoolId, {
         student_id: student.id,
         type: form.type,
-        severity: form.severity,
+        severity: form.severity as "MINOR" | "MODERATE" | "SERIOUS",
         marks_deducted: Number(form.marks_deducted),
         title: form.title,
         description: form.description || undefined,
         action_taken: form.action_taken || undefined,
       });
+      const now = new Date().toISOString();
+      const rec: DisciplineRecord = {
+        id,
+        type: form.type,
+        severity: form.severity,
+        marks_deducted: Number(form.marks_deducted),
+        title: form.title,
+        description: form.description || null,
+        action_taken: form.action_taken || null,
+        recorded_at: now,
+        created_at: now,
+        status: "OPEN",
+        parent_notified: false,
+      };
       toast(`Offense recorded · -${form.marks_deducted} marks`, "success");
-      onSuccess(res.data);
+      onSuccess(rec);
       onClose();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to save", "error");
@@ -239,7 +263,7 @@ function OffenseModal({
 
 /* ── Main Page ─────────────────────────────────────────────────── */
 export default function DisciplinePage() {
-  const { loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const { startListen, stopListen, listening, isSupported } = useNFC();
 
@@ -256,15 +280,15 @@ export default function DisciplinePage() {
 
   /* ── Direct marks deduction ────────────────────────────────── */
   async function handleAdjustMarks(recordId: string, delta: number) {
+    if (!user?.school_id) return;
     const rec = records.find(r => r.id === recordId);
     if (!rec) return;
     const currentDeducted = rec.marks_deducted !== undefined ? Number(rec.marks_deducted) : (rec.severity === "SERIOUS" ? 5 : rec.severity === "MODERATE" ? 3 : 1);
     const newMarks = Math.min(TOTAL_MARKS, Math.max(0, currentDeducted + delta));
     setUpdatingId(recordId);
-    // Optimistically update
     setRecords(prev => prev.map(r => r.id === recordId ? { ...r, marks_deducted: newMarks } : r));
     try {
-      await discipline.update(recordId, { marks_deducted: newMarks });
+      await supabaseDisciplineService.update(user.school_id, recordId, { marks_deducted: newMarks });
       toast(`Marks updated: -${newMarks} (${delta > 0 ? `+${delta} deducted` : `${Math.abs(delta)} restored`})`, "success");
       loadSchool();
     } catch (err) {
@@ -289,29 +313,35 @@ export default function DisciplinePage() {
 
   /* ── Fetch records for scanned student ─────────────────────── */
   const loadStudentRecords = useCallback(async (studentId: string) => {
+    if (!user?.school_id) return;
     setRecordsLoading(true);
     try {
-      const res = await discipline.studentList(studentId);
-      setRecords(res.data as DisciplineRecord[]);
+      const res = await supabaseDisciplineService.studentList(user.school_id, studentId);
+      setRecords(res);
     } catch { /* ignore */ }
     finally { setRecordsLoading(false); }
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.school_id]);
 
   /* ── Card scan handler ─────────────────────────────────────── */
-  async function handleCardScan(cardNum: string, isNFC = false) {
-    if (!cardNum.trim() || processingRef.current) return;
+  async function handleCardScan(cardNum: string, _isNFC = false) {
+    if (!cardNum.trim() || processingRef.current || !user?.school_id) return;
     processingRef.current = true;
     setScanning(true);
     try {
-      const res = isNFC
-        ? await cards.scanNFC(cardNum)
-        : await cards.scan(cardNum.trim());
-      const scanned = res.data.student;
-      setStudent(scanned);
+      const scanned = await supabaseLibraryService.lookupStudent(user.school_id, cardNum.trim());
+      setStudent({
+        id: scanned.id,
+        name: scanned.name,
+        class: scanned.class,
+        card_number: scanned.card_number,
+        student_code: scanned.student_code,
+        photo: scanned.photo,
+      });
       setCardInput("");
       await loadStudentRecords(scanned.id);
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Card not found", "error");
+      toast(err instanceof Error ? err.message : "Student not found", "error");
     } finally {
       setScanning(false);
       processingRef.current = false;
@@ -335,17 +365,17 @@ export default function DisciplinePage() {
 
   /* ── School-wide records ───────────────────────────────────── */
   const loadSchool = useCallback(async () => {
-    if (authLoading) return;
+    if (!user?.school_id) return;
     setSchoolLoading(true);
     try {
-      const res = await discipline.schoolList({ page: schoolPage, limit: LIMIT, search: schoolQuery || undefined });
-      setSchoolRecords(res.data as DisciplineRecord[]);
-      setSchoolTotal((res.pagination as { total: number }).total);
+      const res = await supabaseDisciplineService.schoolList(user.school_id, { page: schoolPage, limit: LIMIT, search: schoolQuery || undefined });
+      setSchoolRecords(res);
+      setSchoolTotal(res.length === LIMIT ? schoolPage * LIMIT + 1 : (schoolPage - 1) * LIMIT + res.length);
     } catch { /* ignore */ }
     finally { setSchoolLoading(false); }
-  }, [schoolPage, schoolQuery, authLoading]);
+  }, [schoolPage, schoolQuery, user?.school_id]);
 
-  useEffect(() => { loadSchool(); }, [loadSchool]);
+  useEffect(() => { if (!authLoading) loadSchool(); }, [loadSchool, authLoading]);
   useEffect(() => {
     const t = setTimeout(() => { setSchoolQuery(schoolSearch); setSchoolPage(1); }, 400);
     return () => clearTimeout(t);
@@ -364,6 +394,7 @@ export default function DisciplinePage() {
       {showOffenseModal && student && (
         <OffenseModal
           student={student}
+          schoolId={user?.school_id ?? ""}
           onClose={() => setShowOffenseModal(false)}
           onSuccess={(rec) => {
             setRecords((prev) => [rec, ...prev]);

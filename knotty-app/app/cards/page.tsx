@@ -5,15 +5,27 @@ import {
   ChevronLeft, ChevronRight, RefreshCw, AlertTriangle, ShieldCheck, Check
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
-import { cards, students, Student, KnottyCard } from "@/lib/api";
-import { supabaseCardService, SchoolCardItem } from "@/lib/supabase/services";
-import { isSupabaseConfigured } from "@/lib/supabase/client";
+import type { Student } from "@/lib/api";
+import { supabaseCardService, supabaseStudentService } from "@/lib/supabase/services";
+import { getSafeBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
+
+type CardItem = {
+  id: string; // card_assignment_id
+  card_number: string;
+  wallet_balance: number;
+  is_frozen: boolean;
+  student: {
+    user: { first_name: string; last_name: string };
+    level: { name: string } | null;
+    class: { name: string } | null;
+  };
+};
 import { useNFC } from "@/hooks/useNFC";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
 
 // ─── Modal: Link NFC Tag ───────────────────────────────────────────────────────
-function LinkNFCModal({ card, onClose, onSuccess }: { card: KnottyCard; onClose: () => void; onSuccess: () => void }) {
+function LinkNFCModal({ card, onClose, onSuccess }: { card: CardItem; onClose: () => void; onSuccess: () => void }) {
   const { scan, scanning, error: nfcError, isSupported } = useNFC();
   const [uid, setUid] = useState("");
   const [loading, setLoading] = useState(false);
@@ -28,11 +40,9 @@ function LinkNFCModal({ card, onClose, onSuccess }: { card: KnottyCard; onClose:
     if (!uid.trim()) return;
     setLoading(true);
     try {
-      await cards.linkNFC(card.id, uid.trim());
-      onSuccess();
+      alert("NFC physical linking requires a hardware backend setup. Record the UID manually for now.");
       onClose();
     }
-    catch (err) { alert(err instanceof Error ? err.message : "Link failed"); }
     finally { setLoading(false); }
   }
 
@@ -91,7 +101,7 @@ function LinkNFCModal({ card, onClose, onSuccess }: { card: KnottyCard; onClose:
 }
 
 // ─── Modal: Top Up Wallet ──────────────────────────────────────────────────────
-function TopUpModal({ card, onClose, onSuccess }: { card: KnottyCard; onClose: () => void; onSuccess: (newBalance: number) => void }) {
+function TopUpModal({ card, schoolId, onClose, onSuccess }: { card: CardItem; schoolId: string; onClose: () => void; onSuccess: (newBalance: number) => void }) {
   const { toast } = useToast();
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
@@ -99,8 +109,7 @@ function TopUpModal({ card, onClose, onSuccess }: { card: KnottyCard; onClose: (
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await cards.topUpCash(card.id, parseInt(amount)) as { new_balance?: number };
-      const nb = res?.new_balance ?? (card.wallet_balance + parseInt(amount));
+      const nb = await supabaseCardService.topUpWallet(schoolId, card.id, parseInt(amount));
       toast(`Topped up ${parseInt(amount).toLocaleString()} RWF · New balance: ${nb.toLocaleString()} RWF`, "success");
       onSuccess(nb); onClose();
     }
@@ -147,27 +156,27 @@ function IssueCardModal({
 
   useEffect(() => {
     setSearching(true);
-    students.list({ limit: 100 })
+    supabaseStudentService.listSchoolStudents(schoolId)
       .then((r) => {
-        const uncarded = (r.data || []).filter((s) => !s.card);
+        const uncarded = r.filter((s) => !(s as any).card);
         setResults(uncarded);
       })
       .catch(() => {})
       .finally(() => setSearching(false));
-  }, []);
+  }, [schoolId]);
 
   useEffect(() => {
     if (!search.trim()) return;
     const t = setTimeout(async () => {
       setSearching(true);
       try {
-        const r = await students.list({ search: search.trim(), limit: 15 });
-        setResults((r.data || []).filter((s) => !s.card));
+        const r = await supabaseStudentService.listSchoolStudents(schoolId, null, search.trim());
+        setResults(r.filter((s) => !(s as any).card));
       } catch { /* ignore */ }
       finally { setSearching(false); }
     }, 250);
     return () => clearTimeout(t);
-  }, [search]);
+  }, [search, schoolId]);
 
   async function handleScanNFC() {
     const res = await scan();
@@ -195,14 +204,9 @@ function IssueCardModal({
           onClose();
           return;
         } catch (supaErr: any) {
-          console.warn("Supabase issue-card failed, trying legacy facade:", supaErr);
+          throw supaErr;
         }
       }
-
-      await cards.issue(selected.id, {
-        nfc_uid: targetUid,
-        initial_balance: initialBalance ? parseInt(initialBalance, 10) : 0,
-      });
       onSuccess(`Card granted successfully to ${selected.user.first_name} ${selected.user.last_name}`);
       onClose();
     } catch (err: any) {
@@ -352,7 +356,7 @@ function ReplaceCardModal({
   onClose,
   onSuccess,
 }: {
-  card: KnottyCard;
+  card: CardItem;
   schoolId: string;
   onClose: () => void;
   onSuccess: (msg: string) => void;
@@ -490,7 +494,7 @@ function ChangeCardStatusModal({
   onClose,
   onSuccess,
 }: {
-  card: KnottyCard;
+  card: CardItem;
   schoolId: string;
   onClose: () => void;
   onSuccess: (msg: string) => void;
@@ -598,7 +602,7 @@ function ChangeCardStatusModal({
 export default function CardsPage() {
   const { toast } = useToast();
   const { user, activeSchool, loading: authLoading } = useAuth();
-  const [data, setData] = useState<KnottyCard[]>([]);
+  const [data, setData] = useState<CardItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -607,32 +611,67 @@ export default function CardsPage() {
 
   // Modals
   const [modal, setModal] = useState<null | "issue" | "nfc" | "topup" | "replace" | "status">(null);
-  const [selectedCard, setSelectedCard] = useState<KnottyCard | null>(null);
+  const [selectedCard, setSelectedCard] = useState<CardItem | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const limit = 20;
 
-  const targetSchoolId = activeSchool?.id || user?.school_id || "00000000-0000-0000-0000-000000000001";
+  const targetSchoolId = activeSchool?.id || user?.school_id || "";
 
   const fetchCards = useCallback(async () => {
-    if (authLoading) return;
+    if (authLoading || !targetSchoolId) return;
     setLoading(true);
     try {
-      const res = await cards.list({ page, limit, search: query || undefined });
-      setData(res.data);
-      const p = res.pagination as { total: number };
-      setTotal(p.total);
+      const client = getSafeBrowserClient();
+      if (!client) return;
+      const { data: rows } = await client.rpc("list_school_students", {
+        p_school_id: targetSchoolId,
+        p_search: query || null,
+      });
+      const studentRows = (rows as any[]) ?? [];
+      const cardsOnly = studentRows.filter((r) => r.card_assignment_id);
+      const cardIds = cardsOnly.map((r: any) => r.card_assignment_id);
+      let walletMap: Record<string, number> = {};
+      if (cardIds.length > 0) {
+        const { data: wallets } = await client
+          .from("card_assignments")
+          .select("id, wallet_balance")
+          .in("id", cardIds);
+        (wallets || []).forEach((w: any) => { walletMap[w.id] = w.wallet_balance ?? 0; });
+      }
+      const nameParts = (name: string) => {
+        const idx = name.trim().indexOf(" ");
+        return idx === -1 ? { first_name: name.trim(), last_name: "" } : { first_name: name.trim().slice(0, idx), last_name: name.trim().slice(idx + 1) };
+      };
+      const mapped: CardItem[] = cardsOnly.map((r: any) => {
+        const { first_name, last_name } = nameParts(r.legal_name ?? "");
+        return {
+          id: r.card_assignment_id,
+          card_number: r.card_number,
+          wallet_balance: walletMap[r.card_assignment_id] ?? 0,
+          is_frozen: r.card_status === "suspended",
+          student: {
+            user: { first_name, last_name },
+            level: r.education_level_name ? { name: r.education_level_name } : null,
+            class: r.class_section_name ? { name: r.class_section_name } : null,
+          },
+        };
+      });
+      setData(mapped);
+      setTotal(mapped.length);
     } catch { /* ignore */ }
     finally { setLoading(false); }
-  }, [page, query, authLoading]);
+  }, [query, authLoading, targetSchoolId]);
 
   useEffect(() => { fetchCards(); }, [fetchCards]);
   useEffect(() => { const t = setTimeout(() => { setQuery(search); setPage(1); }, 400); return () => clearTimeout(t); }, [search]);
 
-  async function toggleFreeze(card: KnottyCard) {
+  async function toggleFreeze(card: CardItem) {
     setActionLoading(card.id);
     setData((d) => d.map((c) => c.id === card.id ? { ...c, is_frozen: !card.is_frozen } : c));
     try {
-      if (card.is_frozen) await cards.unfreeze(card.id); else await cards.freeze(card.id);
+      const newStatus = card.is_frozen ? "active" : "suspended";
+      const reason = card.is_frozen ? "Unfrozen by admin" : "Frozen by admin";
+      await supabaseCardService.changeCardStatus(targetSchoolId, card.id, newStatus, reason);
       toast(`Card ${card.is_frozen ? "unfrozen" : "frozen"} — ${card.student.user.first_name} ${card.student.user.last_name}`, "success");
     } catch (err) {
       setData((d) => d.map((c) => c.id === card.id ? { ...c, is_frozen: card.is_frozen } : c));
@@ -672,12 +711,13 @@ export default function CardsPage() {
         <LinkNFCModal
           card={selectedCard}
           onClose={() => setModal(null)}
-          onSuccess={() => { fetchCards(); toast(`NFC linked — ${selectedCard.student.user.first_name}`, "success"); }}
+          onSuccess={() => { fetchCards(); toast(`NFC tag recorded`, "success"); }}
         />
       )}
       {modal === "topup" && selectedCard && (
         <TopUpModal
           card={selectedCard}
+          schoolId={targetSchoolId}
           onClose={() => setModal(null)}
           onSuccess={(nb) => { setData((d) => d.map((c) => c.id === selectedCard.id ? { ...c, wallet_balance: nb } : c)); }}
         />
@@ -744,13 +784,7 @@ export default function CardsPage() {
                         </span>
                       </td>
                       <td className="py-3">
-                        {card.nfc_uid ? (
-                          <span className="text-xs text-green-600 font-mono flex items-center gap-1">
-                            <Wifi size={11} /> {card.nfc_uid.slice(0, 8)}...
-                          </span>
-                        ) : (
-                          <span className="text-xs text-gray-300 flex items-center gap-1"><WifiOff size={11} />Not linked</span>
-                        )}
+                        <span className="text-xs text-gray-300 flex items-center gap-1"><WifiOff size={11} />Tap card to link</span>
                       </td>
                       <td className="py-3">
                         <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${card.is_frozen ? "bg-red-50 text-red-500 dark:bg-red-950/40" : "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40"}`}>

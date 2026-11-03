@@ -7,7 +7,8 @@ import {
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import { students, structure, cards, health, Level, Class, Student } from "@/lib/api";
-import { supabaseStudentService } from "@/lib/supabase/services";
+import { supabaseStudentService, supabaseAcademicService } from "@/lib/supabase/services";
+import type { ClassSectionRow } from "@/lib/supabase/services/academicService";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
@@ -55,11 +56,13 @@ const BLANK: StudentForm = {
 };
 
 function StudentModal({
-  existing, levels, classes, onClose, onSuccess, defaultLevelId, defaultClassId,
+  existing, levels, classes, rawClassSections, schoolId, onClose, onSuccess, defaultLevelId, defaultClassId,
 }: {
   existing?: Student | null;
   levels: Level[];
   classes: Class[];
+  rawClassSections?: ClassSectionRow[];
+  schoolId?: string;
   onClose: () => void;
   onSuccess: () => void;
   defaultLevelId?: string;
@@ -176,25 +179,70 @@ function StudentModal({
     setLoading(true);
     try {
       if (isEdit && existing) {
-        await students.update(existing.id, {
-          first_name: form.first_name.trim(), last_name: form.last_name.trim(),
-          phone: form.phone || undefined,
-          gender: form.gender, date_of_birth: form.date_of_birth || undefined,
-          nationality: form.nationality || undefined,
-          level_id: form.level_id, class_id: form.class_id,
-          profile_photo: form.profile_photo || undefined,
-          guardian_name: form.guardian_name || undefined,
-          guardian_phone: form.guardian_phone || undefined,
-        });
-        if (form.medical_notes.trim()) {
-          await health.create({
-            student_id: existing.id, type: "ILLNESS", severity: "LOW",
-            title: "Medical Notes", description: form.medical_notes,
+        if (isSupabaseConfigured() && schoolId) {
+          await supabaseStudentService.updateStudentProfile(schoolId, existing.id, {
+            legalName: `${form.first_name.trim()} ${form.last_name.trim()}`,
+            dateOfBirth: form.date_of_birth || undefined,
+            gender: form.gender || undefined,
+            nationality: form.nationality || undefined,
           });
+          if (form.class_id && form.class_id !== existing.class?.id) {
+            const classSection = rawClassSections?.find((cs) => cs.id === form.class_id);
+            if (classSection) {
+              await supabaseStudentService.placeStudent({
+                schoolId,
+                studentId: existing.id,
+                academicYearId: classSection.academic_year_id,
+                classSectionId: form.class_id,
+              });
+            }
+          }
+        } else {
+          await students.update(existing.id, {
+            first_name: form.first_name.trim(), last_name: form.last_name.trim(),
+            phone: form.phone || undefined,
+            gender: form.gender, date_of_birth: form.date_of_birth || undefined,
+            nationality: form.nationality || undefined,
+            level_id: form.level_id, class_id: form.class_id,
+            profile_photo: form.profile_photo || undefined,
+            guardian_name: form.guardian_name || undefined,
+            guardian_phone: form.guardian_phone || undefined,
+          });
+          if (form.medical_notes.trim()) {
+            await health.create({
+              student_id: existing.id, type: "ILLNESS", severity: "LOW",
+              title: "Medical Notes", description: form.medical_notes,
+            });
+          }
         }
         show("Student updated successfully", "success");
       } else {
         // Create student
+        if (isSupabaseConfigured() && schoolId) {
+          const admissionNumber = `ADM-${new Date().getFullYear()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+          const classSection = rawClassSections?.find((cs) => cs.id === form.class_id);
+          const { studentId } = await supabaseStudentService.provisionStudent({
+            schoolId,
+            contactType: "email",
+            contact: effectiveEmail,
+            admissionNumber,
+            legalName: `${form.first_name.trim()} ${form.last_name.trim()}`,
+            dateOfBirth: form.date_of_birth || undefined,
+            gender: form.gender || undefined,
+            nationality: form.nationality || undefined,
+            academicYearId: classSection?.academic_year_id ?? undefined,
+            classSectionId: form.class_id || undefined,
+          });
+          setCreatedCredentials({
+            id: studentId,
+            name: `${form.first_name} ${form.last_name}`,
+            email: effectiveEmail,
+            password: "",
+          });
+          onSuccess();
+          return;
+        }
+
         const payload: Record<string, unknown> = {
           first_name: form.first_name.trim(), last_name: form.last_name.trim(),
           email: effectiveEmail, phone: form.phone || undefined,
@@ -262,19 +310,29 @@ function StudentModal({
             <User size={24} className="text-green-600" />
           </div>
           <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-1">Student Enrolled!</h3>
-          <p className="text-sm text-gray-400 mb-5">{createdCredentials.name} has been enrolled and their card was issued.</p>
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 text-left space-y-3 mb-5">
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Login Credentials</p>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs text-gray-500">Email</span>
-              <span className="text-sm font-mono font-medium text-gray-800 dark:text-gray-100">{createdCredentials.email}</span>
+          <p className="text-sm text-gray-400 mb-5">{createdCredentials.name} has been enrolled.</p>
+          {createdCredentials.password ? (
+            <>
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 text-left space-y-3 mb-5">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Login Credentials</p>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-gray-500">Email</span>
+                  <span className="text-sm font-mono font-medium text-gray-800 dark:text-gray-100">{createdCredentials.email}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-gray-500">Password</span>
+                  <span className="text-sm font-mono font-bold text-blue-600">{createdCredentials.password}</span>
+                </div>
+              </div>
+              <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mb-5">Share these credentials with the student. They can change their password after first login.</p>
+            </>
+          ) : (
+            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 text-left mb-5">
+              <p className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-1">Account Activation</p>
+              <p className="text-sm text-blue-700 dark:text-blue-300">An activation link has been sent to <strong>{createdCredentials.email}</strong>.</p>
+              <p className="text-xs text-blue-500 dark:text-blue-400 mt-1">The student can log in after clicking the link in their email.</p>
             </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs text-gray-500">Password</span>
-              <span className="text-sm font-mono font-bold text-blue-600">{createdCredentials.password}</span>
-            </div>
-          </div>
-          <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mb-5">Share these credentials with the student. They can change their password after first login.</p>
+          )}
           <div className="flex flex-col gap-2">
             {createdCredentials.id && (
               <button
@@ -743,6 +801,7 @@ export default function StudentsPage() {
   const { show } = useToast();
   const [levels, setLevels] = useState<Level[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
+  const [rawClassSections, setRawClassSections] = useState<ClassSectionRow[]>([]);
   const [studentsByClass, setStudentsByClass] = useState<Record<string, Student[]>>({});
   const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
@@ -759,6 +818,38 @@ export default function StudentsPage() {
   // Load levels and classes
   useEffect(() => {
     if (authLoading || !user) return;
+
+    if (isSupabaseConfigured() && user.school_id) {
+      Promise.all([
+        supabaseAcademicService.listEducationLevels(user.school_id),
+        supabaseAcademicService.listClassSections(user.school_id),
+      ]).then(([levelRows, classSectionRows]) => {
+        setRawClassSections(classSectionRows);
+        const levelMap = new Map(levelRows.map((l) => [l.id, l]));
+        const sorted = levelRows
+          .filter((l) => l.is_active)
+          .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0) || a.name.localeCompare(b.name, undefined, { numeric: true }))
+          .map((l) => ({ id: l.id, name: l.name, description: "", order_index: l.display_order ?? 0 }));
+        const mappedClasses: Class[] = classSectionRows
+          .filter((cs) => cs.status === "active")
+          .sort((a, b) => a.section_code.localeCompare(b.section_code, undefined, { numeric: true }))
+          .map((cs) => {
+            const lvl = levelMap.get(cs.education_level_id);
+            return { id: cs.id, name: cs.name, level: { id: cs.education_level_id, name: lvl?.name ?? "" } };
+          });
+        setLevels(sorted);
+        setClasses(mappedClasses);
+        if (sorted.length > 0) {
+          setSelectedLevel(sorted[0].id);
+          const first = mappedClasses.find((c) => c.level.id === sorted[0].id) || mappedClasses[0];
+          if (first) setSelectedClass(first.id);
+        }
+      }).catch((err) => {
+        console.error("Failed to load levels/classes from Supabase:", err);
+      });
+      return;
+    }
+
     Promise.all([structure.levels(), structure.classes()]).then(([lvls, clss]) => {
       // Deduplicate levels by normalized name, prioritizing levels that have classes
       const levelMap = new Map<string, typeof lvls.data[0]>();
@@ -818,27 +909,38 @@ export default function StudentsPage() {
     if (!classId) return;
     setLoading(true);
     try {
-      const res = await students.list({ classId, limit: 100, search: search || undefined });
-      if (res.data && res.data.length > 0) {
-        setStudentsByClass((prev) => ({ ...prev, [classId]: res.data }));
+      if (isSupabaseConfigured() && user?.school_id) {
+        const data = await supabaseStudentService.listSchoolStudents(user.school_id, classId, search || null);
+        setStudentsByClass((prev) => ({ ...prev, [classId]: data }));
       } else {
-        const stored = getStoredStudents().filter((s) => {
+        const res = await students.list({ classId, limit: 100, search: search || undefined });
+        if (res.data && res.data.length > 0) {
+          setStudentsByClass((prev) => ({ ...prev, [classId]: res.data }));
+        } else {
+          const stored = getStoredStudents().filter((s) => {
+            const matchClass = !classId || s.class?.id === classId || (s as any).class_id === classId;
+            const matchSearch = !search || `${s.user.first_name} ${s.user.last_name}`.toLowerCase().includes(search.toLowerCase());
+            return matchClass && matchSearch;
+          });
+          setStudentsByClass((prev) => ({ ...prev, [classId]: stored.length > 0 ? stored : res.data }));
+        }
+      }
+    } catch (err) {
+      if (!isSupabaseConfigured()) {
+        const filtered = getStoredStudents().filter((s) => {
           const matchClass = !classId || s.class?.id === classId || (s as any).class_id === classId;
           const matchSearch = !search || `${s.user.first_name} ${s.user.last_name}`.toLowerCase().includes(search.toLowerCase());
           return matchClass && matchSearch;
         });
-        setStudentsByClass((prev) => ({ ...prev, [classId]: stored.length > 0 ? stored : res.data }));
+        setStudentsByClass((prev) => ({ ...prev, [classId]: filtered }));
+      } else {
+        show(err instanceof Error ? err.message : "Failed to load students", "error");
+        setStudentsByClass((prev) => ({ ...prev, [classId]: [] }));
       }
-    } catch (err) {
-      const filtered = getStoredStudents().filter((s) => {
-        const matchClass = !classId || s.class?.id === classId || (s as any).class_id === classId;
-        const matchSearch = !search || `${s.user.first_name} ${s.user.last_name}`.toLowerCase().includes(search.toLowerCase());
-        return matchClass && matchSearch;
-      });
-      setStudentsByClass((prev) => ({ ...prev, [classId]: filtered }));
+    } finally {
+      setLoading(false);
     }
-    finally { setLoading(false); }
-  }, [search]);
+  }, [search, user?.school_id]);
 
   useEffect(() => {
     if (searchRef.current) clearTimeout(searchRef.current);
@@ -873,7 +975,16 @@ export default function StudentsPage() {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      await students.remove(deleteTarget.id);
+      if (isSupabaseConfigured() && user?.school_id) {
+        await supabaseStudentService.changeStudentStatus(
+          user.school_id,
+          deleteTarget.id,
+          "withdrawn",
+          "Removed by school administrator"
+        );
+      } else {
+        await students.remove(deleteTarget.id);
+      }
       show(`${deleteTarget.user.first_name} removed`, "success");
       setDeleteTarget(null);
       loadStudents(selectedClass);
@@ -1052,6 +1163,8 @@ export default function StudentsPage() {
           existing={editStudent}
           levels={levels}
           classes={classes}
+          rawClassSections={rawClassSections}
+          schoolId={user?.school_id}
           onClose={() => { setShowModal(false); setEditStudent(null); }}
           onSuccess={() => loadStudents(selectedClass)}
           defaultLevelId={!editStudent ? (selectedLevel ?? levels[0]?.id) : undefined}

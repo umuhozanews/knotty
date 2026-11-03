@@ -2,23 +2,36 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Users, GraduationCap, BarChart2, ArrowUpRight, BookOpen, BookMarked, AlertTriangle } from "lucide-react";
-import { schools, library, DashboardStats } from "@/lib/api";
-import { DEMO_STATS } from "@/lib/demo";
+import { getSafeBrowserClient } from "@/lib/supabase/client";
+
+type SchoolStats = { total_students: number; present_today: number; low_balance_cards: number; total_teachers: number };
 
 function Skeleton() {
   return <div className="h-5 w-12 bg-gray-100 rounded animate-pulse" />;
 }
 
 export default function StatsCards({ schoolId }: { schoolId: string }) {
-  const [data, setData] = useState<DashboardStats | null>(null);
-  const [libStats, setLibStats] = useState<{ totalBooks: number; activeMembers: number; overdueBooks: number } | null>(null);
+  const [data, setData] = useState<SchoolStats | null>(null);
   const [activeTab, setActiveTab] = useState<"student" | "teacher" | "library">("student");
 
   useEffect(() => {
-    schools.stats(schoolId).then((r) => setData(r.data)).catch(() => {
-      setData(DEMO_STATS);
-    });
-    library.stats().then((r) => setLibStats(r.data)).catch(() => {});
+    const client = getSafeBrowserClient();
+    if (!client || !schoolId) return;
+
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    Promise.all([
+      client.from("student_records").select("*", { count: "exact", head: true }).eq("school_id", schoolId).eq("status", "active"),
+      client.from("attendance_records").select("*", { count: "exact", head: true }).eq("school_id", schoolId).eq("attendance_date", todayStr).eq("status", "present"),
+      client.from("card_assignments").select("*", { count: "exact", head: true }).eq("school_id", schoolId).eq("status", "active").lt("wallet_balance", 500),
+    ]).then(([students, present, lowBalance]) => {
+      setData({
+        total_students: students.count ?? 0,
+        present_today: present.count ?? 0,
+        low_balance_cards: lowBalance.count ?? 0,
+        total_teachers: 0,
+      });
+    }).catch(() => {});
   }, [schoolId]);
 
   const studentCards = [
@@ -79,7 +92,7 @@ export default function StatsCards({ schoolId }: { schoolId: string }) {
     {
       icon: <div className="w-10 h-10 bg-orange-50 rounded-full flex items-center justify-center"><BookOpen size={20} className="text-orange-600" /></div>,
       label: "Total Books",
-      numerator: libStats?.totalBooks ?? 450,
+      numerator: 0,
       denominator: undefined,
       color: "text-orange-600",
       href: "/library",
@@ -87,7 +100,7 @@ export default function StatsCards({ schoolId }: { schoolId: string }) {
     {
       icon: <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center"><BookMarked size={20} className="text-blue-600" /></div>,
       label: "Active Borrows",
-      numerator: libStats?.activeMembers ?? 18,
+      numerator: 0,
       denominator: undefined,
       color: "text-blue-600",
       href: "/library",
@@ -95,7 +108,7 @@ export default function StatsCards({ schoolId }: { schoolId: string }) {
     {
       icon: <div className="w-10 h-10 bg-red-50 rounded-full flex items-center justify-center"><AlertTriangle size={20} className="text-red-500" /></div>,
       label: "Overdue Books",
-      numerator: libStats?.overdueBooks ?? 3,
+      numerator: 0,
       denominator: undefined,
       color: "text-red-500",
       href: "/library",

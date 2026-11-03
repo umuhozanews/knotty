@@ -18,6 +18,7 @@ import {
   supabaseCanteenService,
   supabaseFeesService,
   supabaseAttendanceService,
+  supabaseStudentService,
 } from "@/lib/supabase/services";
 import type { CanteenTransactionRow } from "@/lib/supabase/services/canteenService";
 import type { FeeInvoiceRow } from "@/lib/supabase/services/feesService";
@@ -71,6 +72,7 @@ type LocalProfile = {
   date_of_birth: string | null;
   gender: string | null;
   nationality: string | null;
+  student_status: string | null;
   level: { name: string } | null;
   class: { name: string } | null;
   card: LocalCard | null;
@@ -381,6 +383,7 @@ export default function StudentProfilePage() {
   const [scanResult, setScanResult] = useState<{ status: string; name: string } | null>(null);
   const [scanning, setScanning] = useState(false);
   const [nfcError, setNfcError] = useState<string | null>(null);
+  const [activating, setActivating] = useState(false);
   const { scan: nfcScan, scanning: nfcScanning, isSupported: nfcSupported, error: nfcHookError } = useNFC();
 
   const studentId = params.id;
@@ -438,6 +441,7 @@ export default function StudentProfilePage() {
         date_of_birth: row.date_of_birth ?? null,
         gender: row.gender ?? null,
         nationality: row.nationality ?? null,
+        student_status: row.student_status ?? null,
         level: row.education_level_name ? { name: row.education_level_name } : null,
         class: row.class_section_name ? { name: row.class_section_name } : null,
         card: row.card_assignment_id ? {
@@ -619,6 +623,20 @@ export default function StudentProfilePage() {
     }
   }
 
+  async function activateStudentAccount() {
+    if (!user) return;
+    setActivating(true);
+    try {
+      await supabaseStudentService.activateStudent(user.school_id, studentId);
+      show("Student account activated", "success");
+      await loadProfile();
+    } catch (err) {
+      show(err instanceof Error ? err.message : "Activation failed", "error");
+    } finally {
+      setActivating(false);
+    }
+  }
+
   if (loading) {
     return (
       <DashboardShell>
@@ -736,6 +754,24 @@ export default function StudentProfilePage() {
             ))}
           </div>
         </div>
+
+        {/* ── Pending student banner ──────────────────────────────────────── */}
+        {profile.student_status === "pending" && isManagementRole(user?.role) && (
+          <div className="flex items-center justify-between gap-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-2xl px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Account not activated</p>
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">This student has not logged in yet. Activate their account to enable all features.</p>
+            </div>
+            <button
+              onClick={activateStudentAccount}
+              disabled={activating}
+              className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 transition disabled:opacity-70"
+            >
+              {activating && <Loader2 size={12} className="animate-spin" />}
+              {activating ? "Activating…" : "Activate Account"}
+            </button>
+          </div>
+        )}
 
         {/* ── Tabs ────────────────────────────────────────────────────────── */}
         <div className="flex gap-1 bg-white dark:bg-gray-900 rounded-2xl p-1.5 shadow-sm overflow-x-auto">

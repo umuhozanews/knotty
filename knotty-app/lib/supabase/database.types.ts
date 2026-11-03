@@ -1074,6 +1074,13 @@ export type Database = {
         };
         Returns: void;
       };
+      admin_activate_student: {
+        Args: {
+          p_school_id: string;
+          p_student_id: string;
+        };
+        Returns: void;
+      };
       change_student_status: {
         Args: {
           p_school_id: string;

@@ -239,6 +239,22 @@ export const supabaseStudentService = {
   },
 
   /**
+   * Activate a pending student without requiring them to log in.
+   * For admin-registered students who may never self-activate.
+   */
+  async activateStudent(schoolId: string, studentId: string): Promise<void> {
+    const client = getSafeBrowserClient();
+    if (!client) throw new Error("Supabase is not configured");
+
+    const { error } = await client.rpc("admin_activate_student", {
+      p_school_id: schoolId,
+      p_student_id: studentId,
+    });
+
+    if (error) throw new Error(error.message);
+  },
+
+  /**
    * Get own single student record.
    * Note: Under Supabase RLS (student_records_select_self), direct table queries are
    * permitted only for the authenticated student themselves. Staff members should query

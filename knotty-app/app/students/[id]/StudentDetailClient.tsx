@@ -7,6 +7,7 @@ import {
   User, ShoppingBag, Snowflake, ThermometerSnowflake,
   X, Activity, Nfc
 } from "lucide-react";
+import { useNFC } from "@/hooks/useNFC";
 import DashboardShell from "@/components/DashboardShell";
 import VirtualCardTap from "@/components/VirtualCardTap";
 import type { HealthRecord, DisciplineRecord } from "@/lib/api";
@@ -379,9 +380,8 @@ export default function StudentProfilePage() {
   const [toppingUp, setToppingUp] = useState(false);
   const [scanResult, setScanResult] = useState<{ status: string; name: string } | null>(null);
   const [scanning, setScanning] = useState(false);
-  const [nfcScanning, setNfcScanning] = useState(false);
   const [nfcError, setNfcError] = useState<string | null>(null);
-  const nfcAbortRef = useRef<AbortController | null>(null);
+  const { scan: nfcScan, scanning: nfcScanning, isSupported: nfcSupported, error: nfcHookError } = useNFC();
 
   const studentId = params.id;
 
@@ -584,65 +584,39 @@ export default function StudentProfilePage() {
   }
 
   async function assignNFC() {
-    if (nfcScanning && nfcAbortRef.current) {
-      nfcAbortRef.current.abort();
-      nfcAbortRef.current = null;
-      setNfcScanning(false);
-      return;
-    }
     setNfcError(null);
-    if (!("NDEFReader" in window)) {
-      setNfcError("Web NFC requires Chrome on Android. NFC card assignment requires a physical attendance device.");
+    if (!user) return;
+    if (!nfcSupported) {
+      setNfcError("Web NFC requires Chrome on Android. Use 'Issue with simulated NFC UID' on desktop.");
       return;
     }
-    setNfcScanning(true);
-    const abort = new AbortController();
-    nfcAbortRef.current = abort;
+    const result = await nfcScan();
+    if (!result) return; // error already set by the hook
+    const nfcUid = result.type === "uid" ? result.value : result.value.trim().toUpperCase().replace(/[^0-9A-F]/g, "");
     try {
-      const ndef = new (window as unknown as { NDEFReader: new () => { scan: (o: { signal: AbortSignal }) => Promise<void>; addEventListener: (e: string, h: (ev: { serialNumber: string }) => void) => void } }).NDEFReader();
-      await ndef.scan({ signal: abort.signal });
-      ndef.addEventListener("reading", async ({ serialNumber }) => {
-        abort.abort();
-        nfcAbortRef.current = null;
-        setNfcScanning(false);
-        const nfcUid = serialNumber.toUpperCase().replace(/:/g, "");
-        if (!user) { setNfcError("Session expired. Please refresh."); return; }
-        try {
-          await supabaseCardService.issueCard({
-            schoolId: user.school_id,
-            holderKind: "student",
-            studentId,
-            identifierKind: "nfc_uid",
-            identifier: nfcUid,
-          });
-          show("IshuriHUB Card issued and linked to NFC", "success");
-          await loadProfile();
-        } catch (err) {
-          setNfcError(err instanceof Error ? err.message : "Failed to issue card");
-        }
+      await supabaseCardService.issueCard({
+        schoolId: user.school_id,
+        holderKind: "student",
+        studentId,
+        identifierKind: "nfc_uid",
+        identifier: nfcUid,
       });
+      show("IshuriHUB Card issued and linked to NFC ✓", "success");
+      setNfcError(null);
+      await loadProfile();
     } catch (err) {
-      nfcAbortRef.current = null;
-      setNfcScanning(false);
-      if (err instanceof Error && err.name !== "AbortError") {
-        const msg = err.message.toLowerCase();
-        if (msg.includes("setting is disabled") || (msg.includes("disabled") && msg.includes("nfc"))) {
-          setNfcError("NFC is disabled on this device. Enable it in Settings > Connected devices.");
-        } else if (err.name === "NotAllowedError" || msg.includes("permission")) {
-          setNfcError("NFC permission denied. Allow NFC access in browser settings.");
-        } else {
-          setNfcError(err.message);
-        }
-      }
+      setNfcError(err instanceof Error ? err.message : "Failed to issue card");
     }
   }
 
   async function simulateAssignNFC() {
     setNfcError(null);
-    if (!profile?.card) {
-      try { await issueCard(); } catch (err) { setNfcError(err instanceof Error ? err.message : "Failed to issue card"); return; }
+    if (!user) return;
+    try {
+      await issueCard();
+    } catch (err) {
+      setNfcError(err instanceof Error ? err.message : "Failed to issue card");
     }
-    setNfcError("NFC card assignment requires a physical NFC reader device. Contact your hardware provider to configure an attendance terminal.");
   }
 
   if (loading) {
@@ -829,14 +803,14 @@ export default function StudentProfilePage() {
                       )}
                       {isManagementRole(user?.role) && (
                         <div className="pt-2">
-                          <button onClick={assignNFC}
-                            className={`w-full py-2 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 transition ${nfcScanning ? "bg-[#121212] text-white animate-pulse" : "border border-[#dcd9d9] text-gray-600 hover:bg-gray-50"}`}>
-                            <Nfc size={11} />
-                            {nfcScanning ? "Tap NFC card now… (tap to cancel)" : "Assign NFC Card"}
+                          <button onClick={assignNFC} disabled={nfcScanning}
+                            className={`w-full py-2 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 transition disabled:opacity-70 ${nfcScanning ? "bg-[#121212] text-white animate-pulse" : "border border-[#dcd9d9] text-gray-600 hover:bg-gray-50"}`}>
+                            {nfcScanning ? <Loader2 size={11} className="animate-spin" /> : <Nfc size={11} />}
+                            {nfcScanning ? "Tap NFC card now…" : "Assign NFC Card"}
                           </button>
-                          {nfcError && (
+                          {(nfcError || nfcHookError) && (
                             <div className="mt-1.5 bg-amber-50 p-2 rounded-lg">
-                              <p className="text-xs text-amber-700">{nfcError}</p>
+                              <p className="text-xs text-amber-700">{nfcError ?? nfcHookError}</p>
                             </div>
                           )}
                         </div>
@@ -848,16 +822,16 @@ export default function StudentProfilePage() {
                       <p className="text-sm text-gray-400 mb-3">No card issued yet</p>
                       {isManagementRole(user?.role) && (
                         <div className="flex flex-col gap-2 items-center">
-                          <button onClick={assignNFC}
-                            className={`flex items-center gap-1.5 text-xs font-medium px-4 py-2 rounded-xl transition ${nfcScanning ? "bg-[#121212] text-white animate-pulse" : "bg-[#121212] text-white hover:bg-black"}`}>
-                            <Nfc size={12} />
-                            {nfcScanning ? "Tap NFC card now… (tap to cancel)" : "Issue & Assign NFC Card"}
+                          <button onClick={assignNFC} disabled={nfcScanning}
+                            className={`flex items-center gap-1.5 text-xs font-medium px-4 py-2 rounded-xl transition disabled:opacity-70 ${nfcScanning ? "bg-[#121212] text-white animate-pulse" : "bg-[#121212] text-white hover:bg-black"}`}>
+                            {nfcScanning ? <Loader2 size={12} className="animate-spin" /> : <Nfc size={12} />}
+                            {nfcScanning ? "Tap NFC card now…" : "Issue & Assign NFC Card"}
                           </button>
                           <button onClick={issueCard} className="text-xs text-gray-500 underline hover:text-gray-700 transition">Issue card without NFC</button>
-                          <button onClick={simulateAssignNFC} className="text-xs text-blue-600 underline hover:text-blue-700 transition">Issue with simulated NFC UID</button>
-                          {nfcError && (
+                          <button onClick={simulateAssignNFC} className="text-xs text-blue-600 underline hover:text-blue-700 transition">Issue with random token (no NFC)</button>
+                          {(nfcError || nfcHookError) && (
                             <div className="bg-amber-50 p-2.5 rounded-lg text-left max-w-xs">
-                              <p className="text-xs text-amber-700">{nfcError}</p>
+                              <p className="text-xs text-amber-700">{nfcError ?? nfcHookError}</p>
                             </div>
                           )}
                         </div>

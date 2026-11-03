@@ -305,9 +305,9 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           </button>
         )}
 
-        {/* Dark/light toggle — desktop only */}
+        {/* Dark/light toggle */}
         <button onClick={toggle} title={theme === "dark" ? "Light mode" : "Dark mode"}
-          className="w-8 h-8 md:w-9 md:h-9 bg-white rounded-full hidden sm:flex items-center justify-center hover:bg-gray-50 transition">
+          className="w-8 h-8 md:w-9 md:h-9 bg-white rounded-full flex items-center justify-center hover:bg-gray-50 transition">
           {theme === "dark" ? <Sun size={16} style={{ color: "#16A34A" }} /> : <Moon size={16} className="text-gray-500" />}
         </button>
 

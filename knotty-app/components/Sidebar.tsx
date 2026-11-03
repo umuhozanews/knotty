@@ -31,9 +31,9 @@ const ALL_NAV = [
 
   // ── Student self-service ──
   { icon: LayoutDashboard, label: "My Dashboard", href: "/",              roles: ["STUDENT", "PARENT"] },
-  { icon: User,            label: "My Profile",   href: "/my-profile",    roles: ["STUDENT", "ADMIN"] },
-  { icon: CalendarDays,    label: "My Attendance",href: "/my-attendance", roles: ["STUDENT", "ADMIN"] },
-  { icon: Wallet,          label: "My Card",      href: "/my-card",       roles: ["STUDENT", "ADMIN"] },
+  { icon: User,            label: "My Profile",   href: "/my-profile",    roles: ["STUDENT"] },
+  { icon: CalendarDays,    label: "My Attendance",href: "/my-attendance", roles: ["STUDENT"] },
+  { icon: Wallet,          label: "My Card",      href: "/my-card",       roles: ["STUDENT"] },
 ];
 
 // Pretty display name for each role

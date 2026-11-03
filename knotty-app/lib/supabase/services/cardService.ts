@@ -61,7 +61,11 @@ export const supabaseCardService = {
       },
     });
 
-    if (error) throw new Error(error.message || "Failed to issue card via Edge Function");
+    if (error) {
+      let msg = error.message || "Failed to issue card";
+      try { const b = await (error as any).context?.json?.(); msg = b?.error || b?.detail || msg; } catch { /* ignore */ }
+      throw new Error(msg);
+    }
     if (!data?.card_assignment_id) throw new Error(data?.error || "Card issuance failed");
 
     return {
@@ -94,7 +98,11 @@ export const supabaseCardService = {
       },
     });
 
-    if (error) throw new Error(error.message || "Failed to replace card via Edge Function");
+    if (error) {
+      let msg = error.message || "Failed to replace card";
+      try { const b = await (error as any).context?.json?.(); msg = b?.error || b?.detail || msg; } catch { /* ignore */ }
+      throw new Error(msg);
+    }
     if (!data?.card_assignment_id) throw new Error(data?.error || "Card replacement failed");
 
     return {

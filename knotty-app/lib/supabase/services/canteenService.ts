@@ -95,6 +95,25 @@ export const supabaseCanteenService = {
     return data?.[0] ?? null;
   },
 
+  async lookupCardHolderByNfcUid(schoolId: string, nfcUid: string): Promise<CardHolderResult | null> {
+    const client = getSafeBrowserClient();
+    if (!client) throw new Error("Supabase is not configured");
+    const { data, error } = await client.functions.invoke("lookup-card", {
+      body: { school_id: schoolId, nfc_uid: nfcUid, identifier_kind: "nfc_uid" },
+    });
+    if (error) {
+      let msg = error.message;
+      try {
+        const body = await (error as any).context?.json?.();
+        msg = body?.error || body?.detail || msg;
+      } catch { /* ignore */ }
+      throw new Error(msg);
+    }
+    if (data?.error === "card_not_found") return null;
+    if (data?.error) throw new Error(data.error);
+    return data as CardHolderResult ?? null;
+  },
+
   async purchase(schoolId: string, cardAssignmentId: string, items: {
     product_id: string; name: string; price: number; qty: number;
   }[], total: number): Promise<{ transaction_id: string; new_balance: number }> {

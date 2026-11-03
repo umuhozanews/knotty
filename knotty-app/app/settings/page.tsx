@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useState } from "react";
 import {
   Plus, Trash2, Loader2, Users, Layers, BookOpen, ToggleLeft, ToggleRight,
@@ -43,17 +43,17 @@ function CreateLevelModal({
     e.preventDefault();
     setLoading(true);
     try {
-      if (isSupabaseConfigured() && schoolId) {
-        const code = form.name.trim().toUpperCase().replace(/\s+/g, "_").slice(0, 10) || "LVL";
-        await supabaseAcademicService.createEducationLevel({
-          schoolId,
-          levelCode: code,
-          name: form.name.trim(),
-          stage: "lower_secondary",
-          displayOrder: 1,
-          framework: "REB CBC",
-        });
-      }
+      if (!isSupabaseConfigured() || !schoolId) throw new Error("Not connected to Supabase");
+      const base = form.name.trim().toUpperCase().replace(/\s+/g, "_").slice(0, 7) || "LVL";
+      const code = base + "_" + Date.now().toString(36).slice(-3).toUpperCase();
+      await supabaseAcademicService.createEducationLevel({
+        schoolId,
+        levelCode: code,
+        name: form.name.trim(),
+        stage: "lower_secondary",
+        displayOrder: 1,
+        framework: "REB CBC",
+      });
       onSuccess();
       onClose();
     } catch (err) {
@@ -107,17 +107,19 @@ function CreateClassModal({
     e.preventDefault();
     setLoading(true);
     try {
-      if (isSupabaseConfigured() && schoolId && academicYears.length > 0) {
-        const activeYear = academicYears.find((y) => y.status === "active") || academicYears[0];
-        const code = form.name.trim().toUpperCase().replace(/\s+/g, "_").slice(0, 10) || "CLS";
-        await supabaseAcademicService.createClassSection({
-          schoolId,
-          academicYearId: activeYear.id,
-          educationLevelId: form.level_id,
-          sectionCode: code,
-          name: form.name.trim(),
-        });
-      }
+      if (!isSupabaseConfigured() || !schoolId) throw new Error("Not connected to Supabase");
+      if (academicYears.length === 0) throw new Error("You must create and activate an Academic Year first (Settings → Academic Years).");
+      if (!form.level_id) throw new Error("You must create a Level first (Settings → Levels).");
+      const activeYear = academicYears.find((y) => y.status === "active") || academicYears[0];
+      const base = form.name.trim().toUpperCase().replace(/\s+/g, "_").slice(0, 7) || "CLS";
+      const code = base + "_" + Date.now().toString(36).slice(-3).toUpperCase();
+      await supabaseAcademicService.createClassSection({
+        schoolId,
+        academicYearId: activeYear.id,
+        educationLevelId: form.level_id,
+        sectionCode: code,
+        name: form.name.trim(),
+      });
       onSuccess();
       onClose();
     } catch (err) {
@@ -158,18 +160,54 @@ function CreateClassModal({
 }
 
 // ─── Modal: Create Staff ───────────────────────────────────────────────────────
-function CreateStaffModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+function CreateStaffModal({ schoolId, actorId, onClose, onSuccess, show }: {
+  schoolId: string;
+  actorId: string;
+  onClose: () => void;
+  onSuccess: () => void;
+  show: (msg: string, type?: "success" | "error" | "info") => void;
+}) {
   const [form, setForm] = useState({ email: "", first_name: "", last_name: "", role: "TEACHER", password: "" });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    alert("New staff accounts must be created by a super admin via the Workers page. Contact your school administrator.");
-    onClose();
+    setError("");
+    if (!form.first_name.trim() || !form.last_name.trim()) { setError("First and last name are required."); return; }
+    if (!form.email.trim()) { setError("Email is required."); return; }
+    if (!form.password.trim()) { setError("Please set a temporary password."); return; }
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/staff/provision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          school_id: schoolId,
+          legal_name: `${form.first_name.trim()} ${form.last_name.trim()}`,
+          email: form.email.trim(),
+          role_key: form.role,
+          password: form.password,
+          actor_auth_user_id: actorId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to create staff account");
+      show(`Staff account created for ${form.first_name} ${form.last_name}`, "success");
+      onSuccess();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to create staff account");
+    } finally {
+      setLoading(false);
+    }
   }
+
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
         <h3 className="font-bold text-gray-800 mb-4">Add Staff Member</h3>
+        {error && <p className="text-xs text-red-600 bg-red-50 rounded-xl px-3 py-2 mb-3">{error}</p>}
         <form onSubmit={submit} className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
             <div>
@@ -199,12 +237,12 @@ function CreateStaffModal({ onClose, onSuccess }: { onClose: () => void; onSucce
           </div>
           <div>
             <label className="text-xs text-gray-500 mb-1 block">Temporary Password</label>
-            <input required type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500" />
+            <input required type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Min 8 characters" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500" />
           </div>
           <div className="flex gap-3 pt-1">
             <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600">Cancel</button>
-            <button type="submit" disabled={loading} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-sm text-white font-medium disabled:opacity-60">
-              {loading ? <Loader2 size={14} className="animate-spin mx-auto" /> : "Create Staff"}
+            <button type="submit" disabled={loading} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-sm text-white font-medium disabled:opacity-60 flex items-center justify-center gap-1.5">
+              {loading ? <><Loader2 size={14} className="animate-spin" /> Creating…</> : "Create Staff"}
             </button>
           </div>
         </form>
@@ -293,7 +331,7 @@ function CreateAcademicYearModal({
           </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600">Cancel</button>
-            <button type="submit" disabled={loading} className="flex-1 py-2.5 rounded-xl bg-[#FF7A22] text-sm text-white font-bold disabled:opacity-60">
+            <button type="submit" disabled={loading} className="flex-1 py-2.5 rounded-xl bg-[#16A34A] text-sm text-white font-bold disabled:opacity-60">
               {loading ? <Loader2 size={14} className="animate-spin mx-auto" /> : "Create Year"}
             </button>
           </div>
@@ -438,7 +476,7 @@ function CreateAcademicTermModal({
           </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600">Cancel</button>
-            <button type="submit" disabled={loading} className="flex-1 py-2.5 rounded-xl bg-[#FF7A22] text-sm text-white font-bold disabled:opacity-60">
+            <button type="submit" disabled={loading} className="flex-1 py-2.5 rounded-xl bg-[#16A34A] text-sm text-white font-bold disabled:opacity-60">
               {loading ? <Loader2 size={14} className="animate-spin mx-auto" /> : "Create Term"}
             </button>
           </div>
@@ -603,7 +641,7 @@ export default function SettingsPage() {
         return idx === -1 ? { first: (name ?? "").trim(), last: "" } : { first: (name ?? "").trim().slice(0, idx), last: (name ?? "").trim().slice(idx + 1) };
       };
 
-      const [lvlRows, clsRows, staffRows, years, terms, settings] = await Promise.all([
+      const results = await Promise.allSettled([
         supabaseAcademicService.listEducationLevels(targetSchoolId),
         supabaseAcademicService.listClassSections(targetSchoolId),
         isManagementRole(user?.role) ? supabaseStaffService.listStaffMembers(targetSchoolId) : Promise.resolve([]),
@@ -611,6 +649,15 @@ export default function SettingsPage() {
         supabaseSchoolService.listAcademicTerms(targetSchoolId),
         supabaseSchoolService.getSchoolSettings(targetSchoolId),
       ]);
+      const getValue = <T,>(r: PromiseSettledResult<T>, fallback: T): T =>
+        r.status === "fulfilled" ? r.value : fallback;
+      const [lvlResult, clsResult, staffResult, yearsResult, termsResult, settingsResult] = results;
+      const lvlRows = getValue(lvlResult as PromiseSettledResult<Awaited<ReturnType<typeof supabaseAcademicService.listEducationLevels>>>, []);
+      const clsRows = getValue(clsResult as PromiseSettledResult<Awaited<ReturnType<typeof supabaseAcademicService.listClassSections>>>, []);
+      const staffRows = getValue(staffResult as PromiseSettledResult<any[]>, []);
+      const years = getValue(yearsResult as PromiseSettledResult<Awaited<ReturnType<typeof supabaseSchoolService.listAcademicYears>>>, []);
+      const terms = getValue(termsResult as PromiseSettledResult<Awaited<ReturnType<typeof supabaseSchoolService.listAcademicTerms>>>, []);
+      const settings = getValue(settingsResult as PromiseSettledResult<Awaited<ReturnType<typeof supabaseSchoolService.getSchoolSettings>>>, null);
 
       const mappedLevels: LocalLevel[] = lvlRows.map((l) => ({ ...l }));
       setLevels(mappedLevels);
@@ -761,32 +808,40 @@ export default function SettingsPage() {
   }
 
   async function deleteLevel(id: string) {
-    if (!confirm("Delete this level? All classes inside will be deleted.")) return;
+    if (!confirm("Delete this level? All classes and student placements inside will be removed.")) return;
     const schoolId = activeSchool?.id || user?.school_id;
     setDeleting(id);
     try {
       const client = getSafeBrowserClient();
       if (!client || !schoolId) throw new Error("Not connected");
-      const { error } = await client.from("education_levels").delete().eq("id", id).eq("school_id", schoolId);
+      const { error } = await client.rpc("delete_education_level", {
+        p_school_id: schoolId,
+        p_level_id: id,
+      });
       if (error) throw new Error(error.message);
+      show("Level deleted", "success");
       await loadAll();
     }
-    catch (err) { alert(err instanceof Error ? err.message : "Error"); }
+    catch (err) { show(err instanceof Error ? err.message : "Error deleting level", "error"); }
     finally { setDeleting(null); }
   }
 
   async function deleteClass(id: string) {
-    if (!confirm("Delete this class?")) return;
+    if (!confirm("Delete this class? Student placements and teacher assignments will be removed.")) return;
     const schoolId = activeSchool?.id || user?.school_id;
     setDeleting(id);
     try {
       const client = getSafeBrowserClient();
       if (!client || !schoolId) throw new Error("Not connected");
-      const { error } = await client.from("class_sections").delete().eq("id", id).eq("school_id", schoolId);
+      const { error } = await client.rpc("delete_class_section", {
+        p_school_id: schoolId,
+        p_class_section_id: id,
+      });
       if (error) throw new Error(error.message);
+      show("Class deleted", "success");
       await loadAll();
     }
-    catch (err) { alert(err instanceof Error ? err.message : "Error"); }
+    catch (err) { show(err instanceof Error ? err.message : "Error deleting class", "error"); }
     finally { setDeleting(null); }
   }
 
@@ -827,7 +882,7 @@ export default function SettingsPage() {
     <DashboardShell>
       {modal === "level" && <CreateLevelModal schoolId={targetSchoolId} onClose={() => setModal(null)} onSuccess={loadAll} />}
       {modal === "class" && <CreateClassModal schoolId={targetSchoolId} academicYears={academicYears} levels={levels} onClose={() => setModal(null)} onSuccess={loadAll} />}
-      {modal === "staff" && <CreateStaffModal onClose={() => setModal(null)} onSuccess={loadAll} />}
+      {modal === "staff" && <CreateStaffModal schoolId={targetSchoolId} actorId={user?.id || ""} onClose={() => setModal(null)} onSuccess={loadAll} show={show} />}
       {modal === "year" && <CreateAcademicYearModal schoolId={targetSchoolId} onClose={() => setModal(null)} onSuccess={loadAll} />}
       {modal === "term" && <CreateAcademicTermModal schoolId={targetSchoolId} academicYears={academicYears} onClose={() => setModal(null)} onSuccess={loadAll} />}
       {assignTeacher && (
@@ -855,7 +910,7 @@ export default function SettingsPage() {
                 else if (tab === "years") setModal("year");
                 else if (tab === "terms") setModal("term");
               }}
-              className="flex items-center gap-2 bg-[#FF7A22] text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-[#e0681a] transition self-start sm:self-auto"
+              className="flex items-center gap-2 bg-[#16A34A] text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-[#e0681a] transition self-start sm:self-auto"
             >
               <Plus size={16} />
               {tab === "levels"
@@ -879,7 +934,7 @@ export default function SettingsPage() {
               onClick={() => setTab(key)}
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
                 tab === key
-                  ? "bg-[#FFF3EC] text-[#FF7A22] dark:bg-orange-950/40 dark:text-orange-300"
+                  ? "bg-[#DCFCE7] text-[#16A34A] dark:bg-orange-950/40 dark:text-orange-300"
                   : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
               }`}
             >
@@ -890,7 +945,7 @@ export default function SettingsPage() {
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-16"><Loader2 className="animate-spin text-[#FF7A22]" size={28} /></div>
+          <div className="flex justify-center py-16"><Loader2 className="animate-spin text-[#16A34A]" size={28} /></div>
         ) : (
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm overflow-hidden border border-gray-100 dark:border-gray-800">
             {/* 1. SCHOOL PROFILE & SETTINGS */}
@@ -908,7 +963,7 @@ export default function SettingsPage() {
                       <input
                         value={settingsForm.timezone}
                         onChange={(e) => setSettingsForm({ ...settingsForm, timezone: e.target.value })}
-                        className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm outline-none focus:border-[#FF7A22] dark:bg-gray-800"
+                        className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm outline-none focus:border-[#16A34A] dark:bg-gray-800"
                         placeholder="e.g. Africa/Kigali"
                       />
                     </div>
@@ -917,7 +972,7 @@ export default function SettingsPage() {
                       <input
                         value={settingsForm.locale}
                         onChange={(e) => setSettingsForm({ ...settingsForm, locale: e.target.value })}
-                        className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm outline-none focus:border-[#FF7A22] dark:bg-gray-800"
+                        className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm outline-none focus:border-[#16A34A] dark:bg-gray-800"
                         placeholder="e.g. en-RW or rw-RW"
                       />
                     </div>
@@ -927,7 +982,7 @@ export default function SettingsPage() {
                         maxLength={3}
                         value={settingsForm.currency}
                         onChange={(e) => setSettingsForm({ ...settingsForm, currency: e.target.value.toUpperCase() })}
-                        className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm font-mono outline-none focus:border-[#FF7A22] dark:bg-gray-800"
+                        className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm font-mono outline-none focus:border-[#16A34A] dark:bg-gray-800"
                         placeholder="RWF"
                       />
                     </div>
@@ -936,7 +991,7 @@ export default function SettingsPage() {
                       <input
                         value={settingsForm.framework}
                         onChange={(e) => setSettingsForm({ ...settingsForm, framework: e.target.value })}
-                        className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm outline-none focus:border-[#FF7A22] dark:bg-gray-800"
+                        className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm outline-none focus:border-[#16A34A] dark:bg-gray-800"
                         placeholder="e.g. REB CBC"
                       />
                     </div>
@@ -946,7 +1001,7 @@ export default function SettingsPage() {
                         type="time"
                         value={settingsForm.dayStart}
                         onChange={(e) => setSettingsForm({ ...settingsForm, dayStart: e.target.value })}
-                        className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm outline-none focus:border-[#FF7A22] dark:bg-gray-800"
+                        className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm outline-none focus:border-[#16A34A] dark:bg-gray-800"
                       />
                     </div>
                     <div>
@@ -966,7 +1021,7 @@ export default function SettingsPage() {
                     <button
                       type="submit"
                       disabled={savingSettings}
-                      className="px-5 py-2.5 rounded-xl bg-[#FF7A22] text-white text-xs font-bold hover:bg-[#e0681a] transition disabled:opacity-50 flex items-center gap-2"
+                      className="px-5 py-2.5 rounded-xl bg-[#16A34A] text-white text-xs font-bold hover:bg-[#e0681a] transition disabled:opacity-50 flex items-center gap-2"
                     >
                       {savingSettings ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
                       Save Institutional Settings

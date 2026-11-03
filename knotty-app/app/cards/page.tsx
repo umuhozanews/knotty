@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useState, useCallback } from "react";
 import {
   Loader2, Plus, Search, CreditCard, Wifi, WifiOff, Lock, Unlock,
@@ -6,19 +6,17 @@ import {
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import type { Student } from "@/lib/api";
-import { supabaseCardService, supabaseStudentService } from "@/lib/supabase/services";
+import { supabaseCardService, supabaseStudentService, supabaseStaffService } from "@/lib/supabase/services";
 import { getSafeBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
 
 type CardItem = {
-  id: string; // card_assignment_id
+  id: string;
   card_number: string;
   wallet_balance: number;
   is_frozen: boolean;
-  student: {
-    user: { first_name: string; last_name: string };
-    level: { name: string } | null;
-    class: { name: string } | null;
-  };
+  holder_kind: "student" | "staff";
+  holder_name: string;
+  holder_subtitle: string;
 };
 import { useNFC } from "@/hooks/useNFC";
 import { useToast } from "@/context/ToastContext";
@@ -52,7 +50,7 @@ function LinkNFCModal({ card, onClose, onSuccess }: { card: CardItem; onClose: (
         <h3 className="font-bold text-gray-800 mb-1">Link NFC Tag</h3>
         <p className="text-xs text-gray-400 mb-4">
           Card: <span className="font-mono">{card.card_number}</span><br />
-          Student: {card.student.user.first_name} {card.student.user.last_name}
+          Holder: {card.holder_name}
         </p>
 
         <div className="space-y-3">
@@ -146,68 +144,103 @@ function IssueCardModal({
   onSuccess: (msg: string) => void;
 }) {
   const { scan, isSupported } = useNFC();
-  const [search, setSearch] = useState("");
-  const [results, setResults] = useState<Student[]>([]);
-  const [selected, setSelected] = useState<Student | null>(null);
+  const [holderKind, setHolderKind] = useState<"student" | "staff">("student");
+
+  // Student state
+  const [studentSearch, setStudentSearch] = useState("");
+  const [studentResults, setStudentResults] = useState<Student[]>([]);
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [studentSearching, setStudentSearching] = useState(false);
+
+  // Staff state
+  type StaffItem = { staff_record_id: string; legal_name: string; job_title: string; department: string | null; employment_status: string };
+  const [staffAll, setStaffAll] = useState<StaffItem[]>([]);
+  const [staffSearch, setStaffSearch] = useState("");
+  const [selectedStaff, setSelectedStaff] = useState<StaffItem | null>(null);
+  const [staffLoading, setStaffLoading] = useState(false);
+  const [assignedStaffIds, setAssignedStaffIds] = useState<Set<string>>(new Set());
+
   const [nfcUid, setNfcUid] = useState("");
   const [initialBalance, setInitialBalance] = useState("5000");
   const [loading, setLoading] = useState(false);
-  const [searching, setSearching] = useState(false);
 
+  // Load students on search change
   useEffect(() => {
-    setSearching(true);
-    supabaseStudentService.listSchoolStudents(schoolId)
-      .then((r) => {
-        const uncarded = r.filter((s) => !(s as any).card);
-        setResults(uncarded);
-      })
-      .catch(() => {})
-      .finally(() => setSearching(false));
-  }, [schoolId]);
-
-  useEffect(() => {
-    if (!search.trim()) return;
-    const t = setTimeout(async () => {
-      setSearching(true);
-      try {
-        const r = await supabaseStudentService.listSchoolStudents(schoolId, null, search.trim());
-        setResults(r.filter((s) => !(s as any).card));
-      } catch { /* ignore */ }
-      finally { setSearching(false); }
-    }, 250);
+    if (holderKind !== "student") return;
+    setStudentSearching(true);
+    const t = setTimeout(() => {
+      supabaseStudentService.listSchoolStudents(schoolId, null, studentSearch.trim() || null)
+        .then((r) => setStudentResults(r.filter((s) => !s.card)))
+        .catch(() => {})
+        .finally(() => setStudentSearching(false));
+    }, studentSearch.trim() ? 250 : 0);
     return () => clearTimeout(t);
-  }, [search, schoolId]);
+  }, [schoolId, studentSearch, holderKind]);
+
+  // Load staff list when switching to staff tab
+  useEffect(() => {
+    if (holderKind !== "staff") return;
+    setStaffLoading(true);
+    const client = getSafeBrowserClient();
+    Promise.all([
+      supabaseStaffService.listStaffMembers(schoolId),
+      client
+        ? client.from("card_assignments")
+            .select("staff_record_id, status")
+            .eq("school_id", schoolId)
+            .eq("holder_kind", "staff")
+        : Promise.resolve({ data: [] as { staff_record_id: string; status: string }[] }),
+    ]).then(([members, cardsRes]) => {
+      const cards = (cardsRes as any)?.data ?? [];
+      const ids = new Set<string>(
+        (cards as { staff_record_id: string; status: string }[])
+          .filter((c) => c.status !== "revoked" && c.status !== "replaced")
+          .map((c) => c.staff_record_id)
+      );
+      setAssignedStaffIds(ids);
+      setStaffAll(members as StaffItem[]);
+    }).catch(() => {})
+    .finally(() => setStaffLoading(false));
+  }, [schoolId, holderKind]);
+
+  const filteredStaff = staffAll.filter(
+    (s) => !assignedStaffIds.has(s.staff_record_id) &&
+      (!staffSearch.trim() || s.legal_name.toLowerCase().includes(staffSearch.toLowerCase()))
+  );
 
   async function handleScanNFC() {
     const res = await scan();
-    if (res?.value) {
-      setNfcUid(res.value.toUpperCase());
-    }
+    if (res?.value) setNfcUid(res.value.toUpperCase());
   }
 
   async function issue() {
-    if (!selected) return;
+    if (holderKind === "student" && !selectedStudent) return;
+    if (holderKind === "staff" && !selectedStaff) return;
     setLoading(true);
     try {
-      const targetUid = nfcUid.trim() ? nfcUid.trim().toUpperCase() : `04${Array.from({ length: 6 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0').toUpperCase()).join("")}`;
+      const targetUid = nfcUid.trim()
+        ? nfcUid.trim().toUpperCase()
+        : `04${Array.from({ length: 6 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, "0").toUpperCase()).join("")}`;
 
-      if (isSupabaseConfigured()) {
-        try {
-          await supabaseCardService.issueCard({
-            schoolId,
-            holderKind: "student",
-            studentId: selected.id,
-            identifierKind: "nfc_uid",
-            identifier: targetUid,
-          });
-          onSuccess(`Card issued securely via Edge Function for ${selected.user.first_name} ${selected.user.last_name}`);
-          onClose();
-          return;
-        } catch (supaErr: any) {
-          throw supaErr;
-        }
+      if (holderKind === "student" && selectedStudent) {
+        await supabaseCardService.issueCard({
+          schoolId,
+          holderKind: "student",
+          studentId: selectedStudent.id,
+          identifierKind: "nfc_uid",
+          identifier: targetUid,
+        });
+        onSuccess(`Card issued for ${selectedStudent.user.first_name} ${selectedStudent.user.last_name}`);
+      } else if (holderKind === "staff" && selectedStaff) {
+        await supabaseCardService.issueCard({
+          schoolId,
+          holderKind: "staff",
+          staffRecordId: selectedStaff.staff_record_id,
+          identifierKind: "nfc_uid",
+          identifier: targetUid,
+        });
+        onSuccess(`Card issued for ${selectedStaff.legal_name}`);
       }
-      onSuccess(`Card granted successfully to ${selected.user.first_name} ${selected.user.last_name}`);
       onClose();
     } catch (err: any) {
       alert(err instanceof Error ? err.message : "Error issuing card");
@@ -216,9 +249,11 @@ function IssueCardModal({
     }
   }
 
+  const canIssue = holderKind === "student" ? !!selectedStudent : !!selectedStaff;
+
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-gray-100 animate-in fade-in zoom-in-95">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-gray-100">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="font-bold text-gray-800 text-lg">Grant & Issue IshuriHUB Card</h3>
@@ -228,55 +263,109 @@ function IssueCardModal({
         </div>
 
         <div className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Select Student</label>
-            <div className="relative">
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by student name or code…"
-                className="w-full border border-gray-200 rounded-xl px-3.5 py-2 text-sm outline-none focus:border-blue-500"
-              />
-              {searching && <Loader2 size={14} className="animate-spin absolute right-3 top-3 text-gray-400" />}
-            </div>
-
-            {results.length > 0 && !selected && (
-              <div className="border border-gray-100 rounded-xl shadow-lg mt-1 max-h-48 overflow-y-auto divide-y divide-gray-50 bg-white z-10 relative">
-                {results.map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => {
-                      setSelected(s);
-                      setSearch(`${s.user.first_name} ${s.user.last_name}`);
-                    }}
-                    className="w-full text-left px-3.5 py-2 text-sm hover:bg-blue-50 transition flex items-center justify-between"
-                  >
-                    <div>
-                      <p className="font-medium text-gray-800">{s.user.first_name} {s.user.last_name}</p>
-                      <p className="text-xs text-gray-400">{s.level?.name || ""} {s.class?.name || ""}</p>
-                    </div>
-                    <span className="font-mono text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600">{s.student_code}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+          {/* Student / Staff toggle */}
+          <div className="flex gap-1 p-1 bg-gray-100 rounded-xl">
+            <button
+              type="button"
+              onClick={() => { setHolderKind("student"); setSelectedStudent(null); setStudentSearch(""); }}
+              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition ${holderKind === "student" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}
+            >
+              Student
+            </button>
+            <button
+              type="button"
+              onClick={() => { setHolderKind("staff"); setSelectedStaff(null); setStaffSearch(""); }}
+              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition ${holderKind === "staff" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}
+            >
+              Staff
+            </button>
           </div>
 
-          {selected && (
-            <div className="p-3 bg-blue-50/60 border border-blue-200/60 rounded-xl flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold text-blue-900">Student Target:</p>
-                <p className="text-sm font-bold text-blue-700">{selected.user.first_name} {selected.user.last_name}</p>
-                <p className="text-xs text-blue-600/80 font-mono">{selected.student_code} · {selected.class?.name || "Class section"}</p>
+          {/* Student search */}
+          {holderKind === "student" && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Select Student</label>
+              <div className="relative">
+                <input
+                  value={studentSearch}
+                  onChange={(e) => setStudentSearch(e.target.value)}
+                  placeholder="Search by student name or code…"
+                  className="w-full border border-gray-200 rounded-xl px-3.5 py-2 text-sm outline-none focus:border-blue-500"
+                />
+                {studentSearching && <Loader2 size={14} className="animate-spin absolute right-3 top-3 text-gray-400" />}
               </div>
-              <button
-                type="button"
-                onClick={() => { setSelected(null); setSearch(""); }}
-                className="text-xs text-blue-600 hover:underline"
-              >
-                Change
-              </button>
+              {studentResults.length > 0 && !selectedStudent && (
+                <div className="border border-gray-100 rounded-xl shadow-lg mt-1 max-h-48 overflow-y-auto divide-y divide-gray-50 bg-white z-10 relative">
+                  {studentResults.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => { setSelectedStudent(s); setStudentSearch(`${s.user.first_name} ${s.user.last_name}`); }}
+                      className="w-full text-left px-3.5 py-2 text-sm hover:bg-blue-50 transition flex items-center justify-between"
+                    >
+                      <div>
+                        <p className="font-medium text-gray-800">{s.user.first_name} {s.user.last_name}</p>
+                        <p className="text-xs text-gray-400">{s.level?.name || ""} {s.class?.name || ""}</p>
+                      </div>
+                      <span className="font-mono text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600">{s.student_code}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {selectedStudent && (
+                <div className="p-3 bg-blue-50/60 border border-blue-200/60 rounded-xl flex items-center justify-between mt-1">
+                  <div>
+                    <p className="text-xs font-semibold text-blue-900">Student Target:</p>
+                    <p className="text-sm font-bold text-blue-700">{selectedStudent.user.first_name} {selectedStudent.user.last_name}</p>
+                    <p className="text-xs text-blue-600/80 font-mono">{selectedStudent.student_code} · {selectedStudent.class?.name || "Class section"}</p>
+                  </div>
+                  <button type="button" onClick={() => { setSelectedStudent(null); setStudentSearch(""); }} className="text-xs text-blue-600 hover:underline">Change</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Staff search */}
+          {holderKind === "staff" && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Select Staff Member</label>
+              <div className="relative">
+                <input
+                  value={staffSearch}
+                  onChange={(e) => setStaffSearch(e.target.value)}
+                  placeholder="Search by name…"
+                  className="w-full border border-gray-200 rounded-xl px-3.5 py-2 text-sm outline-none focus:border-blue-500"
+                />
+                {staffLoading && <Loader2 size={14} className="animate-spin absolute right-3 top-3 text-gray-400" />}
+              </div>
+              {!selectedStaff && filteredStaff.length > 0 && (
+                <div className="border border-gray-100 rounded-xl shadow-lg mt-1 max-h-48 overflow-y-auto divide-y divide-gray-50 bg-white z-10 relative">
+                  {filteredStaff.map((s) => (
+                    <button
+                      key={s.staff_record_id}
+                      type="button"
+                      onClick={() => { setSelectedStaff(s); setStaffSearch(s.legal_name); }}
+                      className="w-full text-left px-3.5 py-2 text-sm hover:bg-blue-50 transition"
+                    >
+                      <p className="font-medium text-gray-800">{s.legal_name}</p>
+                      <p className="text-xs text-gray-400">{[s.job_title, s.department].filter(Boolean).join(" · ")}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {selectedStaff && (
+                <div className="p-3 bg-blue-50/60 border border-blue-200/60 rounded-xl flex items-center justify-between mt-1">
+                  <div>
+                    <p className="text-xs font-semibold text-blue-900">Staff Target:</p>
+                    <p className="text-sm font-bold text-blue-700">{selectedStaff.legal_name}</p>
+                    <p className="text-xs text-blue-600/80">{[selectedStaff.job_title, selectedStaff.department].filter(Boolean).join(" · ")}</p>
+                  </div>
+                  <button type="button" onClick={() => { setSelectedStaff(null); setStaffSearch(""); }} className="text-xs text-blue-600 hover:underline">Change</button>
+                </div>
+              )}
+              {!staffLoading && !selectedStaff && staffAll.length > 0 && filteredStaff.length === 0 && (
+                <p className="text-xs text-gray-400 mt-1 px-1">All active staff already have cards</p>
+              )}
             </div>
           )}
 
@@ -285,11 +374,7 @@ function IssueCardModal({
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold text-gray-700">Physical NFC Hardware UID</label>
               {isSupported && (
-                <button
-                  type="button"
-                  onClick={handleScanNFC}
-                  className="text-xs text-blue-600 hover:underline flex items-center gap-1"
-                >
+                <button type="button" onClick={handleScanNFC} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
                   <Wifi size={12} /> Scan Tag
                 </button>
               )}
@@ -304,7 +389,7 @@ function IssueCardModal({
               <button
                 type="button"
                 onClick={() => {
-                  const fake = Array.from({ length: 7 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0').toUpperCase()).join("");
+                  const fake = Array.from({ length: 7 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, "0").toUpperCase()).join("");
                   setNfcUid(fake);
                 }}
                 className="px-2.5 py-1.5 border border-dashed border-blue-400 text-blue-600 hover:bg-blue-50 rounded-xl text-xs font-medium"
@@ -314,29 +399,27 @@ function IssueCardModal({
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Initial Canteen Balance (RWF)</label>
-            <input
-              type="number"
-              value={initialBalance}
-              onChange={(e) => setInitialBalance(e.target.value)}
-              placeholder="e.g. 5000"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono outline-none focus:border-blue-500"
-            />
-          </div>
+          {holderKind === "student" && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Initial Canteen Balance (RWF)</label>
+              <input
+                type="number"
+                value={initialBalance}
+                onChange={(e) => setInitialBalance(e.target.value)}
+                placeholder="e.g. 5000"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono outline-none focus:border-blue-500"
+              />
+            </div>
+          )}
 
           <div className="flex gap-3 pt-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition"
-            >
+            <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
               Cancel
             </button>
             <button
               type="button"
               onClick={issue}
-              disabled={loading || !selected}
+              disabled={loading || !canIssue}
               className="flex-1 py-2.5 rounded-xl bg-blue-600 text-sm text-white font-semibold hover:bg-blue-700 disabled:opacity-50 transition flex items-center justify-center gap-2 shadow-sm"
             >
               {loading ? <Loader2 size={15} className="animate-spin" /> : <CreditCard size={15} />}
@@ -623,13 +706,20 @@ export default function CardsPage() {
     try {
       const client = getSafeBrowserClient();
       if (!client) return;
-      const { data: rows } = await client.rpc("list_school_students", {
-        p_school_id: targetSchoolId,
-        p_search: query || null,
-      });
-      const studentRows = (rows as any[]) ?? [];
-      const cardsOnly = studentRows.filter((r) => r.card_assignment_id);
-      const cardIds = cardsOnly.map((r: any) => r.card_assignment_id);
+
+      // Load student cards, staff card assignments, and staff names in parallel
+      const [studentRes, staffCardRes, staffMembersRes] = await Promise.all([
+        client.rpc("list_school_students", { p_school_id: targetSchoolId, p_search: query || null }),
+        client.from("card_assignments")
+          .select("id, card_number, status, staff_record_id, wallet_balance")
+          .eq("school_id", targetSchoolId)
+          .eq("holder_kind", "staff"),
+        supabaseStaffService.listStaffMembers(targetSchoolId),
+      ]);
+
+      // ── Student cards ──────────────────────────────────────────────
+      const studentRows = ((studentRes.data as any[]) ?? []).filter((r) => r.card_assignment_id);
+      const cardIds = studentRows.map((r: any) => r.card_assignment_id as string);
       let walletMap: Record<string, number> = {};
       if (cardIds.length > 0) {
         const { data: wallets } = await client
@@ -638,26 +728,42 @@ export default function CardsPage() {
           .in("id", cardIds);
         (wallets || []).forEach((w: any) => { walletMap[w.id] = w.wallet_balance ?? 0; });
       }
-      const nameParts = (name: string) => {
-        const idx = name.trim().indexOf(" ");
-        return idx === -1 ? { first_name: name.trim(), last_name: "" } : { first_name: name.trim().slice(0, idx), last_name: name.trim().slice(idx + 1) };
-      };
-      const mapped: CardItem[] = cardsOnly.map((r: any) => {
-        const { first_name, last_name } = nameParts(r.legal_name ?? "");
-        return {
-          id: r.card_assignment_id,
-          card_number: r.card_number,
-          wallet_balance: walletMap[r.card_assignment_id] ?? 0,
-          is_frozen: r.card_status === "suspended",
-          student: {
-            user: { first_name, last_name },
-            level: r.education_level_name ? { name: r.education_level_name } : null,
-            class: r.class_section_name ? { name: r.class_section_name } : null,
-          },
-        };
-      });
-      setData(mapped);
-      setTotal(mapped.length);
+      const studentCardItems: CardItem[] = studentRows.map((r: any) => ({
+        id: r.card_assignment_id,
+        card_number: r.card_number,
+        wallet_balance: walletMap[r.card_assignment_id] ?? 0,
+        is_frozen: r.card_status === "suspended",
+        holder_kind: "student" as const,
+        holder_name: r.legal_name ?? "",
+        holder_subtitle: [r.education_level_name, r.class_section_name].filter(Boolean).join(" · ") || "Student",
+      }));
+
+      // ── Staff cards ───────────────────────────────────────────────
+      const staffMap = new Map(((staffMembersRes as any[]) || []).map((s: any) => [s.staff_record_id, s]));
+      const qLower = query.trim().toLowerCase();
+      const staffCardItems: CardItem[] = ((staffCardRes.data as any[]) ?? [])
+        .filter((c) => c.status !== "revoked" && c.status !== "replaced")
+        .filter((c) => {
+          if (!qLower) return true;
+          const staff: any = staffMap.get(c.staff_record_id);
+          return staff?.legal_name?.toLowerCase().includes(qLower) ?? false;
+        })
+        .map((c) => {
+          const staff: any = staffMap.get(c.staff_record_id);
+          return {
+            id: c.id,
+            card_number: c.card_number,
+            wallet_balance: c.wallet_balance ?? 0,
+            is_frozen: c.status === "suspended",
+            holder_kind: "staff" as const,
+            holder_name: staff?.legal_name ?? "Unknown Staff",
+            holder_subtitle: [staff?.job_title, staff?.department].filter(Boolean).join(" · ") || "Staff",
+          };
+        });
+
+      const allCards = [...studentCardItems, ...staffCardItems];
+      setData(allCards);
+      setTotal(allCards.length);
     } catch { /* ignore */ }
     finally { setLoading(false); }
   }, [query, authLoading, targetSchoolId]);
@@ -672,7 +778,7 @@ export default function CardsPage() {
       const newStatus = card.is_frozen ? "active" : "suspended";
       const reason = card.is_frozen ? "Unfrozen by admin" : "Frozen by admin";
       await supabaseCardService.changeCardStatus(targetSchoolId, card.id, newStatus, reason);
-      toast(`Card ${card.is_frozen ? "unfrozen" : "frozen"} — ${card.student.user.first_name} ${card.student.user.last_name}`, "success");
+      toast(`Card ${card.is_frozen ? "unfrozen" : "frozen"} — ${card.holder_name}`, "success");
     } catch (err) {
       setData((d) => d.map((c) => c.id === card.id ? { ...c, is_frozen: card.is_frozen } : c));
       toast(err instanceof Error ? err.message : "Error", "error");
@@ -731,7 +837,7 @@ export default function CardsPage() {
           </div>
           <button
             onClick={() => setModal("issue")}
-            className="flex items-center gap-2 bg-[#FF7A22] text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-[#e0681a] transition self-start sm:self-auto"
+            className="flex items-center gap-2 bg-[#16A34A] text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-[#e0681a] transition self-start sm:self-auto"
           >
             <Plus size={16} /> Issue Card
           </button>
@@ -749,7 +855,7 @@ export default function CardsPage() {
           </div>
 
           {loading ? (
-            <div className="flex justify-center py-12"><Loader2 className="animate-spin text-[#FF7A22]" size={24} /></div>
+            <div className="flex justify-center py-12"><Loader2 className="animate-spin text-[#16A34A]" size={24} /></div>
           ) : data.length === 0 ? (
             <div className="flex flex-col items-center py-12 text-gray-300">
               <CreditCard size={36} className="mb-2" />
@@ -760,7 +866,7 @@ export default function CardsPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-xs text-gray-400 border-b border-gray-100 dark:border-gray-800">
-                    <th className="text-left pb-3 font-medium">Student</th>
+                    <th className="text-left pb-3 font-medium">Holder</th>
                     <th className="text-left pb-3 font-medium">Card Number</th>
                     <th className="text-left pb-3 font-medium">Balance</th>
                     <th className="text-left pb-3 font-medium">NFC Tag</th>
@@ -772,10 +878,13 @@ export default function CardsPage() {
                   {data.map((card) => (
                     <tr key={card.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition">
                       <td className="py-3">
-                        <p className="font-semibold text-gray-800 dark:text-gray-200">
-                          {card.student.user.first_name} {card.student.user.last_name}
-                        </p>
-                        <p className="text-xs text-gray-400">{card.student.level?.name} {card.student.class?.name}</p>
+                        <p className="font-semibold text-gray-800 dark:text-gray-200">{card.holder_name}</p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${card.holder_kind === "staff" ? "bg-purple-50 text-purple-600" : "bg-blue-50 text-blue-600"}`}>
+                            {card.holder_kind === "staff" ? "Staff" : "Student"}
+                          </span>
+                          <span className="text-xs text-gray-400 truncate">{card.holder_subtitle}</span>
+                        </div>
                       </td>
                       <td className="py-3 font-mono text-xs text-gray-500 dark:text-gray-400">{card.card_number}</td>
                       <td className="py-3">

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -6,7 +6,7 @@ import {
   Briefcase, GraduationCap, Utensils, Shield, Heart,
   BookOpen, Building2, Edit, CheckCircle2, XCircle,
   AlertCircle, RefreshCw, X, Copy, Check, QrCode,
-  ShieldCheck
+  ShieldCheck, Trash2
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import { supabaseStaffService } from "@/lib/supabase/services";
@@ -53,7 +53,7 @@ function WorkerAvatar({ name, size = 9 }: { name: string; size?: number }) {
   return (
     <div
       className={`w-${size} h-${size} rounded-full flex items-center justify-center text-xs font-bold shrink-0 bg-orange-100 text-orange-700`}
-      style={{ background: "#FFF3EC", color: "#FF7A22" }}
+      style={{ background: "#DCFCE7", color: "#16A34A" }}
     >
       {initials}
     </div>
@@ -155,28 +155,54 @@ function WorkerModal({
     e.preventDefault();
     setError("");
 
-    if (!form.first_name.trim() || !form.last_name.trim() || !form.email.trim()) {
-      setError("First name, last name, and email are required.");
+    if (!form.first_name.trim() || !form.last_name.trim()) {
+      setError("First name and last name are required.");
+      return;
+    }
+    if (!existing && !form.email.trim()) {
+      setError("Email is required for new workers.");
       return;
     }
 
     setSaving(true);
     try {
+      const client = getSafeBrowserClient();
+      if (!client) throw new Error("Not connected");
+
       if (existing) {
-        const client = getSafeBrowserClient();
-        if (!client) throw new Error("Not connected");
         const { error } = await client
           .from("staff_records")
-          .update({ primary_role_category: form.role })
+          .update({ job_title: form.job_title, department: form.department })
           .eq("id", existing.id);
         if (error) throw new Error(error.message);
-        show("Worker role updated successfully", "success");
+        show("Worker updated successfully", "success");
         onSuccess();
         onClose();
       } else {
-        setError("New staff accounts must be created by a super admin. Please contact your school administrator.");
-        setSaving(false);
-        return;
+        const schoolId = (window as any).__knottySchoolId as string | undefined;
+        if (!schoolId) throw new Error("School not identified. Please refresh.");
+        const empCode = form.employee_code.trim() ||
+          "STF-" + Date.now().toString(36).toUpperCase().slice(-5);
+        const categories = form.role === "TEACHER" ? ["teaching"] : ["non_teaching"];
+        const { error } = await client.rpc("register_staff", {
+          p_school_id: schoolId,
+          p_employee_number: empCode,
+          p_legal_name: `${form.first_name.trim()} ${form.last_name.trim()}`,
+          p_job_title: form.job_title || form.role,
+          p_department: form.department || "General Staff",
+          p_hired_on: new Date().toISOString().split("T")[0],
+          p_categories: categories,
+          p_qualification: form.role === "TEACHER" ? "B.Ed" : null,
+          p_specialization: null,
+        });
+        if (error) throw new Error(error.message);
+        setCredentials({
+          name: `${form.first_name.trim()} ${form.last_name.trim()}`,
+          email: form.email,
+          password: form.password || "Staff@2024",
+          code: empCode,
+          role: form.role,
+        });
       }
     } catch (err: any) {
       setError(err?.message || "Failed to save worker record");
@@ -197,8 +223,8 @@ function WorkerModal({
     return (
       <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl p-6 text-center max-w-md w-full border border-gray-200">
-          <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: "#FFF3EC" }}>
-            <CheckCircle2 size={24} style={{ color: "#FF7A22" }} />
+          <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: "#DCFCE7" }}>
+            <CheckCircle2 size={24} style={{ color: "#16A34A" }} />
           </div>
           <h3 className="text-lg font-bold text-gray-800 mb-1">
             Worker Registered
@@ -214,7 +240,7 @@ function WorkerModal({
             </div>
             <div className="flex items-center justify-between text-xs">
               <span className="text-gray-400">Role</span>
-              <span className="font-semibold" style={{ color: "#FF7A22" }}>{credentials.role}</span>
+              <span className="font-semibold" style={{ color: "#16A34A" }}>{credentials.role}</span>
             </div>
             <div className="flex items-center justify-between text-xs">
               <span className="text-gray-400">Staff ID</span>
@@ -226,7 +252,7 @@ function WorkerModal({
             </div>
             <div className="flex items-center justify-between text-xs">
               <span className="text-gray-400">Password</span>
-              <span className="font-mono font-bold" style={{ color: "#FF7A22" }}>{credentials.password}</span>
+              <span className="font-mono font-bold" style={{ color: "#16A34A" }}>{credentials.password}</span>
             </div>
           </div>
 
@@ -241,7 +267,7 @@ function WorkerModal({
             <button
               onClick={onClose}
               className="flex-1 py-2 px-3 rounded-xl text-white text-xs font-semibold transition"
-              style={{ background: "#FF7A22" }}
+              style={{ background: "#16A34A" }}
             >
               Done
             </button>
@@ -356,7 +382,7 @@ function WorkerModal({
                     onClick={() => handleRoleChange(rKey)}
                     className={`p-2 rounded-xl border text-center text-xs font-semibold transition ${
                       isSelected
-                        ? "border-[#FF7A22] bg-[#FFF3EC] text-[#FF7A22]"
+                        ? "border-[#16A34A] bg-[#DCFCE7] text-[#16A34A]"
                         : "border-gray-200 hover:border-gray-300 text-gray-700 bg-white"
                     }`}
                   >
@@ -436,7 +462,7 @@ function WorkerModal({
               type="submit"
               disabled={saving}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-xs font-semibold transition disabled:opacity-60"
-              style={{ background: "#FF7A22" }}
+              style={{ background: "#16A34A" }}
             >
               {saving ? <RefreshCw size={13} className="animate-spin" /> : <Check size={13} />}
               <span>{existing ? "Save Changes" : "Create Worker"}</span>
@@ -462,7 +488,7 @@ function StaffBadgeModal({
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl w-full max-w-xs overflow-hidden border border-gray-200 text-center">
         {/* Card Header Top Graphic */}
-        <div className="p-4 text-white relative" style={{ background: "#FF7A22" }}>
+        <div className="p-4 text-white relative" style={{ background: "#16A34A" }}>
           <button
             onClick={onClose}
             className="absolute top-2.5 right-2.5 p-1 rounded-full text-white/80 hover:text-white transition"
@@ -485,7 +511,7 @@ function StaffBadgeModal({
           </div>
 
           <h3 className="text-base font-bold text-gray-800">{worker.full_name}</h3>
-          <p className="text-xs font-semibold mt-0.5" style={{ color: "#FF7A22" }}>{worker.job_title}</p>
+          <p className="text-xs font-semibold mt-0.5" style={{ color: "#16A34A" }}>{worker.job_title}</p>
           <p className="text-[11px] text-gray-400">{worker.department}</p>
 
           <div className="my-3 py-1.5 px-3 rounded-xl bg-gray-50 inline-flex items-center gap-2 border border-gray-100">
@@ -495,13 +521,13 @@ function StaffBadgeModal({
             </span>
           </div>
 
-          <div className="rounded-xl p-2.5 mb-4 flex items-center justify-between border border-[#FFD4B2]" style={{ background: "#FFF3EC" }}>
+          <div className="rounded-xl p-2.5 mb-4 flex items-center justify-between border border-[#BBF7D0]" style={{ background: "#DCFCE7" }}>
             <div className="text-left text-[11px]">
               <p className="font-semibold text-gray-800">NFC Badge Active</p>
               <p className="text-gray-500 text-[10px]">Gate access & POS enabled</p>
             </div>
             <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center border border-gray-100">
-              <QrCode size={16} style={{ color: "#FF7A22" }} />
+              <QrCode size={16} style={{ color: "#16A34A" }} />
             </div>
           </div>
 
@@ -544,6 +570,13 @@ export default function WorkersPage() {
   const [editingWorker, setEditingWorker] = useState<LocalWorkerItem | null>(null);
   const [badgeWorker, setBadgeWorker] = useState<LocalWorkerItem | null>(null);
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Expose schoolId on window so WorkerModal can access it
+  useEffect(() => {
+    const id = activeSchool?.id || user?.school_id;
+    if (id) (window as any).__knottySchoolId = id;
+  }, [activeSchool?.id, user?.school_id]);
 
   // Load Workers from Supabase
   const fetchWorkers = useCallback(async () => {
@@ -567,8 +600,8 @@ export default function WorkersPage() {
           email: r.primary_email ?? "",
           phone: r.primary_phone ?? "",
           role: r.primary_role_category ?? "",
-          department: "",
-          job_title: "",
+          department: r.department ?? "",
+          job_title: r.job_title ?? "",
           employee_code: r.staff_number ?? "",
           is_active: r.employment_status === "active",
           status: r.employment_status ?? "",
@@ -636,6 +669,22 @@ export default function WorkersPage() {
     }
   };
 
+  const handleDelete = async (worker: LocalWorkerItem) => {
+    if (!confirm(`Remove ${worker.full_name} from staff? This will terminate their record.`)) return;
+    const schoolId = activeSchool?.id || user?.school_id;
+    if (!schoolId) return;
+    setDeletingId(worker.id);
+    try {
+      await supabaseStaffService.updateStaffStatus(schoolId, worker.id, "terminated", "Removed by admin");
+      setWorkerList((prev) => prev.filter((w) => w.id !== worker.id));
+      show(`${worker.full_name} removed from staff`, "success");
+    } catch (err: any) {
+      show(err?.message || "Failed to remove worker", "error");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <DashboardShell>
       {/* Add / Edit Modal */}
@@ -670,7 +719,7 @@ export default function WorkersPage() {
                 Workers & Staff
               </h1>
               {activeSchool && (
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-lg border border-[#FFD4B2]" style={{ background: "#FFF3EC", color: "#FF7A22" }}>
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-lg border border-[#BBF7D0]" style={{ background: "#DCFCE7", color: "#16A34A" }}>
                   {activeSchool.name} ({activeSchool.code})
                 </span>
               )}
@@ -693,7 +742,7 @@ export default function WorkersPage() {
               <button
                 disabled
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-gray-800 shadow-xs"
-                style={{ color: "#FF7A22" }}
+                style={{ color: "#16A34A" }}
               >
                 <UserCheck size={13} />
                 <span>Workers</span>
@@ -704,7 +753,7 @@ export default function WorkersPage() {
             <button
               onClick={() => setShowAddModal(true)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-white text-xs font-semibold transition shrink-0"
-              style={{ background: "#FF7A22" }}
+              style={{ background: "#16A34A" }}
             >
               <Plus size={14} />
               <span>Add Worker</span>
@@ -716,8 +765,8 @@ export default function WorkersPage() {
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <div className="bg-gray-50 rounded-2xl p-4">
-              <div className="w-10 h-10 rounded-full flex items-center justify-center mb-1" style={{ background: "#FFF3EC" }}>
-                <Users size={20} style={{ color: "#FF7A22" }} />
+              <div className="w-10 h-10 rounded-full flex items-center justify-center mb-1" style={{ background: "#DCFCE7" }}>
+                <Users size={20} style={{ color: "#16A34A" }} />
               </div>
               <p className="text-xs text-gray-400 mt-2 mb-1">Total Staff</p>
               <div className="text-base font-bold text-gray-800">{stats.total_workers}</div>
@@ -808,7 +857,7 @@ export default function WorkersPage() {
                   ? "text-white"
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               }`}
-              style={selectedRole === "ALL" ? { background: "#FF7A22" } : undefined}
+              style={selectedRole === "ALL" ? { background: "#16A34A" } : undefined}
             >
               All Workers ({stats.total_workers})
             </button>
@@ -824,7 +873,7 @@ export default function WorkersPage() {
                       ? "text-white"
                       : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                   }`}
-                  style={isSel ? { background: "#FF7A22" } : undefined}
+                  style={isSel ? { background: "#16A34A" } : undefined}
                 >
                   {label}
                 </button>
@@ -959,6 +1008,20 @@ export default function WorkersPage() {
                                 <XCircle size={13} className="text-gray-400" />
                               ) : (
                                 <CheckCircle2 size={13} className="text-green-600" />
+                              )}
+                            </button>
+
+                            {/* Delete */}
+                            <button
+                              onClick={() => handleDelete(worker)}
+                              disabled={deletingId === worker.id}
+                              title="Remove from staff"
+                              className="p-1.5 rounded-lg border border-red-100 text-red-400 hover:bg-red-50 transition"
+                            >
+                              {deletingId === worker.id ? (
+                                <RefreshCw size={13} className="animate-spin" />
+                              ) : (
+                                <Trash2 size={13} />
                               )}
                             </button>
                           </div>

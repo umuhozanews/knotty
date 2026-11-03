@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useState, useRef, useCallback } from "react";
 import {
   Plus, Minus, ShoppingCart, CreditCard, Trash2,
@@ -279,7 +279,7 @@ function AddProductModal({ onClose, onCreated }: { onClose: () => void; onCreate
 
         <button onClick={submit} disabled={saving}
           className="w-full py-3 rounded-2xl font-bold text-sm text-white flex items-center justify-center gap-2 disabled:opacity-60 transition shadow-sm"
-          style={{ background: "#FF7A22" }}>
+          style={{ background: "#16A34A" }}>
           {saving ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
           {saving ? "Saving…" : "Add to Menu"}
         </button>
@@ -360,7 +360,7 @@ function RestockModal({
           onClick={submit}
           disabled={saving}
           className="w-full py-2.5 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition"
-          style={{ background: "#FF7A22" }}
+          style={{ background: "#16A34A" }}
         >
           {saving ? <Loader2 size={13} className="animate-spin" /> : <PackagePlus size={14} />}
           {saving ? "Restocking…" : "Add to Stock"}
@@ -665,7 +665,7 @@ export default function CanteenPage() {
                 onClick={() => executePurchase(scannedCard)}
                 disabled={submittingPayment}
                 className="flex-2 py-3 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-1.5 transition shadow-sm"
-                style={{ background: "#FF7A22" }}
+                style={{ background: "#16A34A" }}
               >
                 {submittingPayment ? <Loader2 size={14} className="animate-spin" /> : <UserCheck size={14} />}
                 {submittingPayment ? "Processing..." : `Charge ${total.toLocaleString()} RWF`}
@@ -702,7 +702,7 @@ export default function CanteenPage() {
             <button
               onClick={() => setShowAddProduct(true)}
               className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white"
-              style={{ background: "#FF7A22" }}
+              style={{ background: "#16A34A" }}
             >
               <Plus size={13} /> Add Product
             </button>
@@ -711,7 +711,7 @@ export default function CanteenPage() {
           <button
             onClick={() => setShowCart((v) => !v)}
             className="relative lg:hidden w-10 h-10 rounded-2xl flex items-center justify-center text-white"
-            style={{ background: cartCount > 0 ? "#FF7A22" : "#e5e5e5" }}
+            style={{ background: cartCount > 0 ? "#16A34A" : "#e5e5e5" }}
           >
             <ShoppingCart size={18} style={{ color: cartCount > 0 ? "white" : "#999" }} />
             {cartCount > 0 && (
@@ -748,7 +748,7 @@ export default function CanteenPage() {
                   onClick={() => setActiveCategory(cat)}
                   className="px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition flex-shrink-0"
                   style={activeCategory === cat
-                    ? { background: "#FF7A22", color: "#fff" }
+                    ? { background: "#16A34A", color: "#fff" }
                     : { background: "#fff", color: "#666666" }}
                 >
                   {cat}
@@ -772,7 +772,7 @@ export default function CanteenPage() {
                     <div
                       key={item.id}
                       className="bg-white rounded-2xl p-3 flex flex-col gap-2 relative cursor-pointer transition"
-                      style={{ border: qty > 0 ? "2px solid #FF7A22" : "2px solid transparent" }}
+                      style={{ border: qty > 0 ? "2px solid #16A34A" : "2px solid transparent" }}
                       onClick={() => inc(item.id)}
                     >
                       {/* Delete button (API products only, admin/canteen) */}
@@ -789,7 +789,7 @@ export default function CanteenPage() {
                       {qty > 0 && (
                         <span
                           className="absolute top-2 right-2 w-6 h-6 rounded-full text-white text-xs font-bold flex items-center justify-center z-10"
-                          style={{ background: "#FF7A22" }}
+                          style={{ background: "#16A34A" }}
                         >
                           {qty}
                         </span>
@@ -797,12 +797,12 @@ export default function CanteenPage() {
                       {/* Item image hero */}
                       <div
                         className="w-full aspect-square rounded-xl flex items-center justify-center overflow-hidden relative group"
-                        style={{ background: qty > 0 ? "#FFF3EC" : "#F5F5F5" }}
+                        style={{ background: qty > 0 ? "#DCFCE7" : "#F5F5F5" }}
                       >
                         {failedImgs[item.id] ? (
                           <div className="w-full h-full flex flex-col items-center justify-center p-2 text-center select-none">
-                            <div className="w-10 h-10 rounded-full flex items-center justify-center mb-1" style={{ background: qty > 0 ? "#FFE3D1" : "#EBEBEB" }}>
-                              <Utensils size={18} style={{ color: "#FF7A22" }} />
+                            <div className="w-10 h-10 rounded-full flex items-center justify-center mb-1" style={{ background: qty > 0 ? "#DCFCE7" : "#EBEBEB" }}>
+                              <Utensils size={18} style={{ color: "#16A34A" }} />
                             </div>
                             <span className="text-[11px] font-bold text-gray-800 leading-tight line-clamp-1">{item.name}</span>
                             <span className="text-[9px] font-medium text-gray-400 mt-0.5">{item.cat}</span>
@@ -828,7 +828,7 @@ export default function CanteenPage() {
                       <div>
                         <p className="text-sm font-semibold leading-tight" style={{ color: "#121212" }}>{item.name}</p>
                         <div className="flex items-center justify-between mt-1">
-                          <span className="text-sm font-bold" style={{ color: "#FF7A22" }}>
+                          <span className="text-sm font-bold" style={{ color: "#16A34A" }}>
                             {item.price.toLocaleString()} <span className="text-[10px] font-normal text-gray-400">RWF</span>
                           </span>
                           {qty > 0 ? (
@@ -844,7 +844,7 @@ export default function CanteenPage() {
                               <button
                                 onClick={(e) => { e.stopPropagation(); inc(item.id); }}
                                 className="w-6 h-6 rounded-lg flex items-center justify-center text-white"
-                                style={{ background: "#FF7A22" }}
+                                style={{ background: "#16A34A" }}
                               >
                                 <Plus size={10} />
                               </button>
@@ -852,7 +852,7 @@ export default function CanteenPage() {
                           ) : (
                             <div
                               className="w-6 h-6 rounded-lg flex items-center justify-center text-white"
-                              style={{ background: "#FF7A22" }}
+                              style={{ background: "#16A34A" }}
                             >
                               <Plus size={12} />
                             </div>
@@ -870,8 +870,8 @@ export default function CanteenPage() {
                     className="bg-white rounded-2xl p-3 flex flex-col items-center justify-center gap-2 border-2 border-dashed hover:border-orange-300 transition min-h-[120px]"
                     style={{ borderColor: "#e5e5e5" }}
                   >
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "#FFF3EC" }}>
-                      <Plus size={20} style={{ color: "#FF7A22" }} />
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "#DCFCE7" }}>
+                      <Plus size={20} style={{ color: "#16A34A" }} />
                     </div>
                     <span className="text-xs font-semibold text-gray-400">Add Product</span>
                   </button>
@@ -892,7 +892,7 @@ export default function CanteenPage() {
             {/* Cart header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
               <div className="flex items-center gap-2">
-                <ShoppingCart size={16} style={{ color: "#FF7A22" }} />
+                <ShoppingCart size={16} style={{ color: "#16A34A" }} />
                 <h3 className="font-bold text-sm" style={{ color: "#121212" }}>
                   Order ({cartCount} item{cartCount !== 1 ? "s" : ""})
                 </h3>
@@ -938,15 +938,15 @@ export default function CanteenPage() {
                     <p className="text-xs text-gray-400">Charged</p>
                     <p className="font-bold text-sm" style={{ color: "#121212" }}>{payResult.total.toLocaleString()} RWF</p>
                   </div>
-                  <div className="rounded-2xl p-3 text-center" style={{ background: "#FFF3EC" }}>
+                  <div className="rounded-2xl p-3 text-center" style={{ background: "#DCFCE7" }}>
                     <p className="text-xs text-gray-400">Remaining</p>
-                    <p className="font-bold text-sm" style={{ color: "#FF7A22" }}>{payResult.new_balance.toLocaleString()} RWF</p>
+                    <p className="font-bold text-sm" style={{ color: "#16A34A" }}>{payResult.new_balance.toLocaleString()} RWF</p>
                   </div>
                 </div>
                 <button
                   onClick={() => { setPayResult(null); setShowCart(false); }}
                   className="w-full py-3 rounded-2xl font-bold text-sm text-white"
-                  style={{ background: "#FF7A22" }}
+                  style={{ background: "#16A34A" }}
                 >
                   New Order
                 </button>
@@ -983,7 +983,7 @@ export default function CanteenPage() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-semibold truncate" style={{ color: "#121212" }}>{item.name}</p>
-                            <p className="text-xs" style={{ color: "#FF7A22" }}>{item.price.toLocaleString()} RWF</p>
+                            <p className="text-xs" style={{ color: "#16A34A" }}>{item.price.toLocaleString()} RWF</p>
                           </div>
                           <div className="flex items-center gap-1 flex-shrink-0">
                             <button onClick={() => dec(item.id)}
@@ -993,7 +993,7 @@ export default function CanteenPage() {
                             <span className="text-xs font-bold w-4 text-center">{item.quantity}</span>
                             <button onClick={() => inc(item.id)}
                               className="w-5 h-5 rounded-lg flex items-center justify-center text-white"
-                              style={{ background: "#FF7A22" }}>
+                              style={{ background: "#16A34A" }}>
                               <Plus size={9} />
                             </button>
                           </div>
@@ -1021,7 +1021,7 @@ export default function CanteenPage() {
                       onClick={startPaying}
                       disabled={cartItems.length === 0}
                       className="w-full py-3.5 rounded-2xl font-bold text-sm text-white flex items-center justify-center gap-2 disabled:opacity-40 transition"
-                      style={{ background: "#FF7A22" }}
+                      style={{ background: "#16A34A" }}
                     >
                       <CreditCard size={16} />
                       Student Tap to Pay
@@ -1031,23 +1031,23 @@ export default function CanteenPage() {
                       {/* NFC waiting indicator */}
                       <div
                         className="rounded-2xl p-3 flex flex-col items-center gap-2 border-2 border-dashed"
-                        style={{ borderColor: "#FF7A22", background: "#FFF3EC" }}
+                        style={{ borderColor: "#16A34A", background: "#DCFCE7" }}
                       >
                         {listening ? (
                           <>
                             <div
                               className="w-12 h-12 rounded-full flex items-center justify-center animate-pulse"
-                              style={{ background: "#FF7A22" }}
+                              style={{ background: "#16A34A" }}
                             >
                               <Wifi size={20} className="text-white" />
                             </div>
-                            <p className="text-xs font-bold text-center" style={{ color: "#FF7A22" }}>
+                            <p className="text-xs font-bold text-center" style={{ color: "#16A34A" }}>
                               Waiting for card tap…
                             </p>
                             <p className="text-[11px] text-center text-gray-400">
                               Student bring phone or NFC card close to this device
                             </p>
-                            {scanLoading && <Loader2 size={16} className="animate-spin" style={{ color: "#FF7A22" } as React.CSSProperties} />}
+                            {scanLoading && <Loader2 size={16} className="animate-spin" style={{ color: "#16A34A" } as React.CSSProperties} />}
                           </>
                         ) : (
                           <>
@@ -1093,13 +1093,13 @@ export default function CanteenPage() {
                 <div className="px-4 pb-3 border-t border-gray-100 pt-3 flex-shrink-0">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-1.5">
-                      <ReceiptText size={12} style={{ color: "#FF7A22" }} />
+                      <ReceiptText size={12} style={{ color: "#16A34A" }} />
                       <span className="text-xs font-semibold" style={{ color: "#121212" }}>Today&apos;s Sales</span>
                     </div>
                     {reportLoading
                       ? <Loader2 size={12} className="animate-spin text-gray-300" />
                       : report && (
-                        <span className="text-xs font-bold" style={{ color: "#FF7A22" }}>
+                        <span className="text-xs font-bold" style={{ color: "#16A34A" }}>
                           {report.total_revenue.toLocaleString()} RWF
                         </span>
                       )}

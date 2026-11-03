@@ -9,39 +9,33 @@ import Header from "./Header";
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
-
-  const [demoUser] = useState<{ role: string } | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      const saved = localStorage.getItem("ishuri_user") || localStorage.getItem("ishuri_demo_user") || localStorage.getItem("knotty_demo_user");
-      return saved ? JSON.parse(saved) : null;
-    } catch {}
-    return null;
-  });
-
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  const resolvedUser = user ?? demoUser;
+  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
-    if (!loading && !resolvedUser) router.replace("/login");
-  }, [resolvedUser, loading, router]);
+    if (mounted && !loading && !user) router.replace("/login");
+  }, [user, loading, router, mounted]);
 
-  if (loading && !resolvedUser) {
+  // Return null on server and first client paint — both agree, no hydration mismatch.
+  if (!mounted) return null;
+
+  if (loading && !user) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg)" }}>
-        <Loader2 className="animate-spin" size={32} style={{ color: "#FF7A22" }} />
+        <Loader2 className="animate-spin" size={32} style={{ color: "#16A34A" }} />
       </div>
     );
   }
 
-  if (!resolvedUser) return null;
+  if (!user) return null;
 
   return (
     <div className="flex h-[100dvh] p-2 md:p-3 gap-2 md:gap-3 overflow-hidden relative" style={{ background: "var(--bg)" }}>
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       {sidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/40 z-40 md:hidden"
           onClick={() => setSidebarOpen(false)}
         />
@@ -50,7 +44,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         <Header onMenuClick={() => setSidebarOpen(true)} />
         <main className="flex-1 overflow-auto mt-2 md:mt-3">{children}</main>
         <footer className="text-center py-1.5 text-[10px] text-gray-400">
-          Built by <span className="font-bold" style={{ color: "#FF7A22" }}>GACONDO LABS</span>
+          Built by <span className="font-bold" style={{ color: "#16A34A" }}>GACONDO LABS</span>
         </footer>
       </div>
     </div>

@@ -30,9 +30,8 @@ export default function DashboardPage() {
   const role = user?.role ?? "";
 
   useEffect(() => {
-    if (role === "LIBRARIAN") {
-      router.replace("/library");
-    }
+    if (role === "LIBRARIAN") router.replace("/library");
+    if (role === "STUDENT") router.replace("/my-dashboard");
   }, [role, router]);
 
   return (

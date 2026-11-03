@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { Menu, Search, Sun, Moon, Bell, X, User, Wifi, Building2, ChevronDown, Check, Users, UserCheck } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -232,14 +232,14 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
                 <X size={13} />
               </button>
             )}
-            {searching && <div className="w-3 h-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "#FF7A22", borderTopColor: "transparent" }} />}
+            {searching && <div className="w-3 h-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "#16A34A", borderTopColor: "transparent" }} />}
           </div>
           {searchResults.length > 0 && (
             <div className="absolute top-full left-0 right-0 bg-white rounded-2xl shadow-xl border border-gray-100 mt-1.5 z-50 overflow-hidden">
               {searchResults.map((s) => (
                 <button key={s.id} onClick={() => { router.push(`/students/${s.id}`); setQuery(""); setSearchResults([]); }}
                   className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition text-left">
-                  <div className="w-8 h-8 rounded-full text-white text-xs font-bold flex items-center justify-center shrink-0" style={{ background: "#FF7A22" }}>
+                  <div className="w-8 h-8 rounded-full text-white text-xs font-bold flex items-center justify-center shrink-0" style={{ background: "#16A34A" }}>
                     {s.user.first_name[0]}{s.user.last_name[0]}
                   </div>
                   <div>
@@ -279,7 +279,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
               {searchResults.map((s) => (
                 <button key={s.id} onClick={() => { router.push(`/students/${s.id}`); setSearchOpen(false); setQuery(""); setSearchResults([]); }}
                   className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition text-left">
-                  <div className="w-7 h-7 rounded-full text-white text-xs font-bold flex items-center justify-center shrink-0" style={{ background: "#FF7A22" }}>
+                  <div className="w-7 h-7 rounded-full text-white text-xs font-bold flex items-center justify-center shrink-0" style={{ background: "#16A34A" }}>
                     {s.user.first_name[0]}{s.user.last_name[0]}
                   </div>
                   <div className="min-w-0">
@@ -298,17 +298,17 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             onClick={() => setNfcModalOpen(true)}
             title="Tap NFC card to look up student"
             className="relative w-8 h-8 md:w-9 md:h-9 bg-white rounded-full flex items-center justify-center transition"
-            style={{ }} onMouseEnter={e => (e.currentTarget.style.background="#FFF3EC")} onMouseLeave={e => (e.currentTarget.style.background="")}
+            style={{ }} onMouseEnter={e => (e.currentTarget.style.background="#DCFCE7")} onMouseLeave={e => (e.currentTarget.style.background="")}
           >
-            <Wifi size={16} style={{ color: "#FF7A22" }} />
-            <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full animate-pulse" style={{ background: "#FF7A22" }} />
+            <Wifi size={16} style={{ color: "#16A34A" }} />
+            <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full animate-pulse" style={{ background: "#16A34A" }} />
           </button>
         )}
 
         {/* Dark/light toggle — desktop only */}
         <button onClick={toggle} title={theme === "dark" ? "Light mode" : "Dark mode"}
           className="w-8 h-8 md:w-9 md:h-9 bg-white rounded-full hidden sm:flex items-center justify-center hover:bg-gray-50 transition">
-          {theme === "dark" ? <Sun size={16} style={{ color: "#FF7A22" }} /> : <Moon size={16} className="text-gray-500" />}
+          {theme === "dark" ? <Sun size={16} style={{ color: "#16A34A" }} /> : <Moon size={16} className="text-gray-500" />}
         </button>
 
         {/* Notifications */}
@@ -317,7 +317,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             className="relative w-8 h-8 md:w-9 md:h-9 bg-white rounded-full flex items-center justify-center hover:bg-gray-50 transition">
             <Bell size={16} className="text-gray-500" />
             {unreadCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full text-white text-[9px] flex items-center justify-center font-bold" style={{ background: "#FF7A22" }}>
+              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full text-white text-[9px] flex items-center justify-center font-bold" style={{ background: "#16A34A" }}>
                 {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}
@@ -337,15 +337,15 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
                 <div key={n.id} onClick={() => markRead(n.id)}
                   className={`flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition border-b border-gray-50 last:border-0 ${n.is_read ? "opacity-60" : ""}`}>
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${n.is_read ? "bg-gray-100" : ""}`}
-                    style={!n.is_read ? { background: "#FFF3EC" } : undefined}>
-                    <Bell size={14} style={{ color: n.is_read ? "#999" : "#FF7A22" }} />
+                    style={!n.is_read ? { background: "#DCFCE7" } : undefined}>
+                    <Bell size={14} style={{ color: n.is_read ? "#999" : "#16A34A" }} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-700">{n.title}</p>
                     <p className="text-xs text-gray-400 mt-0.5 truncate">{n.message}</p>
                     <p className="text-xs text-gray-300 mt-1">{new Date(n.created_at).toLocaleString()}</p>
                   </div>
-                  {!n.is_read && <div className="w-2 h-2 rounded-full mt-2 shrink-0" style={{ background: "#FF7A22" }} />}
+                  {!n.is_read && <div className="w-2 h-2 rounded-full mt-2 shrink-0" style={{ background: "#16A34A" }} />}
                 </div>
               ))}
             </div>
@@ -359,7 +359,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             {user?.profile_photo ? (
               <img src={user.profile_photo} className="w-7 h-7 md:w-8 md:h-8 rounded-full object-cover" alt="avatar" />
             ) : (
-              <div className="w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ background: "linear-gradient(135deg, #FF7A22, #FFB800)" }}>
+              <div className="w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ background: "linear-gradient(135deg, #16A34A, #2563EB)" }}>
                 {user?.first_name?.[0]}{user?.last_name?.[0]}
               </div>
             )}

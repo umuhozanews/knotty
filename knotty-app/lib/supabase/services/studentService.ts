@@ -66,8 +66,8 @@ export const supabaseStudentService = {
   },
 
   /**
-   * Provision a new student via the trusted Edge Function.
-   * This keeps privileged user creation server-side.
+   * Provision a new student via the Next.js API route.
+   * Creates auth user + person + student record + enrollment + placement.
    */
   async provisionStudent(params: {
     schoolId: string;
@@ -80,12 +80,20 @@ export const supabaseStudentService = {
     nationality?: string;
     academicYearId?: string;
     classSectionId?: string;
-  }): Promise<{ studentId: string; activationDelivery: string }> {
+    password?: string;
+    actorAuthUserId?: string;
+  }): Promise<{ studentId: string; activationDelivery: string; email?: string }> {
     const client = getSafeBrowserClient();
     if (!client) throw new Error("Supabase is not configured");
 
-    const { data, error } = await client.functions.invoke("provision-student", {
-      body: {
+    const { data: { session } } = await client.auth.getSession();
+    const actorId = params.actorAuthUserId || session?.user?.id;
+    if (!actorId) throw new Error("Not authenticated");
+
+    const res = await fetch("/api/students/provision", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
         school_id: params.schoolId,
         contact_type: params.contactType,
         contact: params.contact,
@@ -96,15 +104,19 @@ export const supabaseStudentService = {
         nationality: params.nationality || null,
         academic_year_id: params.academicYearId || null,
         class_section_id: params.classSectionId || null,
-      },
+        password: params.password || null,
+        actor_auth_user_id: actorId,
+      }),
     });
 
-    if (error) throw new Error(error.message || "Failed to provision student via Edge Function");
-    if (!data?.student_id) throw new Error(data?.error || "Student provisioning failed");
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || "Student provisioning failed");
+    if (!data?.student_id) throw new Error("Student provisioning failed");
 
     return {
       studentId: data.student_id,
-      activationDelivery: data.activation_delivery ?? "sent",
+      activationDelivery: data.activation_delivery ?? "created",
+      email: data.email,
     };
   },
 

@@ -813,6 +813,7 @@ export default function StudentsPage() {
   const [statusTarget, setStatusTarget] = useState<Student | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [issuing, setIssuing] = useState<string | null>(null);
+  const [noActiveYear, setNoActiveYear] = useState(false);
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load levels and classes
@@ -823,15 +824,18 @@ export default function StudentsPage() {
       Promise.all([
         supabaseAcademicService.listEducationLevels(user.school_id),
         supabaseAcademicService.listClassSections(user.school_id),
-      ]).then(([levelRows, classSectionRows]) => {
+        supabaseAcademicService.listActiveAcademicYearIds(user.school_id),
+      ]).then(([levelRows, classSectionRows, activeYearIds]) => {
         setRawClassSections(classSectionRows);
+        const activeYearSet = new Set(activeYearIds);
+        setNoActiveYear(activeYearIds.length === 0);
         const levelMap = new Map(levelRows.map((l) => [l.id, l]));
         const sorted = levelRows
           .filter((l) => l.is_active)
           .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0) || a.name.localeCompare(b.name, undefined, { numeric: true }))
           .map((l) => ({ id: l.id, name: l.name, description: "", order_index: l.display_order ?? 0 }));
         const mappedClasses: Class[] = classSectionRows
-          .filter((cs) => cs.status === "active")
+          .filter((cs) => cs.status === "active" && activeYearSet.has(cs.academic_year_id))
           .sort((a, b) => a.section_code.localeCompare(b.section_code, undefined, { numeric: true }))
           .map((cs) => {
             const lvl = levelMap.get(cs.education_level_id);
@@ -1102,6 +1106,17 @@ export default function StudentsPage() {
               </button>
             )}
           </div>
+
+          {/* No-active-year warning */}
+          {noActiveYear && (
+            <div className="mx-4 mt-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-start gap-2">
+              <span className="text-amber-500 mt-0.5">⚠</span>
+              <span>
+                <strong>No active academic year.</strong> Students cannot be enrolled until you activate an academic year.
+                Go to <strong>Settings → Academics</strong>, create or activate a year, then create class sections under it.
+              </span>
+            </div>
+          )}
 
           {/* Student List */}
           <div className="flex-1 overflow-y-auto p-4">

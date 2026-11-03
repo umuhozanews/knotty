@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useMemo } from "react";
 import DashboardShell from "@/components/DashboardShell";
@@ -224,7 +224,7 @@ export default function AdminSystemTestsPage() {
             <button
               onClick={runAllAutomatedTests}
               disabled={isRunningAll}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#FF7A22] hover:bg-[#e0681a] text-white text-xs font-bold shadow-xs transition disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#16A34A] hover:bg-[#e0681a] text-white text-xs font-bold shadow-xs transition disabled:opacity-50"
             >
               {isRunningAll ? (
                 <>
@@ -348,7 +348,7 @@ export default function AdminSystemTestsPage() {
                   onClick={() => setSelectedCategory(cat)}
                   className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
                     selectedCategory === cat
-                      ? "bg-[#FF7A22] text-white shadow-2xs"
+                      ? "bg-[#16A34A] text-white shadow-2xs"
                       : "bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-800"
                   }`}
                 >
@@ -364,7 +364,7 @@ export default function AdminSystemTestsPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search test names..."
-                className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 outline-none focus:border-[#FF7A22]"
+                className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 outline-none focus:border-[#16A34A]"
               />
             </div>
           </div>

@@ -88,7 +88,8 @@ export default function StudentTable() {
         </div>
       </div>
 
-      <table className="w-full text-sm">
+      <div className="overflow-x-auto -mx-1">
+      <table className="w-full text-sm min-w-[480px]">
         <thead>
           <tr className="text-xs text-gray-400 border-b border-gray-100">
             <th className="text-left pb-3 font-medium">Profile</th>
@@ -146,6 +147,7 @@ export default function StudentTable() {
           )}
         </tbody>
       </table>
+      </div>
 
       {pages > 1 && (
         <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-50">

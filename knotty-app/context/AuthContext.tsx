@@ -31,11 +31,17 @@ interface AuthContextValue {
   activeSchool: SchoolItem | null;
   schoolsList: SchoolItem[];
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<string>;
   loginWithGoogle: () => Promise<void>;
   logout: () => void;
   switchSchool: (schoolId: string) => Promise<void>;
   refreshSchools: () => Promise<void>;
+}
+
+export function getDashboardPath(role: string): string {
+  if (role === "STUDENT") return "/my-dashboard";
+  if (role === "TEACHER" || role === "NURSE" || role === "BURSAR" || role === "CASHIER") return "/staff-dashboard";
+  return "/";
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -272,6 +278,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (data.session?.refresh_token) localStorage.setItem("ishuri_refresh", data.session.refresh_token);
     setUser(loggedUser);
     fetchSchools(targetSchoolId);
+    return role;
   }, [fetchSchools]);
 
   const loginWithGoogle = useCallback(async () => {

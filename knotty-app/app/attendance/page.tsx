@@ -37,6 +37,8 @@ interface ScanLogEntry {
   time: string;
   rawTime?: string;
   photo: string | null;
+  tapInPoints?: number;
+  tapOutPoints?: number;
 }
 
 interface ClassStudent {
@@ -239,7 +241,78 @@ export default function AttendancePage() {
   const [pdfLoading, setPdfLoading] = useState(false);
 
   async function downloadAttendancePDF() {
-    toast("PDF export not available yet", "info");
+    if (!activeSchool?.id) return;
+    setPdfLoading(true);
+    try {
+      const rows = await supabaseAttendanceService.getClassAttendanceReport({
+        schoolId: activeSchool.id,
+        date,
+      });
+
+      // Group by class
+      const byClass = new Map<string, typeof rows>();
+      for (const r of rows) {
+        const key = r.class_name ? `${r.level_name ?? ""} ${r.class_name}`.trim() : "Unassigned";
+        if (!byClass.has(key)) byClass.set(key, []);
+        byClass.get(key)!.push(r);
+      }
+
+      const fmt = (ts: string | null) => ts
+        ? new Date(ts).toLocaleTimeString("en-RW", { hour: "2-digit", minute: "2-digit" })
+        : "—";
+
+      let html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Attendance Report — ${date}</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 11px; margin: 20px; }
+  h1 { font-size: 16px; margin-bottom: 2px; }
+  h2 { font-size: 13px; margin: 18px 0 6px; color: #1e40af; border-bottom: 1px solid #93c5fd; padding-bottom: 3px; }
+  .meta { color: #6b7280; margin-bottom: 16px; font-size: 10px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+  th { background: #1e40af; color: white; padding: 5px 8px; text-align: left; font-size: 10px; }
+  td { padding: 4px 8px; border-bottom: 1px solid #e5e7eb; }
+  tr:nth-child(even) td { background: #f8faff; }
+  .pts { font-weight: bold; color: #16a34a; }
+  .status-present { color: #16a34a; }
+  .status-late { color: #d97706; }
+  .status-absent { color: #dc2626; }
+  .status-excused { color: #2563eb; }
+  @media print { @page { margin: 15mm; } button { display: none; } }
+</style></head><body>
+<button onclick="window.print()" style="padding:6px 14px;background:#1e40af;color:white;border:none;border-radius:6px;cursor:pointer;margin-bottom:12px;">🖨 Print PDF</button>
+<h1>${activeSchool.name} — Attendance Report</h1>
+<div class="meta">Date: <strong>${date}</strong> &nbsp;|&nbsp; Generated: ${new Date().toLocaleString("en-RW")} &nbsp;|&nbsp; Total: ${rows.length} students</div>`;
+
+      for (const [className, classRows] of byClass.entries()) {
+        const present = classRows.filter(r => r.status === "present" || r.status === "late").length;
+        html += `<h2>${className} &nbsp;<span style="font-weight:normal;font-size:11px;color:#374151;">${present}/${classRows.length} present</span></h2>
+<table><thead><tr>
+  <th>#</th><th>Name</th><th>Adm. No.</th><th>Status</th>
+  <th>Tap In</th><th>Tap Out</th><th>Points</th>
+</tr></thead><tbody>`;
+        classRows.forEach((r, i) => {
+          const pts = r.tap_in_points + r.tap_out_points;
+          html += `<tr>
+  <td>${i + 1}</td>
+  <td>${r.legal_name}</td>
+  <td>${r.admission_number}</td>
+  <td class="status-${r.status}">${r.status.charAt(0).toUpperCase() + r.status.slice(1)}</td>
+  <td>${fmt(r.first_arrived_at)}</td>
+  <td>${fmt(r.departed_at)}</td>
+  <td class="pts">${pts}/4</td>
+</tr>`;
+        });
+        html += "</tbody></table>";
+      }
+      html += "</body></html>";
+
+      const w = window.open("", "_blank");
+      if (w) { w.document.write(html); w.document.close(); }
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "PDF generation failed", "error");
+    } finally {
+      setPdfLoading(false);
+    }
   }
 
   const loadTodaySummary = useCallback((classId?: string) => {
@@ -324,13 +397,18 @@ export default function AttendancePage() {
       if (holder.is_frozen) throw new Error("Card is frozen");
 
       const idempotencyKey = `${holder.student_id}-${Date.now()}`;
-      const tapResult = await supabaseAttendanceService.recordVirtualStudentTap({
+      const direction: "auto" | "in" | "out" = scanType === "IN" ? "in" : scanType === "OUT" ? "out" : "auto";
+      const tapResult = await supabaseAttendanceService.recordVirtualStudentTapV2({
         schoolId: activeSchool.id,
         studentId: holder.student_id,
         idempotencyKey,
-      }) as any;
+        direction,
+      });
 
-      const action: TapAction = tapResult?.action === "TAP_OUT" ? "TAP_OUT" : "TAP_IN";
+      const action: TapAction = tapResult.action === "TAP_OUT" ? "TAP_OUT"
+        : tapResult.action === "ALREADY_OUT" ? "ALREADY_OUT"
+        : "TAP_IN";
+
       const cardDataLocal: CardScanFull = {
         card_number: cardNumber,
         wallet_balance: holder.wallet_balance,
@@ -339,22 +417,27 @@ export default function AttendancePage() {
         expires_at: "",
         is_frozen: holder.is_frozen,
         today_attendance: null,
-        tap_out_available_at: tapResult?.tap_out_available_at ?? null,
-        check_in_time: tapResult?.check_in_time ?? new Date().toISOString(),
-        check_out_time: tapResult?.check_out_time ?? null,
+        tap_out_available_at: null,
+        check_in_time: tapResult.check_in_time,
+        check_out_time: tapResult.check_out_time,
         student: { id: holder.student_id, name: holder.legal_name, class: holder.class_name, student_code: holder.admission_number, photo: holder.profile_photo_path ?? null, school_name: activeSchool.name, school_logo: null },
       };
       setCardData(cardDataLocal);
       setGlowColor(ACTION_CFG[action].glow);
+
+      const totalPts = tapResult.tap_in_points + tapResult.tap_out_points;
+      const ptsLabel = totalPts > 0 ? ` · ${totalPts}/4 pts` : "";
       setTapResult({
         action,
         message: action === "TAP_IN"
-          ? `Tapped in at ${fmtTime(cardDataLocal.check_in_time)}.`
-          : `Tapped out at ${fmtTime(cardDataLocal.check_out_time ?? new Date().toISOString())}.`,
+          ? `Tapped in at ${fmtTime(tapResult.check_in_time)} (+2 pts)`
+          : action === "TAP_OUT"
+          ? `Tapped out at ${fmtTime(tapResult.check_out_time)} (+2 pts)`
+          : `Already tapped out today${ptsLabel}`,
       });
 
       const logEntry: ScanLogEntry = {
-        id: tapResult?.id || Date.now().toString(),
+        id: tapResult.attendance_record_id || Date.now().toString(),
         name: holder.legal_name,
         className: holder.class_name,
         studentCode: holder.admission_number,
@@ -364,10 +447,12 @@ export default function AttendancePage() {
         time: fmtTime(new Date().toISOString()),
         rawTime: new Date().toISOString(),
         photo: holder.profile_photo_path ?? null,
+        tapInPoints: tapResult.tap_in_points,
+        tapOutPoints: tapResult.tap_out_points,
       };
       setScanLog((l) => [logEntry, ...l.filter((x) => x.id !== logEntry.id).slice(0, 99)]);
       loadTodaySummary(selectedClass);
-      toast(`${holder.legal_name} — ${ACTION_CFG[action].label}`, action === "TAP_IN" ? "success" : "info");
+      toast(`${holder.legal_name} — ${ACTION_CFG[action].label}${ptsLabel}`, action === "TAP_IN" ? "success" : "info");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Scan failed";
       setGlowColor("red");
@@ -1030,6 +1115,13 @@ export default function AttendancePage() {
                                 </span>
                               </div>
 
+                              {/* Points earned */}
+                              {(entry.tapInPoints !== undefined || entry.tapOutPoints !== undefined) && (
+                                <span className="text-[11px] font-bold text-green-600 bg-green-50 border border-green-200 px-2 py-0.5 rounded-lg">
+                                  {(entry.tapInPoints ?? 0) + (entry.tapOutPoints ?? 0)}/4 pts
+                                </span>
+                              )}
+
                               {/* Status tag */}
                               {entry.status && (
                                 <span
@@ -1134,15 +1226,15 @@ export default function AttendancePage() {
             <div className="bg-white rounded-2xl shadow-sm p-4">
               <p className="text-xs font-medium text-gray-400 mb-2">Attendance PDF</p>
               <p className="text-xs text-gray-400 mb-3">
-                {selectedClass ? `Download daily report for selected class & date` : "Select a class to generate PDF"}
+                All classes — sorted by arrival order. Tap-in = +2 pts, Tap-out = +2 pts.
               </p>
               <button
                 onClick={downloadAttendancePDF}
-                disabled={pdfLoading || !selectedClass}
+                disabled={pdfLoading}
                 className="w-full py-2.5 rounded-xl bg-gray-900 text-white text-xs font-semibold flex items-center justify-center gap-2 hover:bg-gray-700 disabled:opacity-50 transition"
               >
                 {pdfLoading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-                {pdfLoading ? "Generating…" : "Download PDF"}
+                {pdfLoading ? "Generating…" : "Print PDF Report"}
               </button>
             </div>
 

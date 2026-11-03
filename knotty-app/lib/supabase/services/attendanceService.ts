@@ -85,6 +85,73 @@ export const supabaseAttendanceService = {
   },
 
   /**
+   * Smart tap-in/tap-out: auto-detects direction or accepts forced direction.
+   * Returns { action, check_in_time, check_out_time, tap_in_points, tap_out_points, ... }
+   */
+  async recordVirtualStudentTapV2(params: {
+    schoolId: string;
+    studentId: string;
+    idempotencyKey: string;
+    direction?: "auto" | "in" | "out";
+    occurredAt?: string;
+  }): Promise<{
+    action: "TAP_IN" | "TAP_OUT" | "ALREADY_OUT" | "DUPLICATE";
+    direction: "in" | "out";
+    check_in_time: string | null;
+    check_out_time: string | null;
+    attendance_record_id: string;
+    scan_event_id: string | null;
+    tap_in_points: number;
+    tap_out_points: number;
+  }> {
+    const client = getSafeBrowserClient();
+    if (!client) throw new Error("Supabase is not configured");
+
+    const { data, error } = await client.rpc("record_virtual_student_tap_v2", {
+      p_school_id: params.schoolId,
+      p_student_id: params.studentId,
+      p_idempotency_key: params.idempotencyKey,
+      p_direction: params.direction ?? "auto",
+      p_occurred_at: params.occurredAt,
+    });
+
+    if (error) throw new Error(error.message);
+    return data as any;
+  },
+
+  /**
+   * Fetch per-class attendance report for PDF generation.
+   */
+  async getClassAttendanceReport(params: {
+    schoolId: string;
+    date: string;
+  }): Promise<{
+    attendance_record_id: string;
+    student_id: string;
+    admission_number: string;
+    legal_name: string;
+    class_section_id: string | null;
+    class_name: string | null;
+    level_name: string | null;
+    status: string;
+    first_arrived_at: string | null;
+    departed_at: string | null;
+    tap_in_points: number;
+    tap_out_points: number;
+  }[]> {
+    const client = getSafeBrowserClient();
+    if (!client) throw new Error("Supabase is not configured");
+
+    const { data, error } = await client.rpc("get_class_attendance_report", {
+      p_school_id: params.schoolId,
+      p_date: params.date,
+    });
+
+    if (error) throw new Error(error.message);
+    return (data || []) as any;
+  },
+
+  /**
    * Record staff attendance.
    */
   async recordStaffAttendance(params: {
@@ -137,6 +204,70 @@ export const supabaseAttendanceService = {
     });
 
     if (error) throw new Error(error.message);
+  },
+
+  /**
+   * Look up a staff member by their card number.
+   */
+  async lookupStaffCardHolder(params: {
+    schoolId: string;
+    cardNumber: string;
+  }): Promise<{
+    card_assignment_id: string;
+    card_number: string;
+    staff_record_id: string;
+    employee_number: string;
+    job_title: string;
+    department: string | null;
+    employment_status: string;
+    legal_name: string;
+    profile_photo_path: string | null;
+    card_status: string;
+    is_frozen: boolean;
+  } | null> {
+    const client = getSafeBrowserClient();
+    if (!client) throw new Error("Supabase is not configured");
+
+    const { data, error } = await client.rpc("lookup_staff_card_holder", {
+      p_school_id:   params.schoolId,
+      p_card_number: params.cardNumber,
+    });
+    if (error) throw new Error(error.message);
+    return (data && (data as any[]).length > 0) ? (data as any[])[0] : null;
+  },
+
+  /**
+   * Smart tap-in/tap-out for staff: auto-detects direction or accepts forced direction.
+   * Returns { action, check_in_time, check_out_time, tap_in_points, tap_out_points, ... }
+   */
+  async recordVirtualStaffTap(params: {
+    schoolId: string;
+    staffRecordId: string;
+    idempotencyKey: string;
+    direction?: "auto" | "in" | "out";
+    occurredAt?: string;
+  }): Promise<{
+    action: "TAP_IN" | "TAP_OUT" | "ALREADY_OUT" | "DUPLICATE";
+    direction: "in" | "out";
+    check_in_time: string | null;
+    check_out_time: string | null;
+    staff_attendance_record_id: string;
+    scan_event_id: string | null;
+    tap_in_points: number;
+    tap_out_points: number;
+  }> {
+    const client = getSafeBrowserClient();
+    if (!client) throw new Error("Supabase is not configured");
+
+    const { data, error } = await client.rpc("record_virtual_staff_tap", {
+      p_school_id:         params.schoolId,
+      p_staff_record_id:   params.staffRecordId,
+      p_idempotency_key:   params.idempotencyKey,
+      p_direction:         params.direction ?? "auto",
+      p_occurred_at:       params.occurredAt,
+    });
+    if (error) throw new Error(error.message);
+    return data as any;
   },
 
   /**

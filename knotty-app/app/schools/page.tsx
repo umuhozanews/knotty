@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -196,7 +196,7 @@ function NewSchoolModal({
               type="submit"
               disabled={saving}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-xs font-semibold transition disabled:opacity-60"
-              style={{ background: "#FF7A22" }}
+              style={{ background: "#16A34A" }}
             >
               {saving ? <RefreshCw size={13} className="animate-spin" /> : <Check size={13} />}
               <span>Register School</span>
@@ -284,7 +284,7 @@ export default function SchoolsPage() {
               <h1 className="text-lg font-bold text-gray-800">
                 Schools Network Hub
               </h1>
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-lg border border-[#FFD4B2]" style={{ background: "#FFF3EC", color: "#FF7A22" }}>
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-lg border border-[#BBF7D0]" style={{ background: "#DCFCE7", color: "#16A34A" }}>
                 7 School Nodes
               </span>
             </div>
@@ -304,7 +304,7 @@ export default function SchoolsPage() {
             <button
               onClick={() => setShowNewModal(true)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-white text-xs font-semibold transition shrink-0"
-              style={{ background: "#FF7A22" }}
+              style={{ background: "#16A34A" }}
             >
               <Plus size={14} />
               <span>Register School</span>
@@ -316,8 +316,8 @@ export default function SchoolsPage() {
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="bg-gray-50 rounded-2xl p-4">
-              <div className="w-10 h-10 rounded-full flex items-center justify-center mb-1" style={{ background: "#FFF3EC" }}>
-                <Building2 size={20} style={{ color: "#FF7A22" }} />
+              <div className="w-10 h-10 rounded-full flex items-center justify-center mb-1" style={{ background: "#DCFCE7" }}>
+                <Building2 size={20} style={{ color: "#16A34A" }} />
               </div>
               <p className="text-xs text-gray-400 mt-2 mb-1">Schools in Network</p>
               <div className="text-base font-bold text-gray-800">{aggregates.totalSchools}</div>
@@ -359,7 +359,7 @@ export default function SchoolsPage() {
               <div
                 key={school.id}
                 className="bg-white rounded-2xl p-4 border transition duration-150 flex flex-col justify-between"
-                style={isActive ? { borderColor: "#FF7A22" } : { borderColor: "#e5e5e5" }}
+                style={isActive ? { borderColor: "#16A34A" } : { borderColor: "#e5e5e5" }}
               >
                 <div>
                   {/* Top line: School Code badge & Active indicator */}
@@ -369,8 +369,8 @@ export default function SchoolsPage() {
                     </span>
 
                     {isActive ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold border border-[#FFD4B2]" style={{ background: "#FFF3EC", color: "#FF7A22" }}>
-                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#FF7A22" }} />
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold border border-[#BBF7D0]" style={{ background: "#DCFCE7", color: "#16A34A" }}>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#16A34A" }} />
                         Active School
                       </span>
                     ) : (
@@ -437,8 +437,8 @@ export default function SchoolsPage() {
                   {isActive ? (
                     <button
                       disabled
-                      className="w-full flex items-center justify-center gap-1 py-2 rounded-xl text-xs font-semibold cursor-default border border-[#FFD4B2]"
-                      style={{ background: "#FFF3EC", color: "#FF7A22" }}
+                      className="w-full flex items-center justify-center gap-1 py-2 rounded-xl text-xs font-semibold cursor-default border border-[#BBF7D0]"
+                      style={{ background: "#DCFCE7", color: "#16A34A" }}
                     >
                       <Check size={13} />
                       <span>Current Workspace</span>

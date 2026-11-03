@@ -325,6 +325,8 @@ type RawTables = {
           staff_number: string;
           employment_status: "active" | "on_leave" | "suspended" | "terminated";
           primary_role_category: string;
+          job_title: string;
+          department: string | null;
           started_on: string;
           ended_on: string | null;
           created_by_membership_id: string | null;
@@ -357,6 +359,8 @@ type RawTables = {
           staff_number?: string;
           employment_status?: "active" | "on_leave" | "suspended" | "terminated";
           primary_role_category?: string;
+          job_title?: string;
+          department?: string | null;
           started_on?: string;
           ended_on?: string | null;
           created_by_membership_id?: string | null;
@@ -926,12 +930,54 @@ type RawTables = {
         };
         Update: { is_read?: boolean; };
       };
+      visitor_profiles: {
+        Row: {
+          id: string; school_id: string; full_name: string; phone: string | null;
+          id_type: string | null; id_reference: string | null; organization: string | null;
+          photo_path: string | null; is_blocked: boolean; blocked_reason: string | null;
+          created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; school_id: string; full_name: string; phone?: string | null;
+          id_type?: string | null; id_reference?: string | null; organization?: string | null;
+          photo_path?: string | null; is_blocked?: boolean; blocked_reason?: string | null;
+          created_at?: string; updated_at?: string;
+        };
+        Update: {
+          full_name?: string; phone?: string | null; id_type?: string | null;
+          id_reference?: string | null; organization?: string | null; photo_path?: string | null;
+          is_blocked?: boolean; blocked_reason?: string | null; updated_at?: string;
+        };
+      };
+      visitor_visits: {
+        Row: {
+          id: string; school_id: string; visitor_profile_id: string; visit_date: string;
+          pass_reference: string; host_name: string | null; host_department: string | null;
+          purpose: string; notes: string | null;
+          status: "pending" | "approved" | "inside" | "completed" | "cancelled" | "denied";
+          arrived_at: string | null; departed_at: string | null; denial_reason: string | null;
+          created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; school_id: string; visitor_profile_id: string; visit_date?: string;
+          pass_reference: string; host_name?: string | null; host_department?: string | null;
+          purpose: string; notes?: string | null;
+          status?: "pending" | "approved" | "inside" | "completed" | "cancelled" | "denied";
+          arrived_at?: string | null; departed_at?: string | null; denial_reason?: string | null;
+          created_at?: string; updated_at?: string;
+        };
+        Update: {
+          status?: "pending" | "approved" | "inside" | "completed" | "cancelled" | "denied";
+          arrived_at?: string | null; departed_at?: string | null;
+          denial_reason?: string | null; notes?: string | null; updated_at?: string;
+        };
+      };
     };
 
 export type Database = {
   public: {
     Tables: {
-      [K in keyof RawTables]: RawTables[K] & { Relationships: [] };
+      [K in keyof (RawTables & RawLibraryTables)]: (RawTables & RawLibraryTables)[K] & { Relationships: [] };
     };
     Views: Record<string, never>;
     Functions: {
@@ -1165,6 +1211,36 @@ export type Database = {
           p_occurred_at?: string;
         };
         Returns: Json;
+      };
+      record_virtual_student_tap_v2: {
+        Args: {
+          p_school_id: string;
+          p_student_id: string;
+          p_idempotency_key: string;
+          p_direction?: string;
+          p_occurred_at?: string;
+        };
+        Returns: Json;
+      };
+      get_class_attendance_report: {
+        Args: {
+          p_school_id: string;
+          p_date: string;
+        };
+        Returns: {
+          attendance_record_id: string;
+          student_id: string;
+          admission_number: string;
+          legal_name: string;
+          class_section_id: string | null;
+          class_name: string | null;
+          level_name: string | null;
+          status: string;
+          first_arrived_at: string | null;
+          departed_at: string | null;
+          tap_in_points: number;
+          tap_out_points: number;
+        }[];
       };
       record_staff_attendance: {
         Args: {
@@ -1588,12 +1664,95 @@ export type Database = {
           staff_number: string;
           employment_status: string;
           primary_role_category: string;
-          started_on: string;
+          job_title: string;
+          department: string | null;
+          hired_on: string;
           legal_name: string;
           profile_photo_path: string | null;
           primary_email: string | null;
           primary_phone: string | null;
         }[];
+      };
+      delete_education_level: {
+        Args: { p_school_id: string; p_level_id: string };
+        Returns: void;
+      };
+      delete_class_section: {
+        Args: { p_school_id: string; p_class_section_id: string };
+        Returns: void;
+      };
+      register_staff_from_edge: {
+        Args: {
+          p_actor_auth_user_id: string;
+          p_staff_auth_user_id: string;
+          p_school_id: string;
+          p_legal_name: string;
+          p_email: string;
+          p_role_key: string;
+          p_employee_number: string;
+          p_job_title: string;
+          p_hired_on?: string | null;
+          p_department?: string | null;
+          p_qualification?: string | null;
+          p_specialization?: string | null;
+        };
+        Returns: string;
+      };
+      register_staff: {
+        Args: {
+          p_school_id: string;
+          p_employee_number: string;
+          p_legal_name: string;
+          p_job_title?: string | null;
+          p_department?: string | null;
+          p_hired_on?: string | null;
+          p_categories?: string[] | null;
+          p_qualification?: string | null;
+          p_specialization?: string | null;
+        };
+        Returns: string;
+      };
+      get_my_wallet: {
+        Args: { p_school_id: string };
+        Returns: { card_number: string; card_status: string; wallet_balance: number }[];
+      };
+      get_my_transactions: {
+        Args: { p_school_id: string; p_limit?: number };
+        Returns: { txn_id: string; amount: number; txn_type: string; description: string | null; txn_at: string }[];
+      };
+      get_my_attendance: {
+        Args: { p_school_id: string; p_limit?: number };
+        Returns: { record_id: string; attendance_date: string; status: string; first_arrived_at: string | null; departed_at: string | null; source: string; recorded_at: string }[];
+      };
+      get_my_discipline: {
+        Args: { p_school_id: string; p_limit?: number };
+        Returns: { record_id: string; type: string; title: string; description: string | null; action_taken: string | null; severity: string; status: string; marks_deducted: number; recorded_at: string }[];
+      };
+      get_my_health: {
+        Args: { p_school_id: string; p_limit?: number };
+        Returns: { record_id: string; type: string; title: string; description: string | null; treatment_given: string | null; severity: string; follow_up_required: boolean; resolved_at: string | null; recorded_at: string }[];
+      };
+      get_my_library_borrows: {
+        Args: { p_school_id: string; p_limit?: number };
+        Returns: { borrow_id: string; book_title: string; book_author: string; copy_tag: string; borrowed_at: string; due_at: string; returned_at: string | null; fine_amount: number; fine_waived: boolean }[];
+      };
+      register_student_from_edge: {
+        Args: {
+          p_actor_auth_user_id: string;
+          p_student_auth_user_id: string;
+          p_school_id: string;
+          p_admission_number: string;
+          p_legal_name: string;
+          p_date_of_birth?: string | null;
+          p_gender?: string | null;
+          p_nationality?: string | null;
+          p_contact_type?: string | null;
+          p_contact_value?: string | null;
+          p_contact_normalized?: string | null;
+          p_academic_year_id?: string | null;
+          p_class_section_id?: string | null;
+        };
+        Returns: string;
       };
       get_my_student_profile: {
         Args: { p_school_id: string };
@@ -1615,6 +1774,101 @@ export type Database = {
           card_number: string | null;
           card_status: string | null;
           wallet_balance: number;
+        }[];
+      };
+      lookup_staff_card_holder: {
+        Args: { p_school_id: string; p_card_number: string };
+        Returns: {
+          card_assignment_id: string;
+          card_number: string;
+          staff_record_id: string;
+          employee_number: string;
+          job_title: string;
+          department: string | null;
+          employment_status: string;
+          legal_name: string;
+          profile_photo_path: string | null;
+          card_status: string;
+          is_frozen: boolean;
+        }[];
+      };
+      record_virtual_staff_tap: {
+        Args: {
+          p_school_id: string;
+          p_staff_record_id: string;
+          p_idempotency_key: string;
+          p_direction?: string;
+          p_occurred_at?: string;
+        };
+        Returns: Json;
+      };
+      register_visitor_visit: {
+        Args: {
+          p_school_id: string;
+          p_full_name: string;
+          p_phone?: string | null;
+          p_id_type?: string | null;
+          p_id_reference?: string | null;
+          p_organization?: string | null;
+          p_host_name?: string | null;
+          p_host_department?: string | null;
+          p_purpose?: string;
+          p_notes?: string | null;
+          p_visitor_profile_id?: string | null;
+        };
+        Returns: Json;
+      };
+      admit_visitor: {
+        Args: { p_school_id: string; p_visit_id: string };
+        Returns: void;
+      };
+      checkout_visitor: {
+        Args: { p_school_id: string; p_visit_id: string };
+        Returns: void;
+      };
+      approve_visitor: {
+        Args: { p_school_id: string; p_visit_id: string };
+        Returns: void;
+      };
+      deny_visitor: {
+        Args: { p_school_id: string; p_visit_id: string; p_reason?: string | null };
+        Returns: void;
+      };
+      get_gate_overview: {
+        Args: { p_school_id: string };
+        Returns: Json;
+      };
+      search_visitor_profiles: {
+        Args: { p_school_id: string; p_query: string; p_limit?: number };
+        Returns: {
+          visitor_profile_id: string;
+          full_name: string;
+          phone: string | null;
+          organization: string | null;
+          id_type: string | null;
+          id_reference: string | null;
+          is_blocked: boolean;
+          last_visit_date: string | null;
+        }[];
+      };
+      list_visitor_visits: {
+        Args: { p_school_id: string; p_date?: string; p_status?: string | null; p_limit?: number };
+        Returns: {
+          visit_id: string;
+          visitor_profile_id: string;
+          full_name: string;
+          phone: string | null;
+          organization: string | null;
+          pass_reference: string;
+          host_name: string | null;
+          host_department: string | null;
+          purpose: string;
+          notes: string | null;
+          status: string;
+          arrived_at: string | null;
+          departed_at: string | null;
+          created_at: string;
+          is_blocked: boolean;
         }[];
       };
     };

@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, Users, ClipboardCheck, CreditCard, ShoppingCart,
   Banknote, AlertTriangle, Settings, LogOut, ChevronRight,
   Heart, User, CalendarDays, Wallet, X, Library,
-  UserCheck, Building2, Smartphone, Activity,
+  UserCheck, Building2, Smartphone, Activity, Shield,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { isManagementRole } from "@/lib/roles";
@@ -27,6 +27,7 @@ const ALL_NAV = [
   { icon: ShoppingCart,    label: "Canteen",      href: "/canteen",       roles: ["ADMIN","CANTEEN","BURSAR","TEACHER"] },
   { icon: Banknote,        label: "Fees",         href: "/fees",          roles: ["ADMIN","BURSAR","TEACHER","DISCIPLINE","LIBRARIAN","NURSE","STUDENT","PARENT"] },
   { icon: Smartphone,      label: "Virtual Tap",  href: "/standalone-tap", roles: ["ADMIN","TEACHER","BURSAR","DISCIPLINE","LIBRARIAN","NURSE","CANTEEN"] },
+  { icon: Shield,          label: "Gate",         href: "/gate",           roles: ["ADMIN","DISCIPLINE","BURSAR","TEACHER","NURSE","LIBRARIAN"] },
 
   // ── Student self-service ──
   { icon: LayoutDashboard, label: "My Dashboard", href: "/",              roles: ["STUDENT", "PARENT"] },
@@ -73,11 +74,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       {/* Logo & Close */}
       <div className="flex items-center justify-between px-5 pt-6 pb-4">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "#FFF3EC" }}>
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "#DCFCE7" }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L2 7l10 5 10-5-10-5z" fill="#FF7A22" />
-              <path d="M2 17l10 5 10-5" stroke="#FF7A22" strokeWidth="2" strokeLinecap="round" />
-              <path d="M2 12l10 5 10-5" stroke="#FFB800" strokeWidth="2" strokeLinecap="round" />
+              <path d="M12 2L2 7l10 5 10-5-10-5z" fill="#16A34A" />
+              <path d="M2 17l10 5 10-5" stroke="#16A34A" strokeWidth="2" strokeLinecap="round" />
+              <path d="M2 12l10 5 10-5" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </div>
           <span className="font-bold text-lg text-gray-800">IshuriHUB</span>
@@ -98,7 +99,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             <Link key={href + label} href={href}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-2xl transition-all text-sm font-medium
                 ${active ? "bg-blue-50 text-blue-700" : "text-gray-500 hover:text-[#121212]"}`}
-              style={active ? { background: "#FFF3EC", color: "#FF7A22" } : undefined}
+              style={active ? { background: "#DCFCE7", color: "#16A34A" } : undefined}
             >
               <span className="flex items-center gap-3"><Icon size={16} />{label}</span>
               {active && <ChevronRight size={14} />}
@@ -108,7 +109,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       </nav>
 
       {/* Role & Active School badge */}
-      <div className="mx-3 mb-3 mt-2 rounded-2xl p-3" style={{ background: "#FFF3EC", border: "1px solid #FFD4B2" }}>
+      <div className="mx-3 mb-3 mt-2 rounded-2xl p-3" style={{ background: "#DCFCE7", border: "1px solid #BBF7D0" }}>
         <div className="flex items-center justify-between gap-1 mb-0.5">
           <p className="text-xs font-bold truncate" style={{ color: "#121212" }}>
             {activeSchool?.name || "IshuriHUB Model School"}
@@ -121,7 +122,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           {activeSchool?.student_count ?? 53} Students • {activeSchool?.worker_count ?? 14} Workers
         </p>
         {user && (
-          <p className="text-xs mt-1 font-semibold" style={{ color: "#FF7A22" }}>{ROLE_LABELS[role] ?? role}</p>
+          <p className="text-xs mt-1 font-semibold" style={{ color: "#16A34A" }}>{ROLE_LABELS[role] ?? role}</p>
         )}
       </div>
 
@@ -133,14 +134,14 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             <Link href="/admin/system-tests"
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-medium transition
                 ${isActive("/admin/system-tests") ? "" : "text-gray-500 hover:bg-gray-50"}`}
-              style={isActive("/admin/system-tests") ? { background: "#FFF3EC", color: "#FF7A22" } : undefined}
+              style={isActive("/admin/system-tests") ? { background: "#DCFCE7", color: "#16A34A" } : undefined}
             >
               <Activity size={16} />System Tests
             </Link>
             <Link href="/settings"
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-medium transition
                 ${isActive("/settings") ? "" : "text-gray-500 hover:bg-gray-50"}`}
-              style={isActive("/settings") ? { background: "#FFF3EC", color: "#FF7A22" } : undefined}
+              style={isActive("/settings") ? { background: "#DCFCE7", color: "#16A34A" } : undefined}
             >
               <Settings size={16} />Settings
             </Link>

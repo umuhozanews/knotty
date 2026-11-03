@@ -601,12 +601,25 @@ export default function StudentProfilePage() {
     try {
       const ndef = new (window as unknown as { NDEFReader: new () => { scan: (o: { signal: AbortSignal }) => Promise<void>; addEventListener: (e: string, h: (ev: { serialNumber: string }) => void) => void } }).NDEFReader();
       await ndef.scan({ signal: abort.signal });
-      ndef.addEventListener("reading", ({ serialNumber }) => {
+      ndef.addEventListener("reading", async ({ serialNumber }) => {
         abort.abort();
         nfcAbortRef.current = null;
         setNfcScanning(false);
         const nfcUid = serialNumber.toUpperCase().replace(/:/g, "");
-        setNfcError(`NFC UID detected: ${nfcUid}. To assign this card, configure your hardware attendance device in Settings.`);
+        if (!user) { setNfcError("Session expired. Please refresh."); return; }
+        try {
+          await supabaseCardService.issueCard({
+            schoolId: user.school_id,
+            holderKind: "student",
+            studentId,
+            identifierKind: "nfc_uid",
+            identifier: nfcUid,
+          });
+          show("IshuriHUB Card issued and linked to NFC", "success");
+          await loadProfile();
+        } catch (err) {
+          setNfcError(err instanceof Error ? err.message : "Failed to issue card");
+        }
       });
     } catch (err) {
       nfcAbortRef.current = null;

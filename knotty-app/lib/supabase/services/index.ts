@@ -10,3 +10,4 @@ export * from "./healthService";
 export * from "./canteenService";
 export * from "./feesService";
 export * from "./notificationService";
+export * from "./visitorService";

@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth, getDashboardPath } from "@/context/AuthContext";
 import { Eye, EyeOff, Loader2, ShieldCheck } from "lucide-react";
 
 export default function LoginPage() {
@@ -31,7 +31,7 @@ export default function LoginPage() {
   }, []);
 
   useEffect(() => {
-    if (!loading && user) router.replace("/");
+    if (!loading && user) router.replace(getDashboardPath(user.role));
   }, [user, loading, router]);
 
   async function handleGoogleLogin() {
@@ -56,8 +56,8 @@ export default function LoginPage() {
     setSubmitting(true);
 
     try {
-      await login(email.trim(), password.trim());
-      router.replace("/");
+      const role = await login(email.trim(), password.trim());
+      router.replace(getDashboardPath(role));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Invalid credentials. Please verify your email and password.");
       setSubmitting(false);
@@ -77,11 +77,11 @@ export default function LoginPage() {
       <div className="w-full max-w-md space-y-4">
         {/* Brand Logo */}
         <div className="flex items-center justify-center gap-2 mb-2">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "#FFF3EC" }}>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "#DCFCE7" }}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L2 7l10 5 10-5-10-5z" fill="#FF7A22" />
-              <path d="M2 17l10 5 10-5" stroke="#FF7A22" strokeWidth="2" strokeLinecap="round" />
-              <path d="M2 12l10 5 10-5" stroke="#FFB800" strokeWidth="2" strokeLinecap="round" />
+              <path d="M12 2L2 7l10 5 10-5-10-5z" fill="#16A34A" />
+              <path d="M2 17l10 5 10-5" stroke="#16A34A" strokeWidth="2" strokeLinecap="round" />
+              <path d="M2 12l10 5 10-5" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </div>
           <span className="text-2xl font-bold text-gray-800">IshuriHUB</span>
@@ -180,7 +180,7 @@ export default function LoginPage() {
               type="submit"
               disabled={submitting}
               className="w-full py-2.5 rounded-xl text-white font-semibold text-xs transition disabled:opacity-60 flex items-center justify-center gap-2 mt-2 shadow-xs cursor-pointer"
-              style={{ background: "#FF7A22" }}
+              style={{ background: "#16A34A" }}
             >
               {submitting && <Loader2 size={14} className="animate-spin" />}
               <span>{submitting ? "Signing in…" : "Sign in"}</span>

@@ -4,7 +4,17 @@ import Link from "next/link";
 import { Users, GraduationCap, BarChart2, ArrowUpRight, BookOpen, BookMarked, AlertTriangle } from "lucide-react";
 import { getSafeBrowserClient } from "@/lib/supabase/client";
 
-type SchoolStats = { total_students: number; present_today: number; low_balance_cards: number; total_teachers: number };
+type SchoolStats = {
+  total_students: number;
+  present_today: number;
+  low_balance_cards: number;
+  total_teachers: number;
+  total_workers: number;
+  staff_present_today: number;
+  total_library_books: number;
+  active_borrows: number;
+  overdue_books: number;
+};
 
 function Skeleton() {
   return <div className="h-5 w-12 bg-gray-100 rounded animate-pulse" />;
@@ -19,17 +29,29 @@ export default function StatsCards({ schoolId }: { schoolId: string }) {
     if (!client || !schoolId) return;
 
     const todayStr = new Date().toISOString().split("T")[0];
+    const nowIso = new Date().toISOString();
 
     Promise.all([
       client.from("student_records").select("*", { count: "exact", head: true }).eq("school_id", schoolId).eq("status", "active"),
       client.from("attendance_records").select("*", { count: "exact", head: true }).eq("school_id", schoolId).eq("attendance_date", todayStr).eq("status", "present"),
       client.from("card_assignments").select("*", { count: "exact", head: true }).eq("school_id", schoolId).eq("status", "active").lt("wallet_balance", 500),
-    ]).then(([students, present, lowBalance]) => {
+      client.from("staff_records").select("*", { count: "exact", head: true }).eq("school_id", schoolId).eq("employment_status", "active").ilike("primary_role_category", "teacher"),
+      client.from("staff_records").select("*", { count: "exact", head: true }).eq("school_id", schoolId).eq("employment_status", "active"),
+      client.from("staff_attendance_records").select("*", { count: "exact", head: true }).eq("school_id", schoolId).eq("attendance_date", todayStr).eq("status", "present"),
+      client.from("library_books").select("*", { count: "exact", head: true }).eq("school_id", schoolId),
+      client.from("library_borrow_records").select("*", { count: "exact", head: true }).eq("school_id", schoolId).is("returned_at", null),
+      client.from("library_borrow_records").select("*", { count: "exact", head: true }).eq("school_id", schoolId).is("returned_at", null).lt("due_at", nowIso),
+    ]).then(([students, present, lowBalance, teachers, workers, staffPresent, libBooks, activeBorrows, overdueBooks]) => {
       setData({
         total_students: students.count ?? 0,
         present_today: present.count ?? 0,
         low_balance_cards: lowBalance.count ?? 0,
-        total_teachers: 0,
+        total_teachers: teachers.count ?? 0,
+        total_workers: workers.count ?? 0,
+        staff_present_today: staffPresent.count ?? 0,
+        total_library_books: libBooks.count ?? 0,
+        active_borrows: activeBorrows.count ?? 0,
+        overdue_books: overdueBooks.count ?? 0,
       });
     }).catch(() => {});
   }, [schoolId]);
@@ -46,7 +68,7 @@ export default function StatsCards({ schoolId }: { schoolId: string }) {
     {
       icon: <div className="w-10 h-10 bg-[#e0f7f4] rounded-full flex items-center justify-center"><GraduationCap size={20} className="text-teal-600" /></div>,
       label: "Enrolled Students",
-      numerator: data?.total_students ?? 320,
+      numerator: data?.total_students,
       denominator: undefined,
       color: "text-teal-600",
       href: "/students",
@@ -65,7 +87,7 @@ export default function StatsCards({ schoolId }: { schoolId: string }) {
     {
       icon: <div className="w-10 h-10 bg-teal-50 rounded-full flex items-center justify-center"><GraduationCap size={20} className="text-teal-600" /></div>,
       label: "Teachers",
-      numerator: data?.total_teachers ?? 24,
+      numerator: data?.total_teachers,
       denominator: undefined,
       color: "text-teal-600",
       href: "/workers",
@@ -73,7 +95,7 @@ export default function StatsCards({ schoolId }: { schoolId: string }) {
     {
       icon: <div className="w-10 h-10 bg-purple-50 rounded-full flex items-center justify-center"><Users size={20} className="text-purple-600" /></div>,
       label: "All Workers",
-      numerator: 38,
+      numerator: data?.total_workers,
       denominator: undefined,
       color: "text-purple-600",
       href: "/workers",
@@ -81,7 +103,7 @@ export default function StatsCards({ schoolId }: { schoolId: string }) {
     {
       icon: <div className="w-10 h-10 bg-amber-50 rounded-full flex items-center justify-center"><BarChart2 size={20} className="text-amber-600" /></div>,
       label: "Staff Attendance",
-      numerator: "96%",
+      numerator: data ? (data.total_workers > 0 ? `${Math.round((data.staff_present_today / data.total_workers) * 100)}%` : "0%") : undefined,
       denominator: undefined,
       color: "text-amber-600",
       href: "/workers",
@@ -92,7 +114,7 @@ export default function StatsCards({ schoolId }: { schoolId: string }) {
     {
       icon: <div className="w-10 h-10 bg-orange-50 rounded-full flex items-center justify-center"><BookOpen size={20} className="text-orange-600" /></div>,
       label: "Total Books",
-      numerator: 0,
+      numerator: data?.total_library_books,
       denominator: undefined,
       color: "text-orange-600",
       href: "/library",
@@ -100,7 +122,7 @@ export default function StatsCards({ schoolId }: { schoolId: string }) {
     {
       icon: <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center"><BookMarked size={20} className="text-blue-600" /></div>,
       label: "Active Borrows",
-      numerator: 0,
+      numerator: data?.active_borrows,
       denominator: undefined,
       color: "text-blue-600",
       href: "/library",
@@ -108,7 +130,7 @@ export default function StatsCards({ schoolId }: { schoolId: string }) {
     {
       icon: <div className="w-10 h-10 bg-red-50 rounded-full flex items-center justify-center"><AlertTriangle size={20} className="text-red-500" /></div>,
       label: "Overdue Books",
-      numerator: 0,
+      numerator: data?.overdue_books,
       denominator: undefined,
       color: "text-red-500",
       href: "/library",

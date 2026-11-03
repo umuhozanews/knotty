@@ -50,6 +50,17 @@ export const supabaseAcademicService = {
     return { levelId: data };
   },
 
+  async listActiveAcademicYearIds(schoolId: string): Promise<string[]> {
+    const client = getSafeBrowserClient();
+    if (!client) return [];
+    const { data } = await client
+      .from("academic_years")
+      .select("id")
+      .eq("school_id", schoolId)
+      .eq("status", "active");
+    return (data || []).map((r) => r.id);
+  },
+
   /**
    * List class sections for a school, optionally by academic year.
    */

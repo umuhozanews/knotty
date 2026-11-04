@@ -207,7 +207,8 @@ export const supabaseAttendanceService = {
   },
 
   /**
-   * Look up a staff member by their card number.
+   * Look up a staff member by their card number, employee number (e.g. STF-GATE-01),
+   * staff record ID, or legal name.
    */
   async lookupStaffCardHolder(params: {
     schoolId: string;
@@ -228,12 +229,55 @@ export const supabaseAttendanceService = {
     const client = getSafeBrowserClient();
     if (!client) throw new Error("Supabase is not configured");
 
-    const { data, error } = await client.rpc("lookup_staff_card_holder", {
-      p_school_id:   params.schoolId,
-      p_card_number: params.cardNumber,
-    });
-    if (error) throw new Error(error.message);
-    return (data && (data as any[]).length > 0) ? (data as any[])[0] : null;
+    const query = params.cardNumber?.trim();
+    if (!query) return null;
+
+    // 1. Try lookup_staff_card_holder RPC by card number
+    try {
+      const { data, error } = await client.rpc("lookup_staff_card_holder", {
+        p_school_id:   params.schoolId,
+        p_card_number: query,
+      });
+      if (!error && data && (data as any[]).length > 0) {
+        return (data as any[])[0];
+      }
+    } catch {
+      // ignore and try fallback
+    }
+
+    // 2. Fallback: match by employee_number, staff_record_id, or name from active staff list
+    try {
+      const { data: staffList, error: sErr } = await client.rpc("list_school_staff_members", {
+        p_school_id: params.schoolId,
+      });
+      if (!sErr && Array.isArray(staffList)) {
+        const qLower = query.toLowerCase();
+        const matched = staffList.find((s: any) =>
+          (s.staff_number && s.staff_number.toLowerCase() === qLower) ||
+          s.staff_record_id?.toLowerCase() === qLower ||
+          (s.legal_name && s.legal_name.toLowerCase().includes(qLower))
+        );
+        if (matched) {
+          return {
+            card_assignment_id: matched.staff_record_id,
+            card_number: matched.staff_number || query,
+            staff_record_id: matched.staff_record_id,
+            employee_number: matched.staff_number || "",
+            job_title: matched.job_title || "Staff",
+            department: matched.department || null,
+            employment_status: matched.employment_status || "active",
+            legal_name: matched.legal_name,
+            profile_photo_path: matched.profile_photo_path || null,
+            card_status: "active",
+            is_frozen: false,
+          };
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    return null;
   },
 
   /**

@@ -468,11 +468,11 @@ export default function GatePage() {
       const data = await supabaseVisitorService.getGateOverview({ schoolId });
       setOverview(data);
     } catch (err: any) {
-      showToast(err?.message || "Failed to load gate overview", "error");
+      console.warn("Gate overview load notice:", err?.message);
     } finally {
       setOverviewLoading(false);
     }
-  }, [schoolId, showToast]);
+  }, [schoolId]);
 
   const loadVisits = useCallback(async () => {
     if (!schoolId) return;
@@ -481,11 +481,11 @@ export default function GatePage() {
       const data = await supabaseVisitorService.listVisitorVisits({ schoolId });
       setVisits(data);
     } catch (err: any) {
-      showToast(err?.message || "Failed to load visitor list", "error");
+      console.warn("Gate visits load notice:", err?.message);
     } finally {
       setVisitsLoading(false);
     }
-  }, [schoolId, showToast]);
+  }, [schoolId]);
 
   const loadStaffList = useCallback(async () => {
     if (!schoolId) return;

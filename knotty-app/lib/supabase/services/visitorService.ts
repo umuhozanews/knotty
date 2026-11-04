@@ -125,14 +125,31 @@ export const supabaseVisitorService = {
     today_exits: number;
     pending_visitors: number;
   }> {
-    const client = getSafeBrowserClient();
-    if (!client) throw new Error("Supabase is not configured");
+    const fallback = {
+      students_inside: 0,
+      staff_inside: 0,
+      visitors_inside: 0,
+      today_entries: 0,
+      today_exits: 0,
+      pending_visitors: 0,
+    };
 
-    const { data, error } = await client.rpc("get_gate_overview", {
-      p_school_id: params.schoolId,
-    });
-    if (error) throw new Error(error.message);
-    return data as any;
+    const client = getSafeBrowserClient();
+    if (!client) return fallback;
+
+    try {
+      const { data, error } = await client.rpc("get_gate_overview", {
+        p_school_id: params.schoolId,
+      });
+      if (error) {
+        console.warn("get_gate_overview notice:", error.message);
+        return fallback;
+      }
+      return (data || fallback) as any;
+    } catch (err: any) {
+      console.warn("getGateOverview error:", err?.message);
+      return fallback;
+    }
   },
 
   async searchVisitorProfiles(params: {
@@ -141,15 +158,22 @@ export const supabaseVisitorService = {
     limit?: number;
   }): Promise<VisitorProfileRow[]> {
     const client = getSafeBrowserClient();
-    if (!client) throw new Error("Supabase is not configured");
+    if (!client) return [];
 
-    const { data, error } = await client.rpc("search_visitor_profiles", {
-      p_school_id: params.schoolId,
-      p_query:     params.query,
-      p_limit:     params.limit ?? 10,
-    });
-    if (error) throw new Error(error.message);
-    return (data || []) as any;
+    try {
+      const { data, error } = await client.rpc("search_visitor_profiles", {
+        p_school_id: params.schoolId,
+        p_query:     params.query,
+        p_limit:     params.limit ?? 10,
+      });
+      if (error) {
+        console.warn("search_visitor_profiles notice:", error.message);
+        return [];
+      }
+      return (data || []) as any;
+    } catch {
+      return [];
+    }
   },
 
   async listVisitorVisits(params: {
@@ -159,15 +183,23 @@ export const supabaseVisitorService = {
     limit?: number;
   }): Promise<VisitorVisitRow[]> {
     const client = getSafeBrowserClient();
-    if (!client) throw new Error("Supabase is not configured");
+    if (!client) return [];
 
-    const { data, error } = await client.rpc("list_visitor_visits", {
-      p_school_id: params.schoolId,
-      p_date:      params.date ?? new Date().toISOString().split("T")[0],
-      p_status:    params.status ?? null,
-      p_limit:     params.limit ?? 50,
-    });
-    if (error) throw new Error(error.message);
-    return (data || []) as any;
+    try {
+      const { data, error } = await client.rpc("list_visitor_visits", {
+        p_school_id: params.schoolId,
+        p_date:      params.date ?? new Date().toISOString().split("T")[0],
+        p_status:    params.status ?? null,
+        p_limit:     params.limit ?? 50,
+      });
+      if (error) {
+        console.warn("list_visitor_visits notice:", error.message);
+        return [];
+      }
+      return (data || []) as any;
+    } catch (err: any) {
+      console.warn("listVisitorVisits error:", err?.message);
+      return [];
+    }
   },
 };

@@ -105,8 +105,10 @@ export const supabaseCanteenService = {
       let msg = error.message;
       try {
         const body = await (error as any).context?.json?.();
+        if (body?.error === "card_not_found") return null;
         msg = body?.error || body?.detail || msg;
       } catch { /* ignore */ }
+      if (msg === "card_not_found") return null;
       throw new Error(msg);
     }
     if (data?.error === "card_not_found") return null;

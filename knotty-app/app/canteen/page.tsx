@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { useEffect, useState, useRef, useCallback } from "react";
 import {
   Plus, Minus, ShoppingCart, CreditCard, Trash2,
@@ -485,9 +485,12 @@ export default function CanteenPage() {
     processingRef.current = true;
     setScanLoading(true);
     try {
-      const holder = isNFC
+      let holder = isNFC
         ? await supabaseCanteenService.lookupCardHolderByNfcUid(user.school_id, cardNum.trim())
         : await supabaseCanteenService.lookupCardHolder(user.school_id, cardNum.trim());
+      if (!holder && !isNFC) {
+        holder = await supabaseCanteenService.lookupCardHolderByNfcUid(user.school_id, cardNum.trim()).catch(() => null);
+      }
       if (!holder) throw new Error("Card not found or not active");
       if (holder.is_frozen) throw new Error("This card is frozen");
       const balance = holder.wallet_balance;

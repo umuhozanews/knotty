@@ -84,10 +84,20 @@ export default function AttendancePage() {
     setTapResult(null);
     setGlowColor(null);
     try {
-      const holder = isNfcUid
+      let holder = isNfcUid
         ? await supabaseCanteenService.lookupCardHolderByNfcUid(activeSchool.id, identifier.trim())
         : await supabaseCanteenService.lookupCardHolder(activeSchool.id, identifier.trim());
-      if (!holder) throw new Error("Card not found");
+
+      // If not found by card_number, also check by NFC UID in case the hardware UID was typed or scanned
+      if (!holder && !isNfcUid) {
+        try {
+          holder = await supabaseCanteenService.lookupCardHolderByNfcUid(activeSchool.id, identifier.trim());
+        } catch {
+          /* ignore fallback error */
+        }
+      }
+
+      if (!holder) throw new Error("Card not found — check card number or tap NFC card");
       if (holder.is_frozen) throw new Error("Card is frozen");
       const cardNumber = holder.card_number ?? identifier;
 

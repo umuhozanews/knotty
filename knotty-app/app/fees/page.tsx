@@ -157,9 +157,12 @@ export default function FeesPage() {
     processingRef.current = true;
     setScanning(true);
     try {
-      const holder = isNFC
+      let holder = isNFC
         ? await supabaseCanteenService.lookupCardHolderByNfcUid(user.school_id, cardNum.trim())
         : await supabaseCanteenService.lookupCardHolder(user.school_id, cardNum.trim());
+      if (!holder && !isNFC) {
+        holder = await supabaseCanteenService.lookupCardHolderByNfcUid(user.school_id, cardNum.trim()).catch(() => null);
+      }
       if (!holder) throw new Error("Card not found");
       const scanned: ScannedStudent = {
         id: holder.student_id,

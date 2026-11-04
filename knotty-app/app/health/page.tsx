@@ -297,15 +297,25 @@ export default function HealthPage() {
           photo: holder.profile_photo_path ?? null,
         };
       } else {
-        const scanned = await supabaseLibraryService.lookupStudent(user.school_id, cardNum.trim());
-        studentData = {
-          id: scanned.id,
-          name: scanned.name,
-          class: scanned.class,
-          card_number: scanned.card_number,
-          student_code: scanned.student_code,
-          photo: scanned.photo,
-        };
+        let scanned: { id: string; name: string; class: string; card_number: string | null; student_code: string; photo: string | null };
+        try {
+          scanned = await supabaseLibraryService.lookupStudent(user.school_id, cardNum.trim());
+        } catch (origErr) {
+          const holder = await supabaseCanteenService.lookupCardHolderByNfcUid(user.school_id, cardNum.trim()).catch(() => null);
+          if (holder) {
+            scanned = {
+              id: holder.student_id,
+              name: holder.legal_name,
+              class: [holder.education_level_name, holder.class_name].filter(Boolean).join(" "),
+              card_number: holder.card_number,
+              student_code: holder.admission_number,
+              photo: holder.profile_photo_path ?? null,
+            };
+          } else {
+            throw origErr;
+          }
+        }
+        studentData = scanned;
       }
       setStudent({
         id: studentData.id,
@@ -319,9 +329,9 @@ export default function HealthPage() {
       setStudentTab("incidents");
       setStudentLoading(true);
       const [incRes, visitRes, profRes] = await Promise.allSettled([
-        supabaseHealthService.studentList(user.school_id, scanned.id),
-        supabaseHealthService.studentVisits(user.school_id, scanned.id),
-        supabaseHealthService.getProfile(user.school_id, scanned.id),
+        supabaseHealthService.studentList(user.school_id, studentData.id),
+        supabaseHealthService.studentVisits(user.school_id, studentData.id),
+        supabaseHealthService.getProfile(user.school_id, studentData.id),
       ]);
       if (incRes.status === "fulfilled")   setIncidents(incRes.value);
       if (visitRes.status === "fulfilled") setVisits(visitRes.value);

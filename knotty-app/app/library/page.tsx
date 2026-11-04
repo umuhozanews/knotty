@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Book, BookOpen, Plus, X, Search, AlertTriangle, CheckCircle,
@@ -296,7 +296,17 @@ export default function LibraryPage() {
     setStudentHistoryList([]);
     setShowLendForm(false);
     try {
-      const s = await supabaseLibraryService.lookupStudent(user.school_id, query.trim());
+      let s: Awaited<ReturnType<typeof supabaseLibraryService.lookupStudent>>;
+      try {
+        s = await supabaseLibraryService.lookupStudent(user.school_id, query.trim());
+      } catch (origErr) {
+        const holder = await supabaseCanteenService.lookupCardHolderByNfcUid(user.school_id, query.trim()).catch(() => null);
+        if (holder?.card_number || holder?.admission_number) {
+          s = await supabaseLibraryService.lookupStudent(user.school_id, holder.card_number || holder.admission_number);
+        } else {
+          throw origErr;
+        }
+      }
       setStudent({
         id: s.id,
         name: s.name,
@@ -346,7 +356,17 @@ export default function LibraryPage() {
       setBookResults([]);
     }
     try {
-      const s = await supabaseLibraryService.lookupStudent(user.school_id, query.trim());
+      let s: Awaited<ReturnType<typeof supabaseLibraryService.lookupStudent>>;
+      try {
+        s = await supabaseLibraryService.lookupStudent(user.school_id, query.trim());
+      } catch (origErr) {
+        const holder = await supabaseCanteenService.lookupCardHolderByNfcUid(user.school_id, query.trim()).catch(() => null);
+        if (holder?.card_number || holder?.admission_number) {
+          s = await supabaseLibraryService.lookupStudent(user.school_id, holder.card_number || holder.admission_number);
+        } else {
+          throw origErr;
+        }
+      }
       setModalStudent({
         id: s.id,
         name: s.name,

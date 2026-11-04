@@ -3,15 +3,17 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, Plus, Loader2, CreditCard, User, Trash2, Edit2,
-  ChevronRight, Users, UserCheck, AlertCircle, X, Eye, EyeOff, ShieldCheck
+  ChevronRight, Users, UserCheck, AlertCircle, X, Eye, EyeOff, ShieldCheck,
+  Wifi, WifiOff, Check
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import { students, structure, cards, health, Level, Class, Student } from "@/lib/api";
-import { supabaseStudentService, supabaseAcademicService } from "@/lib/supabase/services";
+import { supabaseStudentService, supabaseAcademicService, supabaseCardService } from "@/lib/supabase/services";
 import type { ClassSectionRow } from "@/lib/supabase/services/academicService";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
+import { useNFC } from "@/hooks/useNFC";
 import { getStoredStudents } from "@/lib/demo";
 import { isManagementRole } from "@/lib/roles";
 
@@ -416,7 +418,7 @@ function StudentModal({
                   <Field label="First Name" required>
                     <input value={form.first_name} onChange={set("first_name")} className={inp} placeholder="e.g. Ange" />
                   </Field>
-                  <Field label="Last Name (Second Name)" required>
+                  <Field label="Last Name" required>
                     <input value={form.last_name} onChange={set("last_name")} className={inp} placeholder="e.g. Uwimana" />
                   </Field>
                 </div>
@@ -426,10 +428,9 @@ function StudentModal({
                     value={form.email}
                     onChange={set("email")}
                     className={inp}
-                    placeholder="student@school.rw (leave blank to auto-generate)"
+                    placeholder="student@school.rw"
                     disabled={isEdit}
                   />
-                  <p className="text-[10px] text-gray-400 mt-1">If left empty, a student email will be created automatically.</p>
                 </Field>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Phone">
@@ -524,7 +525,7 @@ function StudentModal({
             {tab === "guardian" && (
               <>
                 <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 text-xs text-blue-600 dark:text-blue-400">
-                  A parent account will be created automatically. Parents will use the student credentials to log in.
+                  A parent account is created automatically.
                 </div>
                 <Field label="Guardian Full Name">
                   <input value={form.guardian_name} onChange={set("guardian_name")} className={inp} placeholder="e.g. Jean Baptiste Nkusi" />
@@ -661,7 +662,7 @@ function StudentRow({ s, idx, onEdit, onDelete, onIssue, onStatus, issuing, isCl
           </button>
         )}
         {isManagementRole(user?.role) && onStatus && (
-          <button onClick={onStatus} title="Update Lifecycle Status" className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 transition">
+          <button onClick={onStatus} title="Change status" className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 transition">
             <ShieldCheck size={12} />
           </button>
         )}
@@ -734,9 +735,9 @@ function ChangeStudentStatusModal({
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm p-6 border border-gray-100 dark:border-gray-800">
-        <h3 className="font-bold text-gray-800 dark:text-gray-100 text-base mb-1">Update Student Lifecycle Status</h3>
+        <h3 className="font-bold text-gray-800 dark:text-gray-100 text-base mb-1">Change Status</h3>
         <p className="text-xs text-gray-400 mb-4">
-          Student: <span className="font-semibold text-gray-700 dark:text-gray-300">{student.user.first_name} {student.user.last_name}</span> ({student.student_code})
+          {student.user.first_name} {student.user.last_name} · <span className="font-mono">{student.student_code}</span>
         </p>
 
         {error && (
@@ -748,16 +749,16 @@ function ChangeStudentStatusModal({
 
         <form onSubmit={submit} className="space-y-3">
           <div>
-            <label className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1 block">Terminal Lifecycle Status</label>
+            <label className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1 block">Status</label>
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as any)}
               className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm outline-none dark:bg-gray-800 dark:text-gray-200"
             >
-              <option value="withdrawn">Withdrawn (Formal Exit)</option>
-              <option value="graduated">Graduated (Completed)</option>
-              <option value="transferred">Transferred (To Other School)</option>
-              <option value="inactive">Inactive (Dormant Record)</option>
+              <option value="withdrawn">Withdrawn</option>
+              <option value="graduated">Graduated</option>
+              <option value="transferred">Transferred</option>
+              <option value="inactive">Inactive</option>
             </select>
           </div>
 
@@ -794,6 +795,163 @@ function ChangeStudentStatusModal({
   );
 }
 
+function IssueStudentCardModal({
+  schoolId,
+  student,
+  onClose,
+  onSuccess,
+}: {
+  schoolId: string;
+  student: Student;
+  onClose: () => void;
+  onSuccess: (msg: string) => void;
+}) {
+  const { scan, scanning, isSupported } = useNFC();
+  const [nfcUid, setNfcUid] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleScanNFC() {
+    setError("");
+    const res = await scan();
+    if (res?.value) setNfcUid(res.value.toUpperCase());
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!nfcUid.trim()) {
+      setError("Please tap an NFC card or enter the card UID.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      if (student.card?.id) {
+        await supabaseCardService.replaceCard({
+          schoolId,
+          oldCardAssignmentId: student.card.id,
+          identifierKind: "nfc_uid",
+          identifier: nfcUid.trim().toUpperCase(),
+          reason: "Card assigned/replaced from student registry",
+        });
+        onSuccess(`NFC card linked for ${student.user.first_name} ${student.user.last_name}`);
+      } else {
+        await supabaseCardService.issueCard({
+          schoolId,
+          holderKind: "student",
+          studentId: student.id,
+          identifierKind: "nfc_uid",
+          identifier: nfcUid.trim().toUpperCase(),
+        });
+        onSuccess(`Card issued for ${student.user.first_name} ${student.user.last_name}`);
+      }
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Card issuance failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm p-6 border border-gray-100 dark:border-gray-800">
+        <h3 className="font-bold text-gray-800 dark:text-gray-100 text-base mb-1">Issue Card</h3>
+        <p className="text-xs text-gray-400 mb-4">
+          {student.user.first_name} {student.user.last_name} · <span className="font-mono">{student.student_code}</span>
+        </p>
+
+        {error && (
+          <div className="p-3 mb-3 rounded-xl bg-red-50 text-red-600 text-xs border border-red-100 flex items-center gap-1.5">
+            <AlertCircle size={14} className="shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <form onSubmit={submit} className="space-y-4">
+          <div>
+            <label className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2 block">
+              Physical Card UID (NFC)
+            </label>
+
+            {nfcUid ? (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Check size={16} className="text-green-600 shrink-0" />
+                  <div>
+                    <p className="text-xs font-bold text-green-800">Card ready</p>
+                    <p className="text-xs font-mono text-green-600">{nfcUid}</p>
+                  </div>
+                </div>
+                <button type="button" onClick={() => setNfcUid("")} className="text-xs text-green-700 hover:underline">
+                  Rescan
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {isSupported ? (
+                  <button
+                    type="button"
+                    onClick={handleScanNFC}
+                    disabled={scanning}
+                    className={`w-full py-4 rounded-xl flex flex-col items-center gap-1.5 border-2 transition font-medium ${
+                      scanning
+                        ? "border-blue-400 bg-blue-50 text-blue-600 border-dashed"
+                        : "border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-600"
+                    }`}
+                  >
+                    {scanning ? (
+                      <>
+                        <Loader2 size={20} className="animate-spin" />
+                        <span className="text-xs">Hold card to phone…</span>
+                      </>
+                    ) : (
+                      <>
+                        <Wifi size={20} />
+                        <span className="text-xs">Tap NFC Card</span>
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <div className="p-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-[11px] text-amber-700 dark:text-amber-300 flex items-start gap-1.5">
+                    <WifiOff size={14} className="shrink-0 mt-0.5" />
+                    <span>Web NFC requires Chrome on Android. Enter the card UID manually below.</span>
+                  </div>
+                )}
+                <input
+                  required
+                  value={nfcUid}
+                  onChange={(e) => setNfcUid(e.target.value.toUpperCase())}
+                  placeholder="e.g. AC4C1107"
+                  className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm font-mono outline-none focus:border-blue-500 dark:bg-gray-800 dark:text-gray-200"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading || !nfcUid.trim()}
+              className="flex-1 py-2.5 rounded-xl bg-blue-600 text-sm text-white font-medium hover:bg-blue-700 disabled:opacity-50 transition flex items-center justify-center gap-1.5"
+            >
+              {loading ? <Loader2 size={14} className="animate-spin" /> : <CreditCard size={14} />}
+              <span>Issue Card</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 const ALL_KEY = "__all__";
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
@@ -813,6 +971,7 @@ export default function StudentsPage() {
   const [editStudent, setEditStudent] = useState<Student | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Student | null>(null);
   const [statusTarget, setStatusTarget] = useState<Student | null>(null);
+  const [cardTarget, setCardTarget]     = useState<Student | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [issuing, setIssuing] = useState<string | null>(null);
   const [noActiveYear, setNoActiveYear] = useState(false);
@@ -968,19 +1127,6 @@ export default function StudentsPage() {
     const n = studentsByClass[c.id]?.length ?? (c._count?.students ?? 0);
     return acc + n;
   }, 0);
-
-  async function handleIssue(studentId: string) {
-    setIssuing(studentId);
-    try {
-      await cards.issue(studentId);
-      show("Card issued successfully", "success");
-      loadStudents(selectedClass);
-    } catch (err) {
-      show(err instanceof Error ? err.message : "Failed to issue card", "error");
-    } finally {
-      setIssuing(null);
-    }
-  }
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -1174,7 +1320,7 @@ export default function StudentsPage() {
                     key={s.id} s={s} idx={i}
                     onEdit={() => { setEditStudent(s); setShowModal(true); }}
                     onDelete={() => setDeleteTarget(s)}
-                    onIssue={() => handleIssue(s.id)}
+                    onIssue={() => setCardTarget(s)}
                     onStatus={() => setStatusTarget(s)}
                     issuing={issuing === s.id}
                     isClassTeacher={isClassTeacher}
@@ -1221,6 +1367,17 @@ export default function StudentsPage() {
           schoolId={user?.school_id || "00000000-0000-0000-0000-000000000001"}
           student={statusTarget}
           onClose={() => setStatusTarget(null)}
+          onSuccess={(msg) => {
+            show(msg, "success");
+            loadStudents(selectedClass);
+          }}
+        />
+      )}
+      {cardTarget && user?.school_id && (
+        <IssueStudentCardModal
+          schoolId={user.school_id}
+          student={cardTarget}
+          onClose={() => setCardTarget(null)}
           onSuccess={(msg) => {
             show(msg, "success");
             loadStudents(selectedClass);

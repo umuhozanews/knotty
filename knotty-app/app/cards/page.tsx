@@ -379,9 +379,9 @@ function ReplaceCardModal({
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 border border-gray-100">
-        <h3 className="font-bold text-gray-800 text-base mb-1">Replace IshuriHUB Card</h3>
+        <h3 className="font-bold text-gray-800 text-base mb-1">Replace Card</h3>
         <p className="text-xs text-gray-500 mb-4">
-          Revokes existing card <span className="font-mono font-bold text-gray-700">{card.card_number}</span> and issues a replacement.
+          {card.holder_name} · <span className="font-mono">{card.card_number}</span>
         </p>
 
         {error && (
@@ -405,19 +405,7 @@ function ReplaceCardModal({
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-semibold text-gray-600">New Hardware Identifier</label>
-              <button
-                type="button"
-                onClick={() => {
-                  const fake = Array.from({ length: 7 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0').toUpperCase()).join("");
-                  setIdentifier(fake);
-                }}
-                className="text-[11px] text-blue-600 hover:underline"
-              >
-                Simulate UID
-              </button>
-            </div>
+            <label className="text-xs font-semibold text-gray-600 mb-1 block">New Card UID</label>
             <input
               required
               value={identifier}
@@ -511,9 +499,9 @@ function ChangeCardStatusModal({
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 border border-gray-100">
-        <h3 className="font-bold text-gray-800 text-base mb-1">Card Lifecycle Status Transition</h3>
+        <h3 className="font-bold text-gray-800 text-base mb-1">Change Status</h3>
         <p className="text-xs text-gray-500 mb-4">
-          Card: <span className="font-mono font-bold">{card.card_number}</span>
+          {card.holder_name} · <span className="font-mono">{card.card_number}</span>
         </p>
 
         {error && (
@@ -525,17 +513,17 @@ function ChangeCardStatusModal({
 
         <form onSubmit={submit} className="space-y-3">
           <div>
-            <label className="text-xs font-semibold text-gray-600 mb-1 block">New Lifecycle Status</label>
+            <label className="text-xs font-semibold text-gray-600 mb-1 block">Status</label>
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as any)}
               className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none"
             >
-              <option value="suspended">Suspended (Temporary lock)</option>
-              <option value="active">Active (Resume suspended card)</option>
-              <option value="lost">Mark Lost</option>
-              <option value="damaged">Mark Damaged</option>
-              <option value="revoked">Revoked (Permanent)</option>
+              <option value="suspended">Suspended</option>
+              <option value="active">Active</option>
+              <option value="lost">Lost</option>
+              <option value="damaged">Damaged</option>
+              <option value="revoked">Revoked</option>
             </select>
           </div>
 
@@ -716,8 +704,8 @@ export default function CardsPage() {
       <div className="p-4 space-y-4 max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-bold text-gray-800 dark:text-gray-100">IshuriHUB NFC Cards</h1>
-            <p className="text-sm text-gray-400">{total} cards active in current registry</p>
+            <h1 className="text-xl font-bold text-gray-800 dark:text-gray-100">Cards</h1>
+            <p className="text-sm text-gray-400">{total} issued</p>
           </div>
           <button
             onClick={() => setModal("issue")}
@@ -792,7 +780,7 @@ export default function CardsPage() {
                           <button
                             onClick={() => { setSelectedCard(card); setModal("status"); }}
                             className="text-xs px-2.5 py-1 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
-                            title="Audit-trailed lifecycle status transition"
+                            title="Change status"
                           >
                             Status
                           </button>

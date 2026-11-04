@@ -520,6 +520,9 @@ export default function CanteenPage() {
     payHandlerRef.current = handlePayment;
   }, [handlePayment]);
 
+  // Stop NFC on unmount so the listener doesn't fire on other pages
+  useEffect(() => () => stopListen(), []); // eslint-disable-line react-hooks/exhaustive-deps
+
   function startPaying() {
     if (total === 0) return;
     setPaying(true); setPayResult(null); setScannedCard(null);

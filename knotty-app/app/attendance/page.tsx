@@ -91,7 +91,7 @@ export default function AttendancePage() {
       if (holder.is_frozen) throw new Error("Card is frozen");
       const cardNumber = holder.card_number ?? identifier;
 
-      const idempotencyKey = `${holder.student_id}-${Date.now()}`;
+      const idempotencyKey = crypto.randomUUID();
       const direction: "auto" | "in" | "out" = scanType === "IN" ? "in" : scanType === "OUT" ? "out" : "auto";
       const tapRes = await supabaseAttendanceService.recordVirtualStudentTapV2({
         schoolId: activeSchool.id,
@@ -229,6 +229,9 @@ export default function AttendancePage() {
   useEffect(() => {
     return () => { qrScannerRef.current?.stop().catch(() => {}); };
   }, []);
+
+  // Stop NFC listener when navigating away so it doesn't fire on other pages
+  useEffect(() => () => stopListen(), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function toggleNFCListen() {
     if (listening) { stopListen(); toast("NFC stopped", "info"); return; }

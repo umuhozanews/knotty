@@ -144,6 +144,9 @@ export default function LibraryPage() {
     nfcTargetRef.current = showLendModal ? "modal" : "desk";
   }, [showLendModal]);
 
+  // Stop NFC on unmount so the listener doesn't fire on other pages
+  useEffect(() => () => stopListen(), []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleNfcCard = useCallback(async (val: string, isUid = false) => {
     playChime();
     // Physical NFC taps deliver a raw UID — resolve it to a card_number first.

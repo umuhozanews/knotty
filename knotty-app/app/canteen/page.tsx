@@ -479,13 +479,15 @@ export default function CanteenPage() {
     }
   }
 
-  async function handlePayment(cardNum: string, _isNFC = false) {
+  async function handlePayment(cardNum: string, isNFC = false) {
     if (!cardNum.trim() || processingRef.current || total === 0) return;
     if (!user?.school_id) { toast("No school selected", "error"); return; }
     processingRef.current = true;
     setScanLoading(true);
     try {
-      const holder = await supabaseCanteenService.lookupCardHolder(user.school_id, cardNum.trim());
+      const holder = isNFC
+        ? await supabaseCanteenService.lookupCardHolderByNfcUid(user.school_id, cardNum.trim())
+        : await supabaseCanteenService.lookupCardHolder(user.school_id, cardNum.trim());
       if (!holder) throw new Error("Card not found or not active");
       if (holder.is_frozen) throw new Error("This card is frozen");
       const balance = holder.wallet_balance;

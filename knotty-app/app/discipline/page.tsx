@@ -7,7 +7,7 @@ import {
 import DashboardShell from "@/components/DashboardShell";
 import VirtualCardTap from "@/components/VirtualCardTap";
 import type { DisciplineRecord } from "@/lib/api";
-import { supabaseDisciplineService, supabaseLibraryService } from "@/lib/supabase/services";
+import { supabaseDisciplineService, supabaseLibraryService, supabaseCanteenService } from "@/lib/supabase/services";
 import { useNFC } from "@/hooks/useNFC";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
@@ -324,22 +324,37 @@ export default function DisciplinePage() {
   }, [user?.school_id]);
 
   /* ── Card scan handler ─────────────────────────────────────── */
-  async function handleCardScan(cardNum: string, _isNFC = false) {
+  async function handleCardScan(cardNum: string, isNFC = false) {
     if (!cardNum.trim() || processingRef.current || !user?.school_id) return;
     processingRef.current = true;
     setScanning(true);
     try {
-      const scanned = await supabaseLibraryService.lookupStudent(user.school_id, cardNum.trim());
-      setStudent({
-        id: scanned.id,
-        name: scanned.name,
-        class: scanned.class,
-        card_number: scanned.card_number,
-        student_code: scanned.student_code,
-        photo: scanned.photo,
-      });
+      let studentData: ScannedStudent;
+      if (isNFC) {
+        const holder = await supabaseCanteenService.lookupCardHolderByNfcUid(user.school_id, cardNum.trim());
+        if (!holder) throw new Error("Card not found or not active");
+        studentData = {
+          id: holder.student_id,
+          name: holder.legal_name,
+          class: [holder.education_level_name, holder.class_name].filter(Boolean).join(" "),
+          card_number: holder.card_number,
+          student_code: holder.admission_number,
+          photo: holder.profile_photo_path ?? null,
+        };
+      } else {
+        const scanned = await supabaseLibraryService.lookupStudent(user.school_id, cardNum.trim());
+        studentData = {
+          id: scanned.id,
+          name: scanned.name,
+          class: scanned.class,
+          card_number: scanned.card_number,
+          student_code: scanned.student_code,
+          photo: scanned.photo,
+        };
+      }
+      setStudent(studentData);
       setCardInput("");
-      await loadStudentRecords(scanned.id);
+      await loadStudentRecords(studentData.id);
     } catch (err) {
       toast(err instanceof Error ? err.message : "Student not found", "error");
     } finally {

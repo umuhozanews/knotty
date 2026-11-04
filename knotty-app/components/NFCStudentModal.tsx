@@ -1,88 +1,150 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { X, Loader2, AlertTriangle, BookOpen, ShieldAlert, Wifi, StopCircle, User, Heart } from "lucide-react";
+import {
+  X, Loader2, AlertTriangle, BookOpen, ShieldAlert,
+  Wifi, StopCircle, User, Heart, Calendar, CreditCard,
+} from "lucide-react";
 import { useNFC, NFCResult } from "@/hooks/useNFC";
 import VirtualCardTap from "@/components/VirtualCardTap";
-import { cards, discipline, reports, health, CardScanResult, DisciplineRecord, AcademicReport, HealthRecord } from "@/lib/api";
+import {
+  supabaseCanteenService,
+  supabaseDisciplineService,
+  supabaseHealthService,
+} from "@/lib/supabase/services";
+import type { DisciplineRecord, HealthRecord } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
+import { getSafeBrowserClient } from "@/lib/supabase/client";
+
 export type NFCMode = "report" | "discipline" | "health";
 type Phase = "scanning" | "loading" | "found" | "error";
 
 const SEV_COLOR: Record<string, string> = {
-  SERIOUS: "bg-red-50 text-red-500",
+  SERIOUS:  "bg-red-50 text-red-500",
   MODERATE: "bg-orange-50 text-orange-500",
-  MINOR: "bg-yellow-50 text-yellow-600",
+  MINOR:    "bg-yellow-50 text-yellow-600",
 };
-
 const TYPE_COLOR: Record<string, string> = {
-  WARNING: "bg-yellow-50 text-yellow-600",
-  SUSPENSION: "bg-red-50 text-red-500",
-  MISCONDUCT: "bg-orange-50 text-orange-500",
+  WARNING:        "bg-yellow-50 text-yellow-600",
+  SUSPENSION:     "bg-red-50 text-red-500",
+  MISCONDUCT:     "bg-orange-50 text-orange-500",
   RULE_VIOLATION: "bg-purple-50 text-purple-500",
-  OTHER: "bg-gray-100 text-gray-500",
+  OTHER:          "bg-gray-100 text-gray-500",
 };
-
 const HEALTH_SEV_COLOR: Record<string, string> = {
-  CRITICAL: "bg-red-50 text-red-600",
-  HIGH:     "bg-orange-50 text-orange-500",
-  MODERATE: "bg-yellow-50 text-yellow-600",
-  LOW:      "bg-green-50 text-green-600",
+  HIGH:   "bg-orange-50 text-orange-500",
+  MEDIUM: "bg-yellow-50 text-yellow-600",
+  LOW:    "bg-green-50 text-green-600",
 };
-
 const HEALTH_TYPE_COLOR: Record<string, string> = {
-  ILLNESS:   "bg-blue-50 text-blue-600",
-  INJURY:    "bg-orange-50 text-orange-500",
-  CHECKUP:   "bg-green-50 text-green-600",
-  EMERGENCY: "bg-red-50 text-red-600",
-  OTHER:     "bg-gray-100 text-gray-500",
+  ILLNESS:    "bg-blue-50 text-blue-600",
+  INJURY:     "bg-orange-50 text-orange-500",
+  CHECKUP:    "bg-green-50 text-green-600",
+  MEDICATION: "bg-purple-50 text-purple-500",
+  ALLERGY:    "bg-red-50 text-red-500",
+  OTHER:      "bg-gray-100 text-gray-500",
 };
-
-function gradeColor(avg: number | null) {
-  if (avg === null) return "text-gray-400";
-  if (avg >= 80) return "text-green-600";
-  if (avg >= 60) return "text-blue-600";
-  if (avg >= 50) return "text-orange-500";
-  return "text-red-500";
-}
 
 const MODE_CONFIG: Record<NFCMode, { title: string; iconBg: string; iconColor: string; Icon: React.ElementType }> = {
-  report:     { title: "Student Report",      iconBg: "bg-blue-50",  iconColor: "text-blue-500",  Icon: BookOpen    },
-  discipline: { title: "Discipline Records",  iconBg: "bg-red-50",   iconColor: "text-red-500",   Icon: ShieldAlert },
-  health:     { title: "Health Records",      iconBg: "bg-green-50", iconColor: "text-green-600", Icon: Heart       },
+  report:     { title: "Student Report",     iconBg: "bg-blue-50",  iconColor: "text-blue-500",  Icon: BookOpen    },
+  discipline: { title: "Discipline Records", iconBg: "bg-red-50",   iconColor: "text-red-500",   Icon: ShieldAlert },
+  health:     { title: "Health Records",     iconBg: "bg-green-50", iconColor: "text-green-600", Icon: Heart       },
+};
+
+type ScannedStudent = {
+  id: string;
+  name: string;
+  class: string;
+  student_code: string;
+  photo: string | null;
+  wallet_balance: number;
+  card_number: string;
+  card_status: string;
+};
+
+type AttendanceSummary = {
+  total: number;
+  present: number;
+  absent: number;
+  late: number;
+  rate: number;
 };
 
 export default function NFCStudentModal({ mode, onClose }: { mode: NFCMode; onClose: () => void }) {
   const { startListen, stopListen, listening, error: nfcError, isSupported } = useNFC();
+  const { user } = useAuth();
   const [phase, setPhase] = useState<Phase>("scanning");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [student, setStudent] = useState<CardScanResult | null>(null);
+  const [student, setStudent] = useState<ScannedStudent | null>(null);
   const [disciplineData, setDisciplineData] = useState<DisciplineRecord[] | null>(null);
-  const [reportData, setReportData]         = useState<AcademicReport[]   | null>(null);
-  const [healthData, setHealthData]         = useState<HealthRecord[]      | null>(null);
+  const [healthData, setHealthData]         = useState<HealthRecord[] | null>(null);
+  const [attendance, setAttendance]         = useState<AttendanceSummary | null>(null);
 
   const handleNFCTap = useCallback(async (result: NFCResult) => {
+    if (!user?.school_id) {
+      setErrorMsg("Not signed in — please log in and try again");
+      setPhase("error");
+      return;
+    }
     stopListen();
     setPhase("loading");
     try {
-      const cardRes = await cards.scanNFC(result.value);
-      const studentInfo = cardRes.data;
-      setStudent(studentInfo);
+      const cardHolder = await supabaseCanteenService.lookupCardHolderByNfcUid(
+        user.school_id,
+        result.value,
+      );
+      if (!cardHolder) {
+        setErrorMsg("Card not registered or not assigned to any student");
+        setPhase("error");
+        return;
+      }
+
+      const scanned: ScannedStudent = {
+        id:             cardHolder.student_id,
+        name:           cardHolder.legal_name ?? "Unknown",
+        class:          [cardHolder.education_level_name, cardHolder.class_name].filter(Boolean).join(" ") || "—",
+        student_code:   cardHolder.admission_number ?? "—",
+        photo:          cardHolder.profile_photo_path ?? null,
+        wallet_balance: cardHolder.wallet_balance ?? 0,
+        card_number:    cardHolder.card_number ?? "—",
+        card_status:    cardHolder.card_status ?? "unknown",
+      };
+      setStudent(scanned);
 
       if (mode === "discipline") {
-        const res = await discipline.studentList(studentInfo.student.id, 1, 5);
-        setDisciplineData(res.data as DisciplineRecord[]);
-      } else if (mode === "report") {
-        const res = await reports.studentList(studentInfo.student.id, 1, 3);
-        setReportData(res.data as AcademicReport[]);
+        const records = await supabaseDisciplineService.studentList(user.school_id, cardHolder.student_id);
+        setDisciplineData(records.slice(0, 5));
+      } else if (mode === "health") {
+        const records = await supabaseHealthService.studentList(user.school_id, cardHolder.student_id);
+        setHealthData(records.slice(0, 5));
       } else {
-        const res = await health.studentList(studentInfo.student.id);
-        setHealthData((res.data as HealthRecord[]).slice(0, 5));
+        const client = getSafeBrowserClient();
+        if (client) {
+          const { data } = await client
+            .from("attendance_records")
+            .select("status, attendance_date")
+            .eq("school_id", user.school_id)
+            .eq("student_id", cardHolder.student_id)
+            .order("attendance_date", { ascending: false })
+            .limit(60);
+          const rows = data ?? [];
+          const present = rows.filter(r => r.status === "present").length;
+          const late    = rows.filter(r => r.status === "late").length;
+          const absent  = rows.filter(r => r.status === "absent").length;
+          setAttendance({
+            total:   rows.length,
+            present,
+            late,
+            absent,
+            rate: rows.length > 0 ? Math.round(((present + late) / rows.length) * 100) : 0,
+          });
+        }
       }
       setPhase("found");
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Card not found or not registered");
+      setErrorMsg(err instanceof Error ? err.message : "Card not found or lookup failed");
       setPhase("error");
     }
-  }, [mode, stopListen]);
+  }, [mode, stopListen, user]);
 
   const startScanning = useCallback(() => {
     if (isSupported) startListen(handleNFCTap);
@@ -97,8 +159,8 @@ export default function NFCStudentModal({ mode, onClose }: { mode: NFCMode; onCl
     setPhase("scanning");
     setStudent(null);
     setDisciplineData(null);
-    setReportData(null);
     setHealthData(null);
+    setAttendance(null);
     setErrorMsg(null);
     startScanning();
   }
@@ -126,6 +188,7 @@ export default function NFCStudentModal({ mode, onClose }: { mode: NFCMode; onCl
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">
+
           {/* Scanning */}
           {phase === "scanning" && (
             <div className="flex flex-col items-center justify-center py-12 gap-4">
@@ -144,7 +207,7 @@ export default function NFCStudentModal({ mode, onClose }: { mode: NFCMode; onCl
                   </div>
                   <div className="text-center">
                     <p className="text-sm font-semibold text-gray-700">
-                      {listening ? "Ready — tap an IshuriHUB Card" : "Starting NFC scanner…"}
+                      {listening ? "Ready — tap an NFC card" : "Starting NFC scanner…"}
                     </p>
                     <p className="text-xs text-gray-400 mt-1">Hold the NFC card near the back of your phone</p>
                   </div>
@@ -155,7 +218,7 @@ export default function NFCStudentModal({ mode, onClose }: { mode: NFCMode; onCl
                     </button>
                   )}
                   <div className="pt-2 flex flex-col items-center gap-2">
-                    <p className="text-xs text-gray-400">Or use Virtual Tap / test card:</p>
+                    <p className="text-xs text-gray-400">Or use Virtual Tap:</p>
                     <VirtualCardTap onTap={(cn) => handleNFCTap({ type: "text", value: cn })} />
                   </div>
                 </>
@@ -165,9 +228,9 @@ export default function NFCStudentModal({ mode, onClose }: { mode: NFCMode; onCl
                     <AlertTriangle size={28} className="text-orange-400" />
                   </div>
                   <p className="text-sm font-semibold text-gray-700">NFC Hardware Unavailable</p>
-                  <p className="text-xs text-gray-400">Web NFC requires Chrome on Android with NFC enabled.</p>
+                  <p className="text-xs text-gray-400">Web NFC requires Chrome on Android.</p>
                   <div className="pt-2 flex flex-col items-center gap-2">
-                    <p className="text-xs text-gray-500 font-medium">Test lookup with virtual card tap:</p>
+                    <p className="text-xs text-gray-500 font-medium">Test with virtual card tap:</p>
                     <VirtualCardTap onTap={(cn) => handleNFCTap({ type: "text", value: cn })} />
                   </div>
                 </div>
@@ -191,7 +254,7 @@ export default function NFCStudentModal({ mode, onClose }: { mode: NFCMode; onCl
               </div>
               <div className="text-center">
                 <p className="text-sm font-semibold text-gray-700">Card Not Found</p>
-                <p className="text-xs text-gray-400 mt-1">{errorMsg}</p>
+                <p className="text-xs text-gray-400 mt-1 max-w-xs">{errorMsg}</p>
               </div>
               <button onClick={reset} className="px-5 py-2 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">
                 Scan Again
@@ -204,62 +267,46 @@ export default function NFCStudentModal({ mode, onClose }: { mode: NFCMode; onCl
             <div className="space-y-4">
               {/* Student banner */}
               <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                {student.student.photo ? (
-                  <img src={student.student.photo} alt="" className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
+                {student.photo ? (
+                  <img src={student.photo} alt="" className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
                 ) : (
                   <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
                     <User size={20} className="text-blue-500" />
                   </div>
                 )}
-                <div>
-                  <p className="text-sm font-bold text-gray-800">{student.student.name}</p>
-                  <p className="text-xs text-gray-500">{student.student.class} · {student.student.student_code}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-gray-800 truncate">{student.name}</p>
+                  <p className="text-xs text-gray-500">{student.class} · {student.student_code}</p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-xs text-gray-400 flex items-center gap-1 justify-end">
+                    <CreditCard size={10} /> {student.card_number.slice(-8)}
+                  </p>
+                  <p className="text-xs font-bold text-blue-600">{student.wallet_balance.toLocaleString()} RWF</p>
                 </div>
               </div>
 
-              {/* Report */}
-              {mode === "report" && reportData !== null && (
+              {/* Report mode: attendance summary */}
+              {mode === "report" && attendance !== null && (
                 <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                    {reportData.length === 0 ? "No Reports Yet" : "Recent Report Cards"}
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                    <Calendar size={11} /> Attendance (last {attendance.total} records)
                   </p>
-                  {reportData.length === 0 ? (
+                  {attendance.total === 0 ? (
                     <div className="text-center py-6 bg-gray-50 rounded-xl">
-                      <p className="text-sm text-gray-400">No report cards available</p>
+                      <p className="text-sm text-gray-400">No attendance records yet</p>
                     </div>
                   ) : (
-                    <div className="space-y-3">
-                      {reportData.map((r) => (
-                        <div key={r.id} className="p-3 bg-gray-50 rounded-xl">
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="text-sm font-semibold text-gray-700">{r.term} · {r.academic_year}</p>
-                            {r.average !== null && (
-                              <span className={`text-lg font-bold ${gradeColor(r.average)}`}>{r.average.toFixed(1)}%</span>
-                            )}
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            {r.position_in_class !== null && (
-                              <div className="bg-white rounded-lg p-2">
-                                <p className="text-xs text-gray-400">Position</p>
-                                <p className="text-sm font-bold text-gray-700">#{r.position_in_class}</p>
-                              </div>
-                            )}
-                            {r.total_marks !== null && (
-                              <div className="bg-white rounded-lg p-2">
-                                <p className="text-xs text-gray-400">Total Marks</p>
-                                <p className="text-sm font-bold text-gray-700">{r.total_marks}</p>
-                              </div>
-                            )}
-                          </div>
-                          {r.conduct_grade && (
-                            <div className="mt-2 flex items-center gap-1">
-                              <span className="text-xs text-gray-400">Conduct:</span>
-                              <span className="text-xs font-semibold text-blue-600">{r.conduct_grade}</span>
-                            </div>
-                          )}
-                          {r.teacher_remarks && (
-                            <p className="text-xs text-gray-500 mt-1 italic">&quot;{r.teacher_remarks}&quot;</p>
-                          )}
+                    <div className="grid grid-cols-4 gap-2">
+                      {[
+                        { label: "Rate",    value: `${attendance.rate}%`, color: attendance.rate >= 75 ? "text-green-600" : "text-red-500" },
+                        { label: "Present", value: attendance.present,    color: "text-green-600" },
+                        { label: "Late",    value: attendance.late,       color: "text-orange-500" },
+                        { label: "Absent",  value: attendance.absent,     color: "text-red-500" },
+                      ].map(({ label, value, color }) => (
+                        <div key={label} className="bg-gray-50 rounded-xl p-2.5 text-center">
+                          <p className={`text-lg font-bold ${color}`}>{value}</p>
+                          <p className="text-xs text-gray-400">{label}</p>
                         </div>
                       ))}
                     </div>
@@ -318,18 +365,12 @@ export default function NFCStudentModal({ mode, onClose }: { mode: NFCMode; onCl
                             <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${HEALTH_SEV_COLOR[h.severity] || "bg-gray-100 text-gray-500"}`}>{h.severity}</span>
                           </div>
                           {h.description && <p className="text-xs text-gray-400 mt-1">{h.description}</p>}
-                          {h.treatment_given && (
-                            <p className="text-xs text-blue-600 mt-1">Treatment: {h.treatment_given}</p>
-                          )}
+                          {h.treatment_given && <p className="text-xs text-blue-600 mt-1">Treatment: {h.treatment_given}</p>}
                           <div className="flex items-center justify-between mt-2">
                             <span className={`text-xs px-2 py-0.5 rounded-full ${HEALTH_TYPE_COLOR[h.type] || "bg-gray-100 text-gray-500"}`}>{h.type}</span>
                             <div className="flex items-center gap-2">
-                              {h.follow_up_required && (
-                                <span className="text-xs text-orange-500 font-medium">Follow-up needed</span>
-                              )}
-                              {h.resolved_at && (
-                                <span className="text-xs text-green-500">Resolved</span>
-                              )}
+                              {h.follow_up_required && <span className="text-xs text-orange-500 font-medium">Follow-up needed</span>}
+                              {h.resolved_at && <span className="text-xs text-green-500">Resolved</span>}
                               <span className="text-xs text-gray-300">{new Date(h.recorded_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}</span>
                             </div>
                           </div>

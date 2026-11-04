@@ -8,7 +8,7 @@ import {
 import DashboardShell from "@/components/DashboardShell";
 import VirtualCardTap from "@/components/VirtualCardTap";
 import type { HealthRecord, ClinicVisit, MedicalProfile } from "@/lib/api";
-import { supabaseHealthService, supabaseLibraryService } from "@/lib/supabase/services";
+import { supabaseHealthService, supabaseLibraryService, supabaseCanteenService } from "@/lib/supabase/services";
 import { useNFC } from "@/hooks/useNFC";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
@@ -279,19 +279,41 @@ export default function HealthPage() {
   const [schoolLoading, setSchoolLoading]   = useState(true);
   const LIMIT = 20;
 
-  async function handleCardScan(cardNum: string, _isNFC = false) {
+  async function handleCardScan(cardNum: string, isNFC = false) {
     if (!cardNum.trim() || processingRef.current || !user?.school_id) return;
     processingRef.current = true;
     setScanning(true);
     try {
-      const scanned = await supabaseLibraryService.lookupStudent(user.school_id, cardNum.trim());
+      let studentData: { id: string; name: string; class: string; card_number: string | null; student_code: string; photo: string | null };
+      if (isNFC) {
+        const holder = await supabaseCanteenService.lookupCardHolderByNfcUid(user.school_id, cardNum.trim());
+        if (!holder) throw new Error("Card not found or not active");
+        studentData = {
+          id: holder.student_id,
+          name: holder.legal_name,
+          class: [holder.education_level_name, holder.class_name].filter(Boolean).join(" "),
+          card_number: holder.card_number,
+          student_code: holder.admission_number,
+          photo: holder.profile_photo_path ?? null,
+        };
+      } else {
+        const scanned = await supabaseLibraryService.lookupStudent(user.school_id, cardNum.trim());
+        studentData = {
+          id: scanned.id,
+          name: scanned.name,
+          class: scanned.class,
+          card_number: scanned.card_number,
+          student_code: scanned.student_code,
+          photo: scanned.photo,
+        };
+      }
       setStudent({
-        id: scanned.id,
-        name: scanned.name,
-        class: scanned.class,
-        card_number: scanned.card_number,
-        student_code: scanned.student_code,
-        photo: scanned.photo,
+        id: studentData.id,
+        name: studentData.name,
+        class: studentData.class,
+        card_number: studentData.card_number,
+        student_code: studentData.student_code,
+        photo: studentData.photo,
       });
       setCardInput("");
       setStudentTab("incidents");

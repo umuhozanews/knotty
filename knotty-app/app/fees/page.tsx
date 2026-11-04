@@ -152,12 +152,14 @@ export default function FeesPage() {
   const [genForm, setGenForm]       = useState({ fee_structure_id: "", due_date: "" });
 
   /* ── Card scan ─────────────────────────────────────────────── */
-  async function handleCardScan(cardNum: string, _isNFC = false) {
+  async function handleCardScan(cardNum: string, isNFC = false) {
     if (!cardNum.trim() || processingRef.current || !user?.school_id) return;
     processingRef.current = true;
     setScanning(true);
     try {
-      const holder = await supabaseCanteenService.lookupCardHolder(user.school_id, cardNum.trim());
+      const holder = isNFC
+        ? await supabaseCanteenService.lookupCardHolderByNfcUid(user.school_id, cardNum.trim())
+        : await supabaseCanteenService.lookupCardHolder(user.school_id, cardNum.trim());
       if (!holder) throw new Error("Card not found");
       const scanned: ScannedStudent = {
         id: holder.student_id,

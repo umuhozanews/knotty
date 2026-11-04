@@ -22,82 +22,6 @@ import { useNFC } from "@/hooks/useNFC";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
 
-// ─── Modal: Link NFC Tag ───────────────────────────────────────────────────────
-function LinkNFCModal({ card, onClose, onSuccess }: { card: CardItem; onClose: () => void; onSuccess: () => void }) {
-  const { scan, scanning, error: nfcError, isSupported } = useNFC();
-  const [uid, setUid] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [scanned, setScanned] = useState(false);
-
-  async function handleScan() {
-    const result = await scan();
-    if (result) { setUid(result.value); setScanned(true); }
-  }
-
-  async function link() {
-    if (!uid.trim()) return;
-    setLoading(true);
-    try {
-      alert("NFC physical linking requires a hardware backend setup. Record the UID manually for now.");
-      onClose();
-    }
-    finally { setLoading(false); }
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-        <h3 className="font-bold text-gray-800 mb-1">Link NFC Tag</h3>
-        <p className="text-xs text-gray-400 mb-4">
-          Card: <span className="font-mono">{card.card_number}</span><br />
-          Holder: {card.holder_name}
-        </p>
-
-        <div className="space-y-3">
-          {isSupported ? (
-            <button onClick={handleScan} disabled={scanning} className={`w-full py-4 rounded-2xl flex flex-col items-center gap-2 transition ${scanning ? "bg-blue-50 text-blue-600 border-2 border-dashed border-blue-500" : "bg-blue-600 text-white hover:bg-blue-700"}`}>
-              {scanning ? <><Loader2 className="animate-spin" size={24} /><span className="text-sm">Hold NFC tag to phone…</span></> : <><Wifi size={24} /><span className="font-medium">Scan NFC Tag</span></>}
-            </button>
-          ) : (
-            <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-xl text-sm text-gray-400"><WifiOff size={16} />Web NFC requires Chrome on Android</div>
-          )}
-          {nfcError && <p className="text-xs text-red-500">{nfcError}</p>}
-          {scanned && <p className="text-xs text-green-600 font-medium">✓ NFC tag read successfully</p>}
-
-          <div className="flex items-center gap-2">
-            <div className="flex-1 h-px bg-gray-100" />
-            <span className="text-xs text-gray-400">or enter UID manually</span>
-            <div className="flex-1 h-px bg-gray-100" />
-          </div>
-
-          <div className="flex gap-2">
-            <input value={uid} onChange={(e) => setUid(e.target.value)} placeholder="NFC UID (e.g. 04A3B2C1D0)" className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono outline-none focus:border-blue-500" />
-            <button
-              type="button"
-              onClick={() => {
-                const fakeUid = Array.from({ length: 7 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0').toUpperCase()).join("");
-                setUid(fakeUid);
-                setScanned(true);
-              }}
-              className="px-3 py-2 rounded-xl border border-dashed border-blue-500 text-blue-600 hover:bg-blue-50 text-xs font-semibold whitespace-nowrap"
-              title="Generate a random hardware UID for testing without physical NFC"
-            >
-              Simulate UID
-            </button>
-          </div>
-
-          <div className="flex gap-3">
-            <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600">Cancel</button>
-            <button onClick={link} disabled={loading || !uid.trim()} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-sm text-white font-medium disabled:opacity-60 transition">
-              {loading ? <Loader2 size={14} className="animate-spin mx-auto" /> : "Link Tag"}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Modal: Top Up Wallet ──────────────────────────────────────────────────────
 function TopUpModal({ card, schoolId, onClose, onSuccess }: { card: CardItem; schoolId: string; onClose: () => void; onSuccess: (newBalance: number) => void }) {
   const { toast } = useToast();
@@ -133,7 +57,7 @@ function TopUpModal({ card, schoolId, onClose, onSuccess }: { card: CardItem; sc
   );
 }
 
-// ─── Modal: Issue Card (with Edge Function integration) ────────────────────────
+// ─── Modal: Issue Card ─────────────────────────────────────────────────────────
 function IssueCardModal({
   schoolId,
   onClose,
@@ -143,28 +67,26 @@ function IssueCardModal({
   onClose: () => void;
   onSuccess: (msg: string) => void;
 }) {
-  const { scan, isSupported } = useNFC();
+  const { scan, scanning, isSupported } = useNFC();
   const [holderKind, setHolderKind] = useState<"student" | "staff">("student");
 
-  // Student state
-  const [studentSearch, setStudentSearch] = useState("");
-  const [studentResults, setStudentResults] = useState<Student[]>([]);
+  type StaffItem = { staff_record_id: string; legal_name: string; job_title: string; department: string | null; employment_status: string };
+
+  const [studentSearch, setStudentSearch]     = useState("");
+  const [studentResults, setStudentResults]   = useState<Student[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [studentSearching, setStudentSearching] = useState(false);
 
-  // Staff state
-  type StaffItem = { staff_record_id: string; legal_name: string; job_title: string; department: string | null; employment_status: string };
-  const [staffAll, setStaffAll] = useState<StaffItem[]>([]);
-  const [staffSearch, setStaffSearch] = useState("");
-  const [selectedStaff, setSelectedStaff] = useState<StaffItem | null>(null);
-  const [staffLoading, setStaffLoading] = useState(false);
+  const [staffAll, setStaffAll]               = useState<StaffItem[]>([]);
+  const [staffSearch, setStaffSearch]         = useState("");
+  const [selectedStaff, setSelectedStaff]     = useState<StaffItem | null>(null);
+  const [staffLoading, setStaffLoading]       = useState(false);
   const [assignedStaffIds, setAssignedStaffIds] = useState<Set<string>>(new Set());
 
-  const [nfcUid, setNfcUid] = useState("");
-  const [initialBalance, setInitialBalance] = useState("5000");
+  const [nfcUid, setNfcUid]   = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState("");
 
-  // Load students on search change
   useEffect(() => {
     if (holderKind !== "student") return;
     setStudentSearching(true);
@@ -177,7 +99,6 @@ function IssueCardModal({
     return () => clearTimeout(t);
   }, [schoolId, studentSearch, holderKind]);
 
-  // Load staff list when switching to staff tab
   useEffect(() => {
     if (holderKind !== "staff") return;
     setStaffLoading(true);
@@ -185,10 +106,7 @@ function IssueCardModal({
     Promise.all([
       supabaseStaffService.listStaffMembers(schoolId),
       client
-        ? client.from("card_assignments")
-            .select("staff_record_id, status")
-            .eq("school_id", schoolId)
-            .eq("holder_kind", "staff")
+        ? client.from("card_assignments").select("staff_record_id, status").eq("school_id", schoolId).eq("holder_kind", "staff")
         : Promise.resolve({ data: [] as { staff_record_id: string; status: string }[] }),
     ]).then(([members, cardsRes]) => {
       const cards = (cardsRes as any)?.data ?? [];
@@ -199,8 +117,7 @@ function IssueCardModal({
       );
       setAssignedStaffIds(ids);
       setStaffAll(members as StaffItem[]);
-    }).catch(() => {})
-    .finally(() => setStaffLoading(false));
+    }).catch(() => {}).finally(() => setStaffLoading(false));
   }, [schoolId, holderKind]);
 
   const filteredStaff = staffAll.filter(
@@ -209,26 +126,26 @@ function IssueCardModal({
   );
 
   async function handleScanNFC() {
+    setError("");
     const res = await scan();
     if (res?.value) setNfcUid(res.value.toUpperCase());
   }
 
   async function issue() {
-    if (holderKind === "student" && !selectedStudent) return;
-    if (holderKind === "staff" && !selectedStaff) return;
+    setError("");
+    if (holderKind === "student" && !selectedStudent) { setError("Select a student first."); return; }
+    if (holderKind === "staff" && !selectedStaff)     { setError("Select a staff member first."); return; }
+    if (!nfcUid.trim()) { setError("Tap a physical NFC card first — the card UID is required."); return; }
+
     setLoading(true);
     try {
-      const targetUid = nfcUid.trim()
-        ? nfcUid.trim().toUpperCase()
-        : `04${Array.from({ length: 6 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, "0").toUpperCase()).join("")}`;
-
       if (holderKind === "student" && selectedStudent) {
         await supabaseCardService.issueCard({
           schoolId,
           holderKind: "student",
           studentId: selectedStudent.id,
           identifierKind: "nfc_uid",
-          identifier: targetUid,
+          identifier: nfcUid.trim().toUpperCase(),
         });
         onSuccess(`Card issued for ${selectedStudent.user.first_name} ${selectedStudent.user.last_name}`);
       } else if (holderKind === "staff" && selectedStaff) {
@@ -237,193 +154,167 @@ function IssueCardModal({
           holderKind: "staff",
           staffRecordId: selectedStaff.staff_record_id,
           identifierKind: "nfc_uid",
-          identifier: targetUid,
+          identifier: nfcUid.trim().toUpperCase(),
         });
         onSuccess(`Card issued for ${selectedStaff.legal_name}`);
       }
       onClose();
     } catch (err: any) {
-      alert(err instanceof Error ? err.message : "Error issuing card");
+      setError(err instanceof Error ? err.message : "Card issuance failed");
     } finally {
       setLoading(false);
     }
   }
 
-  const canIssue = holderKind === "student" ? !!selectedStudent : !!selectedStaff;
+  const holderSelected = holderKind === "student" ? !!selectedStudent : !!selectedStaff;
+  const canIssue = holderSelected && !!nfcUid.trim();
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-gray-100">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="font-bold text-gray-800 text-lg">Grant & Issue IshuriHUB Card</h3>
-            <p className="text-xs text-gray-500">Privileged Edge Function issuance with HMAC identifier digestion</p>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-sm font-semibold p-1">✕</button>
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="font-bold text-gray-800 text-lg">Issue Card</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1">✕</button>
         </div>
 
-        <div className="space-y-4">
-          {/* Student / Staff toggle */}
-          <div className="flex gap-1 p-1 bg-gray-100 rounded-xl">
-            <button
-              type="button"
-              onClick={() => { setHolderKind("student"); setSelectedStudent(null); setStudentSearch(""); }}
-              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition ${holderKind === "student" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}
-            >
-              Student
-            </button>
-            <button
-              type="button"
-              onClick={() => { setHolderKind("staff"); setSelectedStaff(null); setStaffSearch(""); }}
-              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition ${holderKind === "staff" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}
-            >
-              Staff
-            </button>
+        {error && (
+          <div className="mb-4 p-3 rounded-xl bg-red-50 text-red-600 text-xs border border-red-100 flex items-center gap-2">
+            <AlertTriangle size={14} className="shrink-0" />{error}
           </div>
+        )}
 
-          {/* Student search */}
-          {holderKind === "student" && (
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Select Student</label>
-              <div className="relative">
-                <input
-                  value={studentSearch}
-                  onChange={(e) => setStudentSearch(e.target.value)}
-                  placeholder="Search by student name or code…"
-                  className="w-full border border-gray-200 rounded-xl px-3.5 py-2 text-sm outline-none focus:border-blue-500"
-                />
-                {studentSearching && <Loader2 size={14} className="animate-spin absolute right-3 top-3 text-gray-400" />}
-              </div>
-              {studentResults.length > 0 && !selectedStudent && (
-                <div className="border border-gray-100 rounded-xl shadow-lg mt-1 max-h-48 overflow-y-auto divide-y divide-gray-50 bg-white z-10 relative">
-                  {studentResults.map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => { setSelectedStudent(s); setStudentSearch(`${s.user.first_name} ${s.user.last_name}`); }}
-                      className="w-full text-left px-3.5 py-2 text-sm hover:bg-blue-50 transition flex items-center justify-between"
-                    >
-                      <div>
-                        <p className="font-medium text-gray-800">{s.user.first_name} {s.user.last_name}</p>
-                        <p className="text-xs text-gray-400">{s.level?.name || ""} {s.class?.name || ""}</p>
-                      </div>
-                      <span className="font-mono text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600">{s.student_code}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {selectedStudent && (
-                <div className="p-3 bg-blue-50/60 border border-blue-200/60 rounded-xl flex items-center justify-between mt-1">
-                  <div>
-                    <p className="text-xs font-semibold text-blue-900">Student Target:</p>
-                    <p className="text-sm font-bold text-blue-700">{selectedStudent.user.first_name} {selectedStudent.user.last_name}</p>
-                    <p className="text-xs text-blue-600/80 font-mono">{selectedStudent.student_code} · {selectedStudent.class?.name || "Class section"}</p>
-                  </div>
-                  <button type="button" onClick={() => { setSelectedStudent(null); setStudentSearch(""); }} className="text-xs text-blue-600 hover:underline">Change</button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Staff search */}
-          {holderKind === "staff" && (
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Select Staff Member</label>
-              <div className="relative">
-                <input
-                  value={staffSearch}
-                  onChange={(e) => setStaffSearch(e.target.value)}
-                  placeholder="Search by name…"
-                  className="w-full border border-gray-200 rounded-xl px-3.5 py-2 text-sm outline-none focus:border-blue-500"
-                />
-                {staffLoading && <Loader2 size={14} className="animate-spin absolute right-3 top-3 text-gray-400" />}
-              </div>
-              {!selectedStaff && filteredStaff.length > 0 && (
-                <div className="border border-gray-100 rounded-xl shadow-lg mt-1 max-h-48 overflow-y-auto divide-y divide-gray-50 bg-white z-10 relative">
-                  {filteredStaff.map((s) => (
-                    <button
-                      key={s.staff_record_id}
-                      type="button"
-                      onClick={() => { setSelectedStaff(s); setStaffSearch(s.legal_name); }}
-                      className="w-full text-left px-3.5 py-2 text-sm hover:bg-blue-50 transition"
-                    >
-                      <p className="font-medium text-gray-800">{s.legal_name}</p>
-                      <p className="text-xs text-gray-400">{[s.job_title, s.department].filter(Boolean).join(" · ")}</p>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {selectedStaff && (
-                <div className="p-3 bg-blue-50/60 border border-blue-200/60 rounded-xl flex items-center justify-between mt-1">
-                  <div>
-                    <p className="text-xs font-semibold text-blue-900">Staff Target:</p>
-                    <p className="text-sm font-bold text-blue-700">{selectedStaff.legal_name}</p>
-                    <p className="text-xs text-blue-600/80">{[selectedStaff.job_title, selectedStaff.department].filter(Boolean).join(" · ")}</p>
-                  </div>
-                  <button type="button" onClick={() => { setSelectedStaff(null); setStaffSearch(""); }} className="text-xs text-blue-600 hover:underline">Change</button>
-                </div>
-              )}
-              {!staffLoading && !selectedStaff && staffAll.length > 0 && filteredStaff.length === 0 && (
-                <p className="text-xs text-gray-400 mt-1 px-1">All active staff already have cards</p>
-              )}
-            </div>
-          )}
-
-          {/* NFC UID Section */}
-          <div className="pt-2 border-t border-gray-100 space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-gray-700">Physical NFC Hardware UID</label>
-              {isSupported && (
-                <button type="button" onClick={handleScanNFC} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
-                  <Wifi size={12} /> Scan Tag
-                </button>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <input
-                value={nfcUid}
-                onChange={(e) => setNfcUid(e.target.value)}
-                placeholder="Hardware UID (optional)"
-                className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono outline-none focus:border-blue-500"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  const fake = Array.from({ length: 7 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, "0").toUpperCase()).join("");
-                  setNfcUid(fake);
-                }}
-                className="px-2.5 py-1.5 border border-dashed border-blue-400 text-blue-600 hover:bg-blue-50 rounded-xl text-xs font-medium"
-              >
-                Simulate
+        <div className="space-y-5">
+          {/* Step 1: Who */}
+          <div>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Step 1 — Select person</p>
+            <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-3">
+              <button type="button" onClick={() => { setHolderKind("student"); setSelectedStudent(null); setStudentSearch(""); }}
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition ${holderKind === "student" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}>
+                Student
+              </button>
+              <button type="button" onClick={() => { setHolderKind("staff"); setSelectedStaff(null); setStaffSearch(""); }}
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition ${holderKind === "staff" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}>
+                Staff
               </button>
             </div>
+
+            {holderKind === "student" && !selectedStudent && (
+              <div className="relative">
+                <input value={studentSearch} onChange={(e) => setStudentSearch(e.target.value)}
+                  placeholder="Search student name or code…"
+                  className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-blue-500" />
+                {studentSearching && <Loader2 size={14} className="animate-spin absolute right-3 top-3 text-gray-400" />}
+                {studentResults.length > 0 && (
+                  <div className="border border-gray-100 rounded-xl shadow-lg mt-1 max-h-44 overflow-y-auto divide-y divide-gray-50 bg-white absolute w-full z-10">
+                    {studentResults.map((s) => (
+                      <button key={s.id} type="button"
+                        onClick={() => { setSelectedStudent(s); setStudentSearch(""); }}
+                        className="w-full text-left px-3.5 py-2.5 text-sm hover:bg-blue-50 transition flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-gray-800">{s.user.first_name} {s.user.last_name}</p>
+                          <p className="text-xs text-gray-400">{s.level?.name || ""} {s.class?.name || ""}</p>
+                        </div>
+                        <span className="font-mono text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600">{s.student_code}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {holderKind === "student" && selectedStudent && (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-xl flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold text-green-800">{selectedStudent.user.first_name} {selectedStudent.user.last_name}</p>
+                  <p className="text-xs text-green-600 font-mono">{selectedStudent.student_code} · {selectedStudent.class?.name || ""}</p>
+                </div>
+                <button type="button" onClick={() => setSelectedStudent(null)} className="text-xs text-green-700 hover:underline">Change</button>
+              </div>
+            )}
+
+            {holderKind === "staff" && !selectedStaff && (
+              <div className="relative">
+                <input value={staffSearch} onChange={(e) => setStaffSearch(e.target.value)}
+                  placeholder="Search staff name…"
+                  className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-blue-500" />
+                {staffLoading && <Loader2 size={14} className="animate-spin absolute right-3 top-3 text-gray-400" />}
+                {!staffLoading && filteredStaff.length > 0 && (
+                  <div className="border border-gray-100 rounded-xl shadow-lg mt-1 max-h-44 overflow-y-auto divide-y divide-gray-50 bg-white absolute w-full z-10">
+                    {filteredStaff.map((s) => (
+                      <button key={s.staff_record_id} type="button"
+                        onClick={() => { setSelectedStaff(s); setStaffSearch(""); }}
+                        className="w-full text-left px-3.5 py-2.5 text-sm hover:bg-blue-50 transition">
+                        <p className="font-medium text-gray-800">{s.legal_name}</p>
+                        <p className="text-xs text-gray-400">{[s.job_title, s.department].filter(Boolean).join(" · ")}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {holderKind === "staff" && selectedStaff && (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-xl flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold text-green-800">{selectedStaff.legal_name}</p>
+                  <p className="text-xs text-green-600">{[selectedStaff.job_title, selectedStaff.department].filter(Boolean).join(" · ")}</p>
+                </div>
+                <button type="button" onClick={() => setSelectedStaff(null)} className="text-xs text-green-700 hover:underline">Change</button>
+              </div>
+            )}
           </div>
 
-          {holderKind === "student" && (
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Initial Canteen Balance (RWF)</label>
-              <input
-                type="number"
-                value={initialBalance}
-                onChange={(e) => setInitialBalance(e.target.value)}
-                placeholder="e.g. 5000"
-                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono outline-none focus:border-blue-500"
-              />
-            </div>
-          )}
+          {/* Step 2: NFC Card */}
+          <div>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Step 2 — Tap the physical NFC card</p>
 
-          <div className="flex gap-3 pt-3">
+            {nfcUid ? (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Check size={16} className="text-green-600 shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold text-green-800">Card ready</p>
+                    <p className="text-xs font-mono text-green-600">{nfcUid}</p>
+                  </div>
+                </div>
+                <button type="button" onClick={() => setNfcUid("")} className="text-xs text-green-700 hover:underline">Rescan</button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {isSupported ? (
+                  <button type="button" onClick={handleScanNFC} disabled={scanning}
+                    className={`w-full py-5 rounded-2xl flex flex-col items-center gap-2 border-2 transition font-medium
+                      ${scanning
+                        ? "border-blue-400 bg-blue-50 text-blue-600 border-dashed"
+                        : "border-gray-200 bg-gray-50 text-gray-600 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-600"}`}>
+                    {scanning
+                      ? <><Loader2 size={24} className="animate-spin" /><span className="text-sm">Hold NFC card to phone…</span></>
+                      : <><Wifi size={24} /><span className="text-sm">Tap NFC Card Here</span><span className="text-xs text-gray-400">Hold the physical card to your phone</span></>}
+                  </button>
+                ) : (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 flex items-start gap-2">
+                    <WifiOff size={14} className="shrink-0 mt-0.5" />
+                    <span>Web NFC requires Chrome on Android. Enter the card UID manually below.</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-px bg-gray-100" />
+                  <span className="text-xs text-gray-400">or enter UID manually</span>
+                  <div className="flex-1 h-px bg-gray-100" />
+                </div>
+                <input value={nfcUid} onChange={(e) => setNfcUid(e.target.value.toUpperCase())}
+                  placeholder="e.g. 04A3B2C1D0E5F6"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:border-blue-500" />
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-3 pt-1">
             <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
               Cancel
             </button>
-            <button
-              type="button"
-              onClick={issue}
-              disabled={loading || !canIssue}
-              className="flex-1 py-2.5 rounded-xl bg-blue-600 text-sm text-white font-semibold hover:bg-blue-700 disabled:opacity-50 transition flex items-center justify-center gap-2 shadow-sm"
-            >
+            <button type="button" onClick={issue} disabled={loading || !canIssue}
+              className="flex-1 py-2.5 rounded-xl bg-green-600 text-sm text-white font-semibold hover:bg-green-700 disabled:opacity-50 transition flex items-center justify-center gap-2">
               {loading ? <Loader2 size={15} className="animate-spin" /> : <CreditCard size={15} />}
-              Grant Card
+              Issue Card
             </button>
           </div>
         </div>
@@ -693,7 +584,7 @@ export default function CardsPage() {
   const [loading, setLoading] = useState(true);
 
   // Modals
-  const [modal, setModal] = useState<null | "issue" | "nfc" | "topup" | "replace" | "status">(null);
+  const [modal, setModal] = useState<null | "issue" | "topup" | "replace" | "status">(null);
   const [selectedCard, setSelectedCard] = useState<CardItem | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const limit = 20;
@@ -813,13 +704,6 @@ export default function CardsPage() {
           onSuccess={(msg) => { fetchCards(); toast(msg, "success"); }}
         />
       )}
-      {modal === "nfc" && selectedCard && (
-        <LinkNFCModal
-          card={selectedCard}
-          onClose={() => setModal(null)}
-          onSuccess={() => { fetchCards(); toast(`NFC tag recorded`, "success"); }}
-        />
-      )}
       {modal === "topup" && selectedCard && (
         <TopUpModal
           card={selectedCard}
@@ -869,7 +753,6 @@ export default function CardsPage() {
                     <th className="text-left pb-3 font-medium">Holder</th>
                     <th className="text-left pb-3 font-medium">Card Number</th>
                     <th className="text-left pb-3 font-medium">Balance</th>
-                    <th className="text-left pb-3 font-medium">NFC Tag</th>
                     <th className="text-left pb-3 font-medium">Status</th>
                     <th className="text-right pb-3 font-medium">Actions</th>
                   </tr>
@@ -891,9 +774,6 @@ export default function CardsPage() {
                         <span className={`text-sm font-bold ${card.wallet_balance < 1000 ? "text-red-500" : "text-teal-600"}`}>
                           {card.wallet_balance.toLocaleString()} RWF
                         </span>
-                      </td>
-                      <td className="py-3">
-                        <span className="text-xs text-gray-300 flex items-center gap-1"><WifiOff size={11} />Tap card to link</span>
                       </td>
                       <td className="py-3">
                         <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${card.is_frozen ? "bg-red-50 text-red-500 dark:bg-red-950/40" : "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40"}`}>

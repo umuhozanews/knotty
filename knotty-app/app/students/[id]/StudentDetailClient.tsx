@@ -55,6 +55,7 @@ type LocalCard = {
   wallet_balance: number;
   is_frozen: boolean;
   is_active: boolean;
+  status: string;
 };
 
 type LocalAttendance = {
@@ -385,6 +386,8 @@ export default function StudentProfilePage() {
   const [nfcError, setNfcError] = useState<string | null>(null);
   const [activating, setActivating] = useState(false);
   const { scan: nfcScan, scanning: nfcScanning, isSupported: nfcSupported, error: nfcHookError } = useNFC();
+  const [canteenAmount, setCanteenAmount] = useState("");
+  const [processingPurchase, setProcessingPurchase] = useState(false);
 
   const studentId = params.id;
 
@@ -450,6 +453,7 @@ export default function StudentProfilePage() {
           wallet_balance: walletBalance,
           is_frozen: row.card_status === "suspended",
           is_active: row.card_status === "active",
+          status: row.card_status ?? "issued",
         } : null,
         attendances: (attData ?? []).map((a: { id: string; attendance_date: string; status: string; first_arrived_at: string | null; departed_at: string | null }) => ({
           id: a.id,
@@ -636,6 +640,34 @@ export default function StudentProfilePage() {
     }
   }
 
+  async function handleCanteenPurchase(e: React.FormEvent) {
+    e.preventDefault();
+    if (!profile?.card || !user) return;
+    const amt = parseInt(canteenAmount, 10);
+    if (isNaN(amt) || amt < 1) { show("Enter a valid amount", "error"); return; }
+    if (amt > profile.card.wallet_balance) {
+      show(`Insufficient balance — ${profile.card.wallet_balance.toLocaleString()} RWF available`, "error");
+      return;
+    }
+    setProcessingPurchase(true);
+    try {
+      const result = await supabaseCanteenService.purchase(
+        user.school_id, profile.card.id,
+        [{ product_id: "manual-deduction", name: "Canteen purchase", price: amt, qty: 1 }],
+        amt
+      );
+      show(`${amt.toLocaleString()} RWF deducted`, "success");
+      setCanteenAmount("");
+      setProfile(p => p && p.card ? { ...p, card: { ...p.card, wallet_balance: result.new_balance } } : p);
+      supabaseCanteenService.listStudentTransactions(user.school_id, studentId, 50)
+        .then(setCanteenList).catch(console.error);
+    } catch (err) {
+      show(err instanceof Error ? err.message : "Purchase failed", "error");
+    } finally {
+      setProcessingPurchase(false);
+    }
+  }
+
   async function activateStudentAccount() {
     if (!user) return;
     setActivating(true);
@@ -743,13 +775,7 @@ export default function StudentProfilePage() {
                     </div>
                   )}
                 </div>
-              ) : (
-                user?.role !== "TEACHER" && (
-                  <button onClick={issueCard} className="flex items-center gap-1.5 text-sm text-blue-600 border border-blue-500 rounded-xl px-3 py-2 hover:bg-blue-50 transition">
-                    <CreditCard size={14} /> Issue IshuriHUB Card
-                  </button>
-                )
-              )}
+              ) : null}
             </div>
           </div>
 
@@ -824,13 +850,18 @@ export default function StudentProfilePage() {
               <div className="space-y-5">
                 {/* IshuriHUB Card */}
                 <div>
-                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">IshuriHUB Card</h3>
+                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Card</h3>
                   {profile.card ? (
                     <div className="space-y-0">
                       {[
                         ["Card Number", profile.card.card_number],
                         user?.role !== "TEACHER" ? ["Balance", `${profile.card.wallet_balance.toLocaleString()} RWF`] : null,
-                        ["Status", profile.card.is_frozen ? "Frozen" : profile.card.is_active ? "Active" : "Inactive"],
+                        ["Status", profile.card.status === "active" ? "Active"
+                          : profile.card.status === "suspended" ? "Frozen"
+                          : profile.card.status === "lost" ? "Lost"
+                          : profile.card.status === "damaged" ? "Damaged"
+                          : profile.card.status === "issued" ? "Issued"
+                          : "Inactive"],
                       ].filter((item): item is [string, string] => item !== null).map(([k, v]) => (
                         <div key={k} className="flex justify-between py-2.5 border-b border-gray-50 dark:border-gray-800 last:border-0">
                           <span className="text-xs text-gray-400">{k}</span>
@@ -850,16 +881,19 @@ export default function StudentProfilePage() {
                           }
                         </div>
                       )}
-                      {isManagementRole(user?.role) && (
+                      {isManagementRole(user?.role) && (profile.card.status === "issued" || profile.card.status === "lost" || profile.card.status === "damaged") && (
                         <div className="pt-2">
                           <button onClick={assignNFC} disabled={nfcScanning}
                             className={`w-full py-2 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 transition disabled:opacity-70 ${nfcScanning ? "bg-[#121212] text-white animate-pulse" : "border border-[#dcd9d9] text-gray-600 hover:bg-gray-50"}`}>
                             {nfcScanning ? <Loader2 size={11} className="animate-spin" /> : <Nfc size={11} />}
-                            {nfcScanning ? "Tap NFC card now…" : "Assign NFC Card"}
+                            {nfcScanning ? "Tap NFC card now…"
+                              : profile.card.status === "issued"
+                                ? "Link NFC Card"
+                                : "Replace Card (NFC)"}
                           </button>
                           {(nfcError || nfcHookError) && (
-                            <div className="mt-1.5 bg-amber-50 p-2 rounded-lg">
-                              <p className="text-xs text-amber-700">{nfcError ?? nfcHookError}</p>
+                            <div className="mt-1.5 bg-red-50 p-2 rounded-lg">
+                              <p className="text-xs text-red-600">{nfcError ?? nfcHookError}</p>
                             </div>
                           )}
                         </div>
@@ -876,17 +910,12 @@ export default function StudentProfilePage() {
                             {nfcScanning ? <Loader2 size={12} className="animate-spin" /> : <Nfc size={12} />}
                             {nfcScanning ? "Tap NFC card now…" : "Issue & Assign NFC Card"}
                           </button>
-                          <button onClick={issueCard} className="text-xs text-gray-500 underline hover:text-gray-700 transition">Issue card without NFC</button>
-                          <button onClick={simulateAssignNFC} className="text-xs text-blue-600 underline hover:text-blue-700 transition">Issue with random token (no NFC)</button>
                           {(nfcError || nfcHookError) && (
-                            <div className="bg-amber-50 p-2.5 rounded-lg text-left max-w-xs">
-                              <p className="text-xs text-amber-700">{nfcError ?? nfcHookError}</p>
+                            <div className="bg-red-50 p-2.5 rounded-lg text-left max-w-xs">
+                              <p className="text-xs text-red-600">{nfcError ?? nfcHookError}</p>
                             </div>
                           )}
                         </div>
-                      )}
-                      {user?.role !== "TEACHER" && user?.role !== "ADMIN" && (
-                        <button onClick={issueCard} className="bg-blue-600 text-white text-xs px-4 py-2 rounded-xl hover:bg-blue-700 transition">Issue Card</button>
                       )}
                     </div>
                   )}
@@ -929,8 +958,15 @@ export default function StudentProfilePage() {
                 <div className="flex flex-col items-end gap-2">
                   <p className="text-sm text-gray-500 dark:text-gray-400">Rate: <strong className={attRate >= 75 ? "text-green-600" : "text-red-500"}>{attRate}%</strong></p>
                   {profile.card && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-400">Mark attendance:</span>
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                      <button
+                        onClick={() => handleCardScan("")}
+                        disabled={scanning}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-green-600 text-white text-xs font-semibold hover:bg-green-700 transition disabled:opacity-60"
+                      >
+                        {scanning ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />}
+                        {scanning ? "Marking…" : "Mark Present"}
+                      </button>
                       <VirtualCardTap onTap={handleCardScan} busy={scanning} />
                     </div>
                   )}
@@ -1016,8 +1052,7 @@ export default function StudentProfilePage() {
               ) : (
                 <div className="text-center py-8">
                   <Wallet size={36} className="text-gray-200 mx-auto mb-3" />
-                  <p className="text-gray-500 mb-3">No card issued — issue an IshuriHUB Card first</p>
-                  <button onClick={issueCard} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition">Issue Card</button>
+                  <p className="text-gray-500 mb-3">No card issued yet</p>
                 </div>
               )}
 
@@ -1116,9 +1151,17 @@ export default function StudentProfilePage() {
 
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-gray-700 dark:text-gray-200">Discipline Records</h3>
-                <button onClick={() => setModal("discipline")} className="flex items-center gap-1.5 text-sm text-blue-600 border border-blue-500 rounded-xl px-3 py-1.5 hover:bg-blue-50 transition">
-                  <Plus size={14} /> Record Infraction
-                </button>
+                <div className="flex items-center gap-2">
+                  {profile.card && isManagementRole(user?.role) && (
+                    <button onClick={() => setModal("discipline")}
+                      className="flex items-center gap-1.5 text-xs text-orange-600 border border-orange-400 rounded-xl px-3 py-1.5 hover:bg-orange-50 transition">
+                      <Nfc size={12} /> Scan to Record
+                    </button>
+                  )}
+                  <button onClick={() => setModal("discipline")} className="flex items-center gap-1.5 text-sm text-blue-600 border border-blue-500 rounded-xl px-3 py-1.5 hover:bg-blue-50 transition">
+                    <Plus size={14} /> Record Infraction
+                  </button>
+                </div>
               </div>
               {(profile.discipline || []).length === 0 ? (
                 <p className="text-sm text-gray-400 text-center py-10">No discipline records — full 40/40 conduct marks intact!</p>
@@ -1187,6 +1230,31 @@ export default function StudentProfilePage() {
           {/* CANTEEN */}
           {tab === "canteen" && (
             <div>
+              {profile.card && isManagementRole(user?.role) && (
+                <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-800 rounded-2xl p-4 mb-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="text-xs font-bold text-orange-800 dark:text-orange-300 uppercase tracking-wider">Quick Deduction</p>
+                      <p className="text-xs text-orange-600 dark:text-orange-400 mt-0.5">
+                        Balance: <span className="font-bold">{profile.card.wallet_balance.toLocaleString()} RWF</span>
+                      </p>
+                    </div>
+                    <ShoppingBag size={20} className="text-orange-400" />
+                  </div>
+                  <form onSubmit={handleCanteenPurchase} className="flex gap-2">
+                    <input
+                      type="number" min={1} value={canteenAmount}
+                      onChange={(e) => setCanteenAmount(e.target.value)}
+                      placeholder="Amount (RWF)" className={`${inp} flex-1`}
+                    />
+                    <button type="submit" disabled={processingPurchase || !canteenAmount}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-orange-600 text-white rounded-xl text-sm font-medium hover:bg-orange-700 transition disabled:opacity-60">
+                      {processingPurchase ? <Loader2 size={13} className="animate-spin" /> : <Nfc size={13} />}
+                      Charge
+                    </button>
+                  </form>
+                </div>
+              )}
               <h3 className="font-semibold text-gray-700 dark:text-gray-200 mb-4">Canteen Purchase History</h3>
               {tabLoading ? (
                 <div className="flex justify-center py-8"><Loader2 className="animate-spin text-blue-600" size={20} /></div>

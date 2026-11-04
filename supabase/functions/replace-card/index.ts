@@ -36,11 +36,21 @@ Deno.serve(async (request) => {
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(hmacSecret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const digest = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(identifier)));
   const admin = createClient(url, service, { auth: { persistSession: false, autoRefreshToken: false } });
+  // Remove stale card_identifiers entry for the same physical card if previously
+  // linked to a revoked/replaced assignment — prevents unique constraint violation.
+  await admin.rpc("cleanup_stale_card_identifier", {
+    p_school_id: schoolId, p_identifier_kind: identifierKind, p_keyed_digest: `\\x${hex(digest)}`,
+  });
   const { data: newCardId, error } = await admin.rpc("replace_card_from_edge", {
     p_actor_auth_user_id: user.id, p_school_id: schoolId, p_old_card_id: oldCardId,
     p_identifier_kind: identifierKind,
     p_identifier_digest: `\\x${hex(digest)}`, p_digest_key_version: 1, p_reason: reason,
   });
-  if (error || typeof newCardId !== "string") return respond({ error: "card_replacement_failed" }, 422);
-  return respond({ card_assignment_id: newCardId, status: "issued" }, 201);
+  if (error) return respond({ error: error.message || "card_replacement_failed" }, 422);
+  if (typeof newCardId !== "string") return respond({ error: "card_replacement_failed" }, 422);
+  // Auto-activate so the replacement card is immediately usable.
+  const { error: activateError } = await userClient.rpc("activate_card", {
+    p_school_id: schoolId, p_card_assignment_id: newCardId,
+  });
+  return respond({ card_assignment_id: newCardId, status: activateError ? "issued" : "active" }, 201);
 });

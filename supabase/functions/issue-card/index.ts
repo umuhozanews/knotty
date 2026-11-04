@@ -40,11 +40,21 @@ Deno.serve(async (request) => {
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(hmacSecret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const digest = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(identifier)));
   const admin = createClient(url, service, { auth: { persistSession: false, autoRefreshToken: false } });
+  // Remove stale card_identifiers entry if the same NFC/QR was previously
+  // assigned to a revoked or replaced card — otherwise the unique constraint fires.
+  await admin.rpc("cleanup_stale_card_identifier", {
+    p_school_id: schoolId, p_identifier_kind: identifierKind, p_keyed_digest: `\\x${hex(digest)}`,
+  });
   const { data: cardId, error } = await admin.rpc("issue_card_from_edge", {
     p_actor_auth_user_id: user.id, p_school_id: schoolId, p_holder_kind: kind,
     p_student_id: studentId, p_staff_record_id: staffId,
     p_identifier_kind: identifierKind, p_identifier_digest: `\\x${hex(digest)}`, p_digest_key_version: 1,
   });
-  if (error || typeof cardId !== "string") return encode({ error: "card_issue_failed" }, 422);
-  return encode({ card_assignment_id: cardId, status: "issued" }, 201);
+  if (error) return encode({ error: error.message || "card_issue_failed" }, 422);
+  if (typeof cardId !== "string") return encode({ error: "card_issue_failed" }, 422);
+  // Auto-activate so the card is immediately usable (no manual "Activate" step needed).
+  const { error: activateError } = await userClient.rpc("activate_card", {
+    p_school_id: schoolId, p_card_assignment_id: cardId,
+  });
+  return encode({ card_assignment_id: cardId, status: activateError ? "issued" : "active" }, 201);
 });

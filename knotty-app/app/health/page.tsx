@@ -319,9 +319,9 @@ export default function HealthPage() {
       setStudentTab("incidents");
       setStudentLoading(true);
       const [incRes, visitRes, profRes] = await Promise.allSettled([
-        supabaseHealthService.studentList(user.school_id, scanned.id),
-        supabaseHealthService.studentVisits(user.school_id, scanned.id),
-        supabaseHealthService.getProfile(user.school_id, scanned.id),
+        supabaseHealthService.studentList(user.school_id, studentData.id),
+        supabaseHealthService.studentVisits(user.school_id, studentData.id),
+        supabaseHealthService.getProfile(user.school_id, studentData.id),
       ]);
       if (incRes.status === "fulfilled")   setIncidents(incRes.value);
       if (visitRes.status === "fulfilled") setVisits(visitRes.value);

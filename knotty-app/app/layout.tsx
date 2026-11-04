@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Plus_Jakarta_Sans, Bricolage_Grotesque } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
@@ -13,6 +13,13 @@ const plusJakartaSans = Plus_Jakarta_Sans({
   display: "swap",
 });
 
+const bricolageGrotesque = Bricolage_Grotesque({
+  subsets: ["latin"],
+  weight: ["600", "700", "800"],
+  variable: "--font-bricolage",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: "IshuriHUB — Smart School Hub",
   description: "IshuriHUB Smart School Management System",
@@ -21,7 +28,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`h-full ${plusJakartaSans.variable}`}>
+    <html lang="en" className={`h-full ${plusJakartaSans.variable} ${bricolageGrotesque.variable}`}>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
         <meta name="theme-color" content="#121212" />

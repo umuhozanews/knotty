@@ -2,11 +2,13 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth, getDashboardPath } from "@/context/AuthContext";
+import { useMobileDevice } from "@/hooks/useMobileDevice";
 import { Eye, EyeOff, Loader2, ShieldCheck } from "lucide-react";
 
 export default function LoginPage() {
   const { login, loginWithGoogle, user, loading } = useAuth();
   const router = useRouter();
+  const isMobile = useMobileDevice();
   const [isMounted, setIsMounted] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -31,8 +33,8 @@ export default function LoginPage() {
   }, []);
 
   useEffect(() => {
-    if (!loading && user) router.replace(getDashboardPath(user.role));
-  }, [user, loading, router]);
+    if (!loading && user) router.replace(getDashboardPath(user.role, isMobile));
+  }, [user, loading, router, isMobile]);
 
   async function handleGoogleLogin() {
     setError("");
@@ -57,7 +59,7 @@ export default function LoginPage() {
 
     try {
       const role = await login(email.trim(), password.trim());
-      router.replace(getDashboardPath(role));
+      router.replace(getDashboardPath(role, isMobile));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Invalid credentials. Please verify your email and password.");
       setSubmitting(false);
@@ -149,7 +151,7 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 placeholder="your.email@school.rw"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-orange-500 transition bg-white"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-base outline-none focus:border-orange-500 transition bg-white"
               />
             </div>
 
@@ -164,7 +166,7 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   placeholder="••••••••"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-orange-500 transition bg-white pr-10"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-base outline-none focus:border-orange-500 transition bg-white pr-10"
                 />
                 <button
                   type="button"

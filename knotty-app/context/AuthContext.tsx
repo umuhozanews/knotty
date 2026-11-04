@@ -38,10 +38,19 @@ interface AuthContextValue {
   refreshSchools: () => Promise<void>;
 }
 
-export function getDashboardPath(role: string): string {
+export function getDashboardPath(role: string, isMobile = false): string {
+  if (isMobile) return "/mobile";
   if (role === "STUDENT") return "/my-dashboard";
   if (role === "TEACHER" || role === "NURSE" || role === "BURSAR" || role === "CASHIER") return "/staff-dashboard";
   return "/";
+}
+
+function detectMobilePhone(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent.toLowerCase();
+  if (ua.includes("ipad")) return false;
+  if (ua.includes("android") && !ua.includes("mobile")) return false;
+  return /iphone|ipod|android.*mobile|windows phone|blackberry/.test(ua);
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);

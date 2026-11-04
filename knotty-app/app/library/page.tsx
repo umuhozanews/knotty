@@ -9,7 +9,7 @@ import {
 import DashboardShell from "@/components/DashboardShell";
 import VirtualCardTap from "@/components/VirtualCardTap";
 import type { LibraryBorrowRecord, LibraryBook } from "@/lib/api";
-import { supabaseLibraryService } from "@/lib/supabase/services";
+import { supabaseLibraryService, supabaseCanteenService } from "@/lib/supabase/services";
 import { useNFC } from "@/hooks/useNFC";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
@@ -144,16 +144,24 @@ export default function LibraryPage() {
     nfcTargetRef.current = showLendModal ? "modal" : "desk";
   }, [showLendModal]);
 
-  const handleNfcCard = useCallback(async (val: string) => {
+  const handleNfcCard = useCallback(async (val: string, isUid = false) => {
     playChime();
-    if (nfcTargetRef.current === "modal") {
-      setModalCardInput(val);
-      await lookupModalStudent(val);
-    } else {
-      setCardInput(val);
-      await lookupCard(val);
+    // Physical NFC taps deliver a raw UID — resolve it to a card_number first.
+    let identifier = val;
+    if (isUid && user?.school_id) {
+      try {
+        const holder = await supabaseCanteenService.lookupCardHolderByNfcUid(user.school_id, val);
+        if (holder?.card_number) identifier = holder.card_number;
+      } catch { /* fall through with raw val */ }
     }
-  }, []);
+    if (nfcTargetRef.current === "modal") {
+      setModalCardInput(identifier);
+      await lookupModalStudent(identifier);
+    } else {
+      setCardInput(identifier);
+      await lookupCard(identifier);
+    }
+  }, [user?.school_id]);
 
   const handleNfcCardRef = useRef(handleNfcCard);
   handleNfcCardRef.current = handleNfcCard;
@@ -169,7 +177,7 @@ export default function LibraryPage() {
       return;
     }
     const ok = await startListen((result) => {
-      handleNfcCardRef.current(result.value);
+      handleNfcCardRef.current(result.value, result.type === "uid");
       if (!continuousMode) stopListen();
     });
     if (ok) {

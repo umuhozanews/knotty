@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -6,11 +6,12 @@ import {
   Briefcase, GraduationCap, Utensils, Shield, Heart,
   BookOpen, Building2, Edit, CheckCircle2, XCircle,
   AlertCircle, RefreshCw, X, Copy, Check, QrCode,
-  ShieldCheck, Trash2
+  ShieldCheck, Trash2, CreditCard, Wifi, StopCircle
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
-import { supabaseStaffService } from "@/lib/supabase/services";
+import { supabaseStaffService, supabaseCardService } from "@/lib/supabase/services";
 import { getSafeBrowserClient } from "@/lib/supabase/client";
+import { useNFC } from "@/hooks/useNFC";
 
 type LocalWorkerItem = {
   id: string; // staff_record_id
@@ -26,6 +27,8 @@ type LocalWorkerItem = {
   employee_code: string;
   is_active: boolean;
   status: string;
+  card_number?: string | null;
+  has_card?: boolean;
 };
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
@@ -521,13 +524,19 @@ function StaffBadgeModal({
             </span>
           </div>
 
-          <div className="rounded-xl p-2.5 mb-4 flex items-center justify-between border border-[#BBF7D0]" style={{ background: "#DCFCE7" }}>
+          <div className={`rounded-xl p-2.5 mb-4 flex items-center justify-between border ${
+            worker.has_card ? "border-[#BBF7D0] bg-[#DCFCE7]" : "border-gray-200 bg-gray-50"
+          }`}>
             <div className="text-left text-[11px]">
-              <p className="font-semibold text-gray-800">NFC Badge Active</p>
-              <p className="text-gray-500 text-[10px]">Gate access & POS enabled</p>
+              <p className="font-semibold text-gray-800">
+                {worker.has_card ? "NFC Card Linked" : "No Physical Card"}
+              </p>
+              <p className="text-gray-500 text-[10px]">
+                {worker.has_card ? "Gate access & attendance enabled" : "Use Action menu to issue card"}
+              </p>
             </div>
             <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center border border-gray-100">
-              <QrCode size={16} style={{ color: "#16A34A" }} />
+              <CreditCard size={16} className={worker.has_card ? "text-emerald-600" : "text-gray-400"} />
             </div>
           </div>
 
@@ -537,6 +546,154 @@ function StaffBadgeModal({
             style={{ background: "#121212" }}
           >
             Close Badge
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Staff Card Issuance Modal ────────────────────────────────────────────────
+function IssueStaffCardModal({
+  worker,
+  schoolId,
+  onClose,
+  onSuccess,
+}: {
+  worker: LocalWorkerItem;
+  schoolId: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const { startListen, stopListen, listening, isSupported } = useNFC();
+  const [nfcUid, setNfcUid] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const { show } = useToast();
+
+  useEffect(() => {
+    return () => {
+      stopListen();
+    };
+  }, [stopListen]);
+
+  async function toggleNFC() {
+    if (listening) {
+      stopListen();
+      return;
+    }
+    setError("");
+    const ok = await startListen(async (result) => {
+      setNfcUid(result.value.toUpperCase());
+      stopListen();
+    });
+    if (ok) show("NFC reader active — tap staff card on device", "info");
+  }
+
+  async function handleIssue() {
+    setError("");
+    let uid = nfcUid.trim().toUpperCase();
+    if (!uid) {
+      // Auto-generate 8-character hex card UID
+      uid = Array.from(crypto.getRandomValues(new Uint8Array(4)))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("")
+        .toUpperCase();
+    }
+
+    setLoading(true);
+    try {
+      await supabaseCardService.issueCard({
+        schoolId,
+        holderKind: "staff",
+        staffRecordId: worker.id,
+        identifierKind: "nfc_uid",
+        identifier: uid,
+      });
+
+      show(`Card ${uid} issued to ${worker.full_name}`, "success");
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || "Failed to issue staff card");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+      <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden border border-gray-200 p-5 space-y-4 shadow-xl">
+        <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <CreditCard className="w-5 h-5 text-emerald-600" />
+            <h3 className="font-bold text-sm text-gray-900">Issue Staff NFC Card</h3>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-full text-gray-400 hover:text-gray-600">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 space-y-1">
+          <p className="font-bold text-xs text-gray-900">{worker.full_name}</p>
+          <p className="text-[11px] text-gray-500">{worker.job_title} · #{worker.employee_code}</p>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-xs font-semibold text-gray-700 block">
+            NFC Card UID (Tap or Enter)
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={nfcUid}
+              onChange={(e) => setNfcUid(e.target.value.toUpperCase())}
+              placeholder="e.g. B5E32890 (or leave blank to auto-generate)"
+              className="flex-1 px-3 py-2 text-xs border border-gray-200 rounded-xl font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+            />
+            {isSupported && (
+              <button
+                type="button"
+                onClick={toggleNFC}
+                className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1 border transition ${
+                  listening
+                    ? "bg-red-50 text-red-600 border-red-200 animate-pulse"
+                    : "bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200"
+                }`}
+              >
+                {listening ? <StopCircle size={14} /> : <Wifi size={14} />}
+                <span>{listening ? "Reading…" : "Scan"}</span>
+              </button>
+            )}
+          </div>
+          <p className="text-[10px] text-gray-400">
+            Tap a physical card on your device NFC reader, type a UID, or leave blank to auto-generate.
+          </p>
+        </div>
+
+        {error && (
+          <div className="p-2.5 rounded-xl bg-red-50 text-red-700 text-xs border border-red-200 flex items-start gap-1.5">
+            <AlertCircle size={14} className="shrink-0 mt-0.5" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <div className="flex gap-2 pt-2 border-t border-gray-100">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 py-2 rounded-xl text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleIssue}
+            disabled={loading}
+            className="flex-1 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition flex items-center justify-center gap-1.5 disabled:opacity-50"
+          >
+            {loading ? <RefreshCw size={13} className="animate-spin" /> : <CreditCard size={13} />}
+            <span>Issue Card</span>
           </button>
         </div>
       </div>
@@ -569,6 +726,7 @@ export default function WorkersPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingWorker, setEditingWorker] = useState<LocalWorkerItem | null>(null);
   const [badgeWorker, setBadgeWorker] = useState<LocalWorkerItem | null>(null);
+  const [cardWorker, setCardWorker] = useState<LocalWorkerItem | null>(null);
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -585,6 +743,18 @@ export default function WorkersPage() {
     setLoading(true);
     try {
       const rows = await supabaseStaffService.listStaffMembers(schoolId) as any[];
+      let cardMap: Record<string, string> = {};
+      try {
+        const cards = await supabaseCardService.listSchoolCards(schoolId);
+        (cards || []).forEach((c: any) => {
+          if (c.holder_kind === "staff" && c.staff_record_id && (c.status === "active" || c.status === "issued")) {
+            cardMap[c.staff_record_id] = c.card_number || "Active";
+          }
+        });
+      } catch {
+        // ignore
+      }
+
       const nameParts = (name: string) => {
         const idx = (name ?? "").trim().indexOf(" ");
         return idx === -1 ? { first: (name ?? "").trim(), last: "" } : { first: (name ?? "").trim().slice(0, idx), last: (name ?? "").trim().slice(idx + 1) };
@@ -605,6 +775,8 @@ export default function WorkersPage() {
           employee_code: r.staff_number ?? "",
           is_active: r.employment_status === "active",
           status: r.employment_status ?? "",
+          card_number: cardMap[r.staff_record_id] || null,
+          has_card: !!cardMap[r.staff_record_id],
         };
       });
       if (selectedRole !== "ALL") mapped = mapped.filter((w) => w.role === selectedRole);
@@ -707,6 +879,16 @@ export default function WorkersPage() {
           worker={badgeWorker}
           schoolName={activeSchool?.name || "IshuriHUB School"}
           onClose={() => setBadgeWorker(null)}
+        />
+      )}
+
+      {/* Staff NFC Card Issuance Modal */}
+      {cardWorker && (activeSchool?.id || user?.school_id) && (
+        <IssueStaffCardModal
+          worker={cardWorker}
+          schoolId={activeSchool?.id || user?.school_id || ""}
+          onClose={() => setCardWorker(null)}
+          onSuccess={() => fetchWorkers()}
         />
       )}
 
@@ -912,6 +1094,7 @@ export default function WorkersPage() {
                     <th className="pb-3 font-medium">Department</th>
                     <th className="pb-3 font-medium">Staff ID</th>
                     <th className="pb-3 font-medium">Contact</th>
+                    <th className="pb-3 font-medium">NFC Card</th>
                     <th className="pb-3 font-medium">Status</th>
                     <th className="pb-3 pr-1 text-right font-medium">Actions</th>
                   </tr>
@@ -959,6 +1142,24 @@ export default function WorkersPage() {
                           {worker.phone || "—"}
                         </td>
 
+                        {/* NFC Card column */}
+                        <td className="py-3">
+                          {worker.has_card ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <CreditCard size={11} />
+                              <span>Linked</span>
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => setCardWorker(worker)}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 hover:bg-emerald-50 hover:text-emerald-700 text-gray-600 transition"
+                            >
+                              <Plus size={10} />
+                              <span>Issue Card</span>
+                            </button>
+                          )}
+                        </td>
+
                         {/* Status column */}
                         <td className="py-3">
                           {worker.is_active ? (
@@ -984,6 +1185,19 @@ export default function WorkersPage() {
                               className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 transition"
                             >
                               <QrCode size={13} />
+                            </button>
+
+                            {/* Issue / Link NFC Card */}
+                            <button
+                              onClick={() => setCardWorker(worker)}
+                              title={worker.has_card ? "Manage Staff NFC Card" : "Issue Staff NFC Card"}
+                              className={`p-1.5 rounded-lg border transition ${
+                                worker.has_card
+                                  ? "border-emerald-200 text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
+                                  : "border-gray-200 text-gray-500 hover:bg-gray-100"
+                              }`}
+                            >
+                              <CreditCard size={13} />
                             </button>
 
                             {/* Edit */}

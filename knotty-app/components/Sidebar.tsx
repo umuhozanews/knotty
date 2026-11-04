@@ -1,11 +1,11 @@
-﻿"use client";
+"use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, Users, ClipboardCheck, CreditCard, ShoppingCart,
   Banknote, AlertTriangle, Settings, LogOut, ChevronRight,
   Heart, User, CalendarDays, Wallet, X, Library,
-  UserCheck, Building2, Smartphone, Activity, Shield,
+  UserCheck, Building2, Smartphone, Activity, Shield, Package,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { isManagementRole } from "@/lib/roles";
@@ -28,6 +28,7 @@ const ALL_NAV = [
   { icon: Banknote,        label: "Fees",         href: "/fees",          roles: ["ADMIN","BURSAR","TEACHER","DISCIPLINE","LIBRARIAN","NURSE","STUDENT","PARENT"] },
   { icon: Smartphone,      label: "Virtual Tap",  href: "/standalone-tap", roles: ["ADMIN","TEACHER","BURSAR","DISCIPLINE","LIBRARIAN","NURSE","CANTEEN"] },
   { icon: Shield,          label: "Gate",         href: "/gate",           roles: ["ADMIN","DISCIPLINE","BURSAR","TEACHER","NURSE","LIBRARIAN"] },
+  { icon: Package,         label: "Materials",    href: "/materials",      roles: ["ADMIN","BURSAR","TEACHER","DISCIPLINE","CANTEEN","LIBRARIAN","NURSE"] },
 
   // ── Student self-service ──
   { icon: LayoutDashboard, label: "My Dashboard", href: "/",              roles: ["STUDENT", "PARENT"] },

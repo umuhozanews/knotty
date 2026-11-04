@@ -591,25 +591,38 @@ export default function StudentProfilePage() {
     setNfcError(null);
     if (!user) return;
     if (!nfcSupported) {
-      setNfcError("Web NFC requires Chrome on Android. Use 'Issue with simulated NFC UID' on desktop.");
+      setNfcError("Web NFC requires Chrome on Android.");
       return;
     }
     const result = await nfcScan();
-    if (!result) return; // error already set by the hook
+    if (!result) return;
     const nfcUid = result.type === "uid" ? result.value : result.value.trim().toUpperCase().replace(/[^0-9A-F]/g, "");
     try {
-      await supabaseCardService.issueCard({
-        schoolId: user.school_id,
-        holderKind: "student",
-        studentId,
-        identifierKind: "nfc_uid",
-        identifier: nfcUid,
-      });
-      show("IshuriHUB Card issued and linked to NFC ✓", "success");
+      if (profile?.card?.id) {
+        // Student already has a card — replace it so the NFC UID is linked to a fresh card.
+        // Revoking the old one and issuing a new one is atomic via replace_card_from_edge.
+        await supabaseCardService.replaceCard({
+          schoolId: user.school_id,
+          oldCardAssignmentId: profile.card.id,
+          identifierKind: "nfc_uid",
+          identifier: nfcUid,
+          reason: "NFC card assigned by admin",
+        });
+        show("NFC card linked ✓", "success");
+      } else {
+        await supabaseCardService.issueCard({
+          schoolId: user.school_id,
+          holderKind: "student",
+          studentId,
+          identifierKind: "nfc_uid",
+          identifier: nfcUid,
+        });
+        show("Card issued and linked to NFC ✓", "success");
+      }
       setNfcError(null);
       await loadProfile();
     } catch (err) {
-      setNfcError(err instanceof Error ? err.message : "Failed to issue card");
+      setNfcError(err instanceof Error ? err.message : "Failed to link NFC card");
     }
   }
 

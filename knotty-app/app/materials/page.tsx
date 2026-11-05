@@ -385,15 +385,8 @@ export default function MaterialsPage() {
               <Package className="w-6 h-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold text-gray-900 tracking-tight">School Materials & Inventory</h1>
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  Enterprise ERP
-                </span>
-              </div>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Kitchen, Garden, Catering, Academics, Lab, Maintenance & Sports stock control
-              </p>
+              <h1 className="text-xl font-bold text-gray-900 tracking-tight">Materials & Inventory</h1>
+              <p className="text-xs text-gray-400 mt-0.5">Track stock, issue items, and log deliveries</p>
             </div>
           </div>
 
@@ -420,21 +413,19 @@ export default function MaterialsPage() {
         {/* Metric Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-xs">
-            <div className="flex items-center justify-between text-gray-400 mb-2">
-              <span className="text-xs font-medium">Total Items</span>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-gray-400">Items</span>
               <Package className="w-4 h-4 text-emerald-600" />
             </div>
             <p className="text-2xl font-bold text-gray-900">{totalItemsCount}</p>
-            <p className="text-[11px] text-gray-400 mt-0.5">{MATERIAL_CATEGORIES.length} school categories</p>
           </div>
 
           <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-xs">
-            <div className="flex items-center justify-between text-gray-400 mb-2">
-              <span className="text-xs font-medium">Inventory Value</span>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-gray-400">Stock Value</span>
               <CreditCard className="w-4 h-4 text-blue-600" />
             </div>
-            <p className="text-2xl font-bold text-gray-900">{totalValue.toLocaleString()}</p>
-            <p className="text-[11px] text-gray-400 mt-0.5">RWF Total Estimated Asset</p>
+            <p className="text-lg font-bold text-gray-900">{totalValue.toLocaleString()} <span className="text-xs font-normal text-gray-400">RWF</span></p>
           </div>
 
           <div
@@ -443,23 +434,21 @@ export default function MaterialsPage() {
               lowStockCount > 0 ? "border-amber-200 bg-amber-50/40 hover:bg-amber-50" : "border-gray-100"
             }`}
           >
-            <div className="flex items-center justify-between text-gray-400 mb-2">
-              <span className="text-xs font-medium">Low Stock Alerts</span>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-gray-400">Low Stock</span>
               <AlertTriangle className={`w-4 h-4 ${lowStockCount > 0 ? "text-amber-600" : "text-gray-400"}`} />
             </div>
             <p className={`text-2xl font-bold ${lowStockCount > 0 ? "text-amber-700" : "text-gray-900"}`}>
               {lowStockCount}
             </p>
-            <p className="text-[11px] text-gray-400 mt-0.5">Items needing reorder</p>
           </div>
 
           <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-xs">
-            <div className="flex items-center justify-between text-gray-400 mb-2">
-              <span className="text-xs font-medium">Today's Moves</span>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-gray-400">Today</span>
               <Clock className="w-4 h-4 text-purple-600" />
             </div>
             <p className="text-2xl font-bold text-gray-900">{todayTxCount}</p>
-            <p className="text-[11px] text-gray-400 mt-0.5">Requisitions & deliveries</p>
           </div>
         </div>
 
@@ -476,7 +465,7 @@ export default function MaterialsPage() {
                     : "text-gray-500 hover:text-gray-700"
                 }`}
               >
-                Stock Registry ({materials.length})
+                Stock ({materials.length})
               </button>
               <button
                 onClick={() => setActiveTab("transactions")}
@@ -486,7 +475,7 @@ export default function MaterialsPage() {
                     : "text-gray-500 hover:text-gray-700"
                 }`}
               >
-                Movement Log ({transactions.length})
+                Moves ({transactions.length})
               </button>
               <button
                 onClick={() => setActiveTab("low_stock")}
@@ -512,7 +501,7 @@ export default function MaterialsPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search material, code, store location, supplier..."
+                placeholder="Search items..."
                 className="w-full pl-9 pr-3 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
               />
             </div>
@@ -533,24 +522,19 @@ export default function MaterialsPage() {
               </button>
 
               {MATERIAL_CATEGORIES.map((cat) => {
-                const Icon = CATEGORY_ICONS[cat.key];
                 const count = materials.filter((m) => m.category === cat.key).length;
                 const isSelected = selectedCategory === cat.key;
                 return (
                   <button
                     key={cat.key}
                     onClick={() => setSelectedCategory(cat.key)}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold transition shrink-0 ${
+                    className={`px-3 py-1 rounded-xl text-xs font-semibold transition shrink-0 ${
                       isSelected
                         ? "bg-emerald-600 text-white shadow-xs"
                         : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                     }`}
                   >
-                    <Icon className="w-3.5 h-3.5" />
-                    <span>{cat.label}</span>
-                    <span className={`text-[10px] ml-0.5 ${isSelected ? "text-white/80" : "text-gray-400"}`}>
-                      ({count})
-                    </span>
+                    {cat.label} ({count})
                   </button>
                 );
               })}
@@ -574,11 +558,8 @@ export default function MaterialsPage() {
                 <table className="w-full text-left text-xs">
                   <thead className="bg-gray-50 border-b border-gray-100 text-gray-500 uppercase tracking-wider font-semibold">
                     <tr>
-                      <th className="py-3 px-4">Code / Item</th>
-                      <th className="py-3 px-4">Category</th>
-                      <th className="py-3 px-4">Store Location</th>
+                      <th className="py-3 px-4">Item</th>
                       <th className="py-3 px-4 text-right">In Stock</th>
-                      <th className="py-3 px-4 text-right">Reorder Level</th>
                       <th className="py-3 px-4 text-right">Unit Cost</th>
                       <th className="py-3 px-4">Status</th>
                       <th className="py-3 px-4 text-right">Actions</th>
@@ -593,30 +574,16 @@ export default function MaterialsPage() {
                       return (
                         <tr key={item.id} className="hover:bg-gray-50/70 transition">
                           <td className="py-3 px-4">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center shrink-0 text-gray-600">
-                                <CatIcon className="w-4 h-4" />
-                              </div>
-                              <div className="min-w-0">
-                                <p className="font-bold text-gray-900 truncate">{item.name}</p>
-                                <p className="font-mono text-[10px] text-gray-400">{item.item_code}</p>
-                              </div>
+                            <div className="min-w-0">
+                              <p className="font-semibold text-gray-900 truncate">{item.name}</p>
+                              <p className="text-[10px] text-gray-400">{item.item_code} · {item.location}</p>
                             </div>
                           </td>
-                          <td className="py-3 px-4">
-                            <span className="capitalize font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded-lg text-[11px]">
-                              {item.category.replace("_", " ")}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-gray-600">{item.location}</td>
                           <td className="py-3 px-4 text-right font-bold text-gray-900">
                             {item.quantity_on_hand}{" "}
-                            <span className="font-normal text-gray-500 text-[11px]">{item.unit_of_measure}</span>
+                            <span className="font-normal text-gray-400 text-[11px]">{item.unit_of_measure}</span>
                           </td>
-                          <td className="py-3 px-4 text-right text-gray-500">
-                            {item.min_reorder_level} {item.unit_of_measure}
-                          </td>
-                          <td className="py-3 px-4 text-right font-medium text-gray-900">
+                          <td className="py-3 px-4 text-right text-gray-600 text-xs">
                             {item.unit_cost.toLocaleString()} RWF
                           </td>
                           <td className="py-3 px-4">
@@ -680,8 +647,8 @@ export default function MaterialsPage() {
         {activeTab === "transactions" && (
           <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-4 space-y-3">
             <div className="flex items-center justify-between pb-2 border-b border-gray-100">
-              <h2 className="text-sm font-bold text-gray-900">Inventory Movement & Requisition History</h2>
-              <span className="text-xs text-gray-400">{transactions.length} audit records</span>
+              <h2 className="text-sm font-bold text-gray-900">Movement History</h2>
+              <span className="text-xs text-gray-400">{transactions.length} records</span>
             </div>
 
             {transactions.length === 0 ? (
@@ -723,11 +690,10 @@ export default function MaterialsPage() {
                             )}
                           </div>
                           <p className="text-xs text-gray-600 mt-0.5">
-                            Recipient / Custodian: <strong>{tx.recipient_name}</strong> ({tx.department}) · Purpose:{" "}
-                            {tx.purpose}
+                            {tx.recipient_name && <><strong>{tx.recipient_name}</strong> · </>}{tx.purpose}
                           </p>
                           {tx.batch_or_invoice_ref && (
-                            <p className="text-[11px] text-gray-400 mt-0.5">Ref/Invoice: {tx.batch_or_invoice_ref}</p>
+                            <p className="text-[11px] text-gray-400 mt-0.5">Ref: {tx.batch_or_invoice_ref}</p>
                           )}
                         </div>
                       </div>
@@ -752,10 +718,7 @@ export default function MaterialsPage() {
           <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-5 space-y-4">
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-amber-600" />
-              <div>
-                <h2 className="text-sm font-bold text-gray-900">Critical & Low Stock Thresholds</h2>
-                <p className="text-xs text-gray-500">Materials below minimum safety stock requiring urgent procurement</p>
-              </div>
+              <h2 className="text-sm font-bold text-gray-900">Low Stock Alerts</h2>
             </div>
 
             {lowStockItems.length === 0 ? (
@@ -776,19 +739,12 @@ export default function MaterialsPage() {
                         <span className="font-bold text-gray-900 text-xs">{item.name}</span>
                         <span className="font-mono text-[10px] text-gray-500">({item.item_code})</span>
                       </div>
-                      <p className="text-xs text-gray-500 mt-0.5">Category: {item.category} · Store: {item.location}</p>
-                      <div className="flex items-center gap-2 mt-2 text-xs">
-                        <span className="font-bold text-red-600">
-                          Current: {item.quantity_on_hand} {item.unit_of_measure}
-                        </span>
-                        <span className="text-gray-400">|</span>
-                        <span className="text-gray-600">
-                          Min Safety: {item.min_reorder_level} {item.unit_of_measure}
-                        </span>
+                      <p className="text-[10px] text-gray-400 mt-0.5">{item.item_code} · {item.location}</p>
+                      <div className="flex items-center gap-2 mt-1.5 text-xs">
+                        <span className="font-bold text-red-600">{item.quantity_on_hand} {item.unit_of_measure}</span>
+                        <span className="text-gray-400">/</span>
+                        <span className="text-gray-500">min {item.min_reorder_level}</span>
                       </div>
-                      {item.supplier_name && (
-                        <p className="text-[11px] text-gray-400 mt-1">Supplier: {item.supplier_name}</p>
-                      )}
                     </div>
                     <button
                       onClick={() => {

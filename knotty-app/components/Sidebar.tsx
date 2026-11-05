@@ -70,6 +70,8 @@ const ROLE_LABELS: Record<string, string> = {
   CANTEEN:    "Canteen Staff",
   PARENT:     "Parent",
   LIBRARIAN:  "Librarian",
+  GATEKEEPER: "Gatekeeper",
+  MATERIALS:  "Materials Staff",
 };
 
 interface SidebarProps {

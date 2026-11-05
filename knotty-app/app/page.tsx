@@ -15,14 +15,16 @@ function DashboardLoader() {
   );
 }
 
-const AdminDashboard = dynamic(() => import("@/components/dashboards/AdminDashboard"), { loading: DashboardLoader });
-const TeacherDashboard = dynamic(() => import("@/components/dashboards/TeacherDashboard"), { loading: DashboardLoader });
-const NurseDashboard = dynamic(() => import("@/components/dashboards/NurseDashboard"), { loading: DashboardLoader });
+const AdminDashboard      = dynamic(() => import("@/components/dashboards/AdminDashboard"),      { loading: DashboardLoader });
+const TeacherDashboard    = dynamic(() => import("@/components/dashboards/TeacherDashboard"),    { loading: DashboardLoader });
+const NurseDashboard      = dynamic(() => import("@/components/dashboards/NurseDashboard"),      { loading: DashboardLoader });
 const DisciplineDashboard = dynamic(() => import("@/components/dashboards/DisciplineDashboard"), { loading: DashboardLoader });
-const BursarDashboard = dynamic(() => import("@/components/dashboards/BursarDashboard"), { loading: DashboardLoader });
-const CanteenDashboard = dynamic(() => import("@/components/dashboards/CanteenDashboard"), { loading: DashboardLoader });
-const StudentDashboard = dynamic(() => import("@/components/dashboards/StudentDashboard"), { loading: DashboardLoader });
-const ParentDashboard = dynamic(() => import("@/components/dashboards/ParentDashboard"), { loading: DashboardLoader });
+const BursarDashboard     = dynamic(() => import("@/components/dashboards/BursarDashboard"),     { loading: DashboardLoader });
+const CanteenDashboard    = dynamic(() => import("@/components/dashboards/CanteenDashboard"),    { loading: DashboardLoader });
+const GatekeeperDashboard = dynamic(() => import("@/components/dashboards/GatekeeperDashboard"), { loading: DashboardLoader });
+const MaterialsDashboard  = dynamic(() => import("@/components/dashboards/MaterialsDashboard"),  { loading: DashboardLoader });
+const StudentDashboard    = dynamic(() => import("@/components/dashboards/StudentDashboard"),    { loading: DashboardLoader });
+const ParentDashboard     = dynamic(() => import("@/components/dashboards/ParentDashboard"),     { loading: DashboardLoader });
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -31,22 +33,24 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (role === "LIBRARIAN") router.replace("/library");
-    if (role === "STUDENT") router.replace("/my-dashboard");
+    if (role === "STUDENT")   router.replace("/my-dashboard");
   }, [role, router]);
 
   return (
     <DashboardShell>
       {(!role || isManagementRole(role)) && <AdminDashboard />}
-      {role === "TEACHER"    && <TeacherDashboard />}
-      {role === "NURSE"      && <NurseDashboard />}
-      {role === "DISCIPLINE" && <DisciplineDashboard />}
-      {role === "BURSAR"     && <BursarDashboard />}
-      {role === "CANTEEN"    && <CanteenDashboard />}
-      {role === "STUDENT"    && <StudentDashboard />}
-      {role === "PARENT"     && <ParentDashboard />}
-      {role === "LIBRARIAN"  && (
+      {role === "TEACHER"     && <TeacherDashboard />}
+      {role === "NURSE"       && <NurseDashboard />}
+      {role === "DISCIPLINE"  && <DisciplineDashboard />}
+      {role === "BURSAR"      && <BursarDashboard />}
+      {role === "CANTEEN"     && <CanteenDashboard />}
+      {role === "GATEKEEPER"  && <GatekeeperDashboard />}
+      {role === "MATERIALS"   && <MaterialsDashboard />}
+      {role === "STUDENT"     && <StudentDashboard />}
+      {role === "PARENT"      && <ParentDashboard />}
+      {role === "LIBRARIAN"   && (
         <div className="py-20 flex flex-col items-center justify-center text-center">
-          <p className="text-sm font-semibold text-gray-700">Opening Library Management...</p>
+          <p className="text-sm font-semibold text-gray-700">Opening Library...</p>
         </div>
       )}
     </DashboardShell>

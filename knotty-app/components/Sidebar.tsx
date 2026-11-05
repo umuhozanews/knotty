@@ -10,31 +10,53 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { isManagementRole } from "@/lib/roles";
 
-// Every nav item and which roles can see it
+// Every nav item and which roles can see it — only give a role what it actually needs
 const ALL_NAV = [
-  // ── Shared dashboard ──
-  { icon: LayoutDashboard, label: "Dashboard",    href: "/",              roles: ["ADMIN","TEACHER","CANTEEN","NURSE","BURSAR","DISCIPLINE","LIBRARIAN"] },
+  // ── Role dashboards (all staff land at "/") ──
+  { icon: LayoutDashboard, label: "Dashboard",     href: "/",               roles: ["ADMIN","TEACHER","CANTEEN","NURSE","BURSAR","DISCIPLINE","LIBRARIAN","GATEKEEPER","MATERIALS"] },
 
-  // ── Admin / Teacher / Staff shared ──
-  { icon: Users,           label: "Students",     href: "/students",      roles: ["ADMIN","TEACHER","BURSAR","DISCIPLINE","LIBRARIAN","NURSE"] },
-  { icon: UserCheck,       label: "Workers",      href: "/workers",       roles: ["ADMIN","BURSAR","DISCIPLINE","TEACHER","LIBRARIAN","NURSE"] },
-  { icon: Building2,       label: "Schools Hub",  href: "/schools",       roles: ["ADMIN","TEACHER","BURSAR","DISCIPLINE","LIBRARIAN"] },
-  { icon: ClipboardCheck,  label: "Attendance",   href: "/attendance",    roles: ["ADMIN","TEACHER","DISCIPLINE","BURSAR","NURSE","LIBRARIAN"] },
-  { icon: Library,         label: "Library",      href: "/library",       roles: ["ADMIN","TEACHER","LIBRARIAN","STUDENT","BURSAR","DISCIPLINE","NURSE","CANTEEN","PARENT"] },
-  { icon: AlertTriangle,   label: "Discipline",   href: "/discipline",    roles: ["ADMIN","TEACHER","DISCIPLINE","BURSAR"] },
-  { icon: Heart,           label: "Health",       href: "/health",        roles: ["ADMIN","NURSE","TEACHER","DISCIPLINE"] },
-  { icon: CreditCard,      label: "Cards",        href: "/cards",         roles: ["ADMIN","BURSAR","TEACHER","DISCIPLINE","CANTEEN"] },
-  { icon: ShoppingCart,    label: "Canteen",      href: "/canteen",       roles: ["ADMIN","CANTEEN","BURSAR","TEACHER"] },
-  { icon: Banknote,        label: "Fees",         href: "/fees",          roles: ["ADMIN","BURSAR","TEACHER","DISCIPLINE","LIBRARIAN","NURSE","STUDENT","PARENT"] },
-  { icon: Smartphone,      label: "Virtual Tap",  href: "/standalone-tap", roles: ["ADMIN","TEACHER","BURSAR","DISCIPLINE","LIBRARIAN","NURSE","CANTEEN"] },
-  { icon: Shield,          label: "Gate",         href: "/gate",           roles: ["ADMIN","DISCIPLINE","BURSAR","TEACHER","NURSE","LIBRARIAN"] },
-  { icon: Package,         label: "Materials",    href: "/materials",      roles: ["ADMIN","BURSAR","TEACHER","DISCIPLINE","CANTEEN","LIBRARIAN","NURSE"] },
+  // ── Student roster — roles that work directly with students ──
+  { icon: Users,           label: "Students",      href: "/students",       roles: ["ADMIN","TEACHER","BURSAR","DISCIPLINE","LIBRARIAN","NURSE"] },
+
+  // ── Staff management — admin only ──
+  { icon: UserCheck,       label: "Workers",       href: "/workers",        roles: ["ADMIN"] },
+  { icon: Building2,       label: "Schools Hub",   href: "/schools",        roles: ["ADMIN"] },
+
+  // ── Attendance — teacher and discipline mark it ──
+  { icon: ClipboardCheck,  label: "Attendance",    href: "/attendance",     roles: ["ADMIN","TEACHER","DISCIPLINE"] },
+
+  // ── Library — librarian manages; admin oversees ──
+  { icon: Library,         label: "Library",       href: "/library",        roles: ["ADMIN","LIBRARIAN"] },
+
+  // ── Discipline — teacher and discipline office log incidents ──
+  { icon: AlertTriangle,   label: "Discipline",    href: "/discipline",     roles: ["ADMIN","TEACHER","DISCIPLINE"] },
+
+  // ── Health — nurse only ──
+  { icon: Heart,           label: "Health",        href: "/health",         roles: ["ADMIN","NURSE"] },
+
+  // ── Cards — bursar issues/manages cards ──
+  { icon: CreditCard,      label: "Cards",         href: "/cards",          roles: ["ADMIN","BURSAR"] },
+
+  // ── Canteen — canteen staff ──
+  { icon: ShoppingCart,    label: "Canteen",       href: "/canteen",        roles: ["ADMIN","CANTEEN"] },
+
+  // ── Fees — bursar + student/parent (self-service) ──
+  { icon: Banknote,        label: "Fees",          href: "/fees",           roles: ["ADMIN","BURSAR","STUDENT","PARENT"] },
+
+  // ── Virtual Tap — canteen and bursar use it for payments ──
+  { icon: Smartphone,      label: "Virtual Tap",   href: "/standalone-tap", roles: ["ADMIN","BURSAR","CANTEEN"] },
+
+  // ── Gate — gatekeeper + discipline ──
+  { icon: Shield,          label: "Gate",          href: "/gate",           roles: ["ADMIN","GATEKEEPER","DISCIPLINE"] },
+
+  // ── Materials — materials staff ──
+  { icon: Package,         label: "Materials",     href: "/materials",      roles: ["ADMIN","MATERIALS"] },
 
   // ── Student self-service ──
-  { icon: LayoutDashboard, label: "My Dashboard", href: "/",              roles: ["STUDENT", "PARENT"] },
-  { icon: User,            label: "My Profile",   href: "/my-profile",    roles: ["STUDENT"] },
-  { icon: CalendarDays,    label: "My Attendance",href: "/my-attendance", roles: ["STUDENT"] },
-  { icon: Wallet,          label: "My Card",      href: "/my-card",       roles: ["STUDENT"] },
+  { icon: LayoutDashboard, label: "My Dashboard",  href: "/",               roles: ["STUDENT","PARENT"] },
+  { icon: User,            label: "My Profile",    href: "/my-profile",     roles: ["STUDENT"] },
+  { icon: CalendarDays,    label: "My Attendance", href: "/my-attendance",  roles: ["STUDENT"] },
+  { icon: Wallet,          label: "My Card",       href: "/my-card",        roles: ["STUDENT"] },
 ];
 
 // Pretty display name for each role

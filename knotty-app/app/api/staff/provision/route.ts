@@ -27,6 +27,7 @@ export async function POST(req: NextRequest) {
   const {
     school_id, legal_name, email, role_key, password,
     actor_auth_user_id,
+    employee_number: employeeNumberInput,
     job_title: jobTitleOverride,
     department,
     qualification,
@@ -52,9 +53,11 @@ export async function POST(req: NextRequest) {
   const cleanName = clean(legal_name);
   const cleanPassword = password ? clean(password) : "Ishuri@Staff2024";
 
-  // Generate employee number: ROLE prefix + timestamp suffix
+  // Use provided employee number or generate one
   const prefix = (role_key as string).slice(0, 3).toUpperCase();
-  const employeeNumber = `${prefix}-${Date.now().toString(36).slice(-5).toUpperCase()}`;
+  const employeeNumber = employeeNumberInput
+    ? clean(String(employeeNumberInput))
+    : `${prefix}-${Date.now().toString(36).slice(-5).toUpperCase()}`;
   const jobTitle = jobTitleOverride ? clean(jobTitleOverride) : (ROLE_TITLES[role_key] ?? role_key);
 
   // 1. Create auth user
@@ -94,5 +97,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: regErr.message }, { status: 400 });
   }
 
-  return NextResponse.json({ staff_id: staffId, email: cleanEmail });
+  return NextResponse.json({ staff_id: staffId, email: cleanEmail, employee_number: employeeNumber });
 }

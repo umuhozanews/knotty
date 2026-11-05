@@ -1,71 +1,57 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { structure, Class, academics, TimetableEntry } from "@/lib/api";
-import { Loader2, Users, BookOpen, FileText, AlertTriangle, ChevronRight } from "lucide-react";
+import { supabaseAcademicService } from "@/lib/supabase/services";
+import type { ClassSectionRow } from "@/lib/supabase/services/academicService";
+import { Loader2, Users, BookOpen, FileText, AlertTriangle, ChevronRight, CalendarDays } from "lucide-react";
 import Link from "next/link";
 
 export default function TeacherDashboard() {
   const { user, loading: authLoading } = useAuth();
-  const [classes, setClasses] = useState<Class[]>([]);
-  const [timetable, setTimetable] = useState<TimetableEntry[]>([]);
+  const [classes, setClasses] = useState<ClassSectionRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (authLoading) return;
-    Promise.all([structure.classes(), academics.timetable()])
-      .then(([classResult, timetableResult]) => { setClasses(classResult.data); setTimetable(timetableResult.data); })
+    if (authLoading || !user?.school_id) return;
+    supabaseAcademicService.listClassSections(user.school_id)
+      .then(setClasses)
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [authLoading]);
-
-  const totalStudents = classes.reduce((s, c) => s + (c._count?.students ?? 0), 0);
+  }, [authLoading, user?.school_id]);
 
   return (
     <div className="flex gap-3 h-full overflow-hidden">
       <div className="flex-1 flex flex-col gap-3 overflow-y-auto min-w-0 pr-1">
-        {/* Header */}
         <div>
           <h1 className="text-xl font-bold text-gray-800">Welcome, {user?.first_name}</h1>
           <p className="text-sm text-gray-400">Teacher Dashboard · {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</p>
         </div>
 
         <section className="rounded-2xl bg-white p-4 shadow-sm">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-bold text-gray-800">Your teaching timetable</h2>
-              <p className="text-xs text-gray-500">Only lessons assigned to your account are shown.</p>
-            </div>
+          <div className="mb-3">
+            <h2 className="text-sm font-bold text-gray-800">Timetable</h2>
+            <p className="text-xs text-gray-500">Timetable scheduling is not yet configured for this school.</p>
           </div>
-          {loading ? <div className="flex justify-center py-5"><Loader2 className="animate-spin text-indigo-500" size={18} /></div> : timetable.length === 0 ? (
-            <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-600">No teaching periods are assigned to your account yet.</p>
-          ) : <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">{["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map((day, index) => {
-            const lessons = timetable.filter((entry) => entry.day_of_week === index + 1);
-            return <div key={day} className="rounded-xl border border-gray-200 p-3">
-              <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-700">{day}</h3>
-              {lessons.length ? <div className="space-y-2">{lessons.map((lesson) => <div key={lesson.id} className="rounded-lg bg-indigo-50 p-2.5">
-                <p className="text-xs font-bold text-indigo-950">{lesson.start_time}–{lesson.end_time} · {lesson.subject?.name}</p>
-                <p className="mt-0.5 text-xs text-gray-700">{lesson.class_section?.name}{lesson.room ? ` · ${lesson.room}` : ""}</p>
-              </div>)}</div> : <p className="text-xs text-gray-500">No lessons</p>}
-            </div>;
-          })}</div>}
+          <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl">
+            <CalendarDays size={20} className="text-gray-300 flex-shrink-0" />
+            <p className="text-sm text-gray-400">Contact your administrator to set up the timetable.</p>
+          </div>
         </section>
 
-        {/* Quick stats */}
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-white rounded-2xl shadow-sm p-4">
             <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center mb-3">
               <Users size={17} className="text-blue-600" />
             </div>
-            <p className="text-2xl font-bold text-gray-800">{loading ? "—" : totalStudents}</p>
-            <p className="text-xs text-gray-400 mt-0.5">Total students</p>
+            <p className="text-2xl font-bold text-gray-800">{loading ? "—" : classes.filter(c => c.status === "active").length}</p>
+            <p className="text-xs text-gray-400 mt-0.5">Active classes</p>
           </div>
           <div className="bg-white rounded-2xl shadow-sm p-4">
             <div className="w-9 h-9 rounded-xl bg-green-50 flex items-center justify-center mb-3">
               <BookOpen size={17} className="text-green-600" />
             </div>
             <p className="text-2xl font-bold text-gray-800">{loading ? "—" : classes.length}</p>
-            <p className="text-xs text-gray-400 mt-0.5">Classes assigned</p>
+            <p className="text-xs text-gray-400 mt-0.5">Total classes</p>
           </div>
           <div className="bg-white rounded-2xl shadow-sm p-4">
             <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center mb-3">
@@ -76,23 +62,22 @@ export default function TeacherDashboard() {
           </div>
         </div>
 
-        {/* Classes */}
         <div className="bg-white rounded-2xl shadow-sm p-4">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-semibold text-gray-700">Your Classes</p>
+            <p className="text-sm font-semibold text-gray-700">Class Sections</p>
             <Link href="/attendance" className="text-xs text-blue-600 hover:underline">Mark Attendance →</Link>
           </div>
           {loading ? (
             <div className="flex justify-center py-6"><Loader2 className="animate-spin text-blue-400" size={20} /></div>
           ) : classes.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-4">No classes assigned yet</p>
+            <p className="text-sm text-gray-400 text-center py-4">No class sections found</p>
           ) : (
             <div className="space-y-2">
-              {classes.map((cls) => (
+              {classes.filter(c => c.status === "active").map((cls) => (
                 <div key={cls.id} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition">
                   <div>
-                    <p className="text-sm font-medium text-gray-800">{cls.level?.name} — {cls.name}</p>
-                    <p className="text-xs text-gray-400">{cls._count?.students ?? 0} students · {cls.academic_year}</p>
+                    <p className="text-sm font-medium text-gray-800">{cls.name}</p>
+                    <p className="text-xs text-gray-400">Code: {cls.section_code}</p>
                   </div>
                   <div className="flex gap-2">
                     <Link href="/attendance"
@@ -110,7 +95,6 @@ export default function TeacherDashboard() {
           )}
         </div>
 
-        {/* Quick links */}
         <div className="grid grid-cols-2 gap-3">
           {[
             { href: "/materials", icon: BookOpen,      label: "Class Materials",   sub: "Upload notes & slides",     bg: "bg-green-50",  ic: "text-green-600" },

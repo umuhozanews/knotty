@@ -7,14 +7,13 @@ import {
   Wifi, WifiOff, Check
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
-import { students, structure, cards, health, Level, Class, Student } from "@/lib/api";
+import type { Level, Class, Student } from "@/lib/api";
 import { supabaseStudentService, supabaseAcademicService, supabaseCardService } from "@/lib/supabase/services";
 import type { ClassSectionRow } from "@/lib/supabase/services/academicService";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 import { useNFC } from "@/hooks/useNFC";
-import { getStoredStudents } from "@/lib/demo";
 import { isManagementRole } from "@/lib/roles";
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
@@ -99,20 +98,6 @@ function StudentModal({
   const [showPass, setShowPass] = useState(false);
   const [tab, setTab] = useState<"basic" | "guardian" | "medical">("basic");
 
-  useEffect(() => {
-    if (isEdit && existing) {
-      students.getOne(existing.id).then((res) => {
-        const fullStudent = res.data as any;
-        if (fullStudent.parent) {
-          setForm((f) => ({
-            ...f,
-            guardian_name: `${fullStudent.parent.first_name} ${fullStudent.parent.last_name}`.trim(),
-            guardian_phone: fullStudent.parent.phone ?? "",
-          }));
-        }
-      }).catch(console.error);
-    }
-  }, [existing, isEdit]);
 
   const selectedLvl = levels.find((l) => l.id === form.level_id);
   const filteredClasses = form.level_id
@@ -175,8 +160,13 @@ function StudentModal({
       setTab("basic");
       return;
     }
+    if (!form.email?.trim()) {
+      setError("Please provide a real email address the student can use to log in.");
+      setTab("basic");
+      return;
+    }
 
-    const effectiveEmail = form.email?.trim() || `${form.first_name.trim().toLowerCase().replace(/[^a-z0-9]/g, "")}.${form.last_name.trim().toLowerCase().replace(/[^a-z0-9]/g, "")}${Math.floor(10 + Math.random() * 90)}@student.ishurihub.rw`;
+    const effectiveEmail = form.email.trim();
 
     setLoading(true);
     try {
@@ -199,30 +189,14 @@ function StudentModal({
               });
             }
           }
-        } else {
-          await students.update(existing.id, {
-            first_name: form.first_name.trim(), last_name: form.last_name.trim(),
-            phone: form.phone || undefined,
-            gender: form.gender, date_of_birth: form.date_of_birth || undefined,
-            nationality: form.nationality || undefined,
-            level_id: form.level_id, class_id: form.class_id,
-            profile_photo: form.profile_photo || undefined,
-            guardian_name: form.guardian_name || undefined,
-            guardian_phone: form.guardian_phone || undefined,
-          });
-          if (form.medical_notes.trim()) {
-            await health.create({
-              student_id: existing.id, type: "ILLNESS", severity: "LOW",
-              title: "Medical Notes", description: form.medical_notes,
-            });
-          }
-        }
         show("Student updated successfully", "success");
+        }
       } else {
         // Create student
         if (isSupabaseConfigured() && schoolId) {
           const admissionNumber = `ADM-${new Date().getFullYear()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
           const classSection = rawClassSections?.find((cs) => cs.id === form.class_id);
+          const effectivePassword = form.password?.trim() || "Ishuri@2024";
           const { studentId } = await supabaseStudentService.provisionStudent({
             schoolId,
             contactType: "email",
@@ -234,66 +208,18 @@ function StudentModal({
             nationality: form.nationality || undefined,
             academicYearId: classSection?.academic_year_id ?? undefined,
             classSectionId: form.class_id || undefined,
+            password: effectivePassword,
           });
           setCreatedCredentials({
             id: studentId,
             name: `${form.first_name} ${form.last_name}`,
             email: effectiveEmail,
-            password: "",
+            password: effectivePassword,
           });
           onSuccess();
           return;
         }
-
-        const payload: Record<string, unknown> = {
-          first_name: form.first_name.trim(), last_name: form.last_name.trim(),
-          email: effectiveEmail, phone: form.phone || undefined,
-          password: form.password || undefined, gender: form.gender,
-          level_id: form.level_id, class_id: form.class_id,
-          date_of_birth: form.date_of_birth || undefined,
-          nationality: form.nationality || undefined,
-          profile_photo: form.profile_photo || undefined,
-          guardian_name: form.guardian_name || undefined,
-          guardian_phone: form.guardian_phone || undefined,
-        };
-
-        const created = await students.create(payload);
-        const studentId = created.data.id;
-
-        // Auto-issue card
-        try {
-          const cardRes = await cards.issue(studentId);
-          const cardId = (cardRes.data as { id: string }).id;
-
-          // Top up initial balance
-          const bal = parseInt(form.initial_balance, 10);
-          if (bal > 0) {
-            await cards.topUpCash(cardId, bal);
-          }
-        } catch {
-          // Card may already exist
-        }
-
-        // Save medical notes safely
-        if (form.medical_notes.trim()) {
-          try {
-            await health.create({
-              student_id: studentId, type: "ILLNESS", severity: "LOW",
-              title: "Medical Notes (Initial)", description: form.medical_notes,
-            });
-          } catch (e) {
-            console.warn("Medical notes creation skipped or failed:", e);
-          }
-        }
-
-        setCreatedCredentials({
-          id: studentId,
-          name: `${form.first_name} ${form.last_name}`,
-          email: form.email,
-          password: form.password || "Ishuri@2024",
-        });
-        onSuccess();
-        return; // stay open to show credentials
+        throw new Error("School is not configured. Cannot enroll student.");
       }
       onSuccess();
       onClose();
@@ -422,14 +348,15 @@ function StudentModal({
                     <input value={form.last_name} onChange={set("last_name")} className={inp} placeholder="e.g. Uwimana" />
                   </Field>
                 </div>
-                <Field label="Email Address">
+                <Field label="Email Address" required>
                   <input
                     type="email"
                     value={form.email}
                     onChange={set("email")}
                     className={inp}
-                    placeholder="student@school.rw"
+                    placeholder="student.realname@gmail.com"
                     disabled={isEdit}
+                    required
                   />
                 </Field>
                 <div className="grid grid-cols-2 gap-3">
@@ -1016,61 +943,7 @@ export default function StudentsPage() {
         console.error("Failed to load levels/classes from Supabase:", err);
         setSelectedClass(ALL_KEY);
       });
-      return;
     }
-
-    Promise.all([structure.levels(), structure.classes()]).then(([lvls, clss]) => {
-      // Deduplicate levels by normalized name, prioritizing levels that have classes
-      const levelMap = new Map<string, typeof lvls.data[0]>();
-      for (const l of lvls.data) {
-        const key = l.name.trim().toLowerCase();
-        const existing = levelMap.get(key);
-        const lClassCount = clss.data.filter((c: any) => (c.level?.id || c.level_id) === l.id).length;
-        if (!existing) {
-          levelMap.set(key, l);
-        } else {
-          const existClassCount = clss.data.filter((c: any) => (c.level?.id || c.level_id) === existing.id).length;
-          if (lClassCount > existClassCount) {
-            levelMap.set(key, l);
-          }
-        }
-      }
-      const uniqueLevels = Array.from(levelMap.values());
-      let sorted = uniqueLevels.sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0) || a.name.localeCompare(b.name, undefined, { numeric: true }));
-      if (sorted.length === 0) {
-        sorted = [
-          { id: "l1", name: "Senior 5", description: "Senior 5 level" },
-          { id: "l2", name: "Senior 6", description: "Senior 6 level" },
-        ];
-        clss.data = [
-          { id: "c1", name: "A", level: { id: "l1", name: "Senior 5" }, class_teacher_id: "demo-teacher" },
-          { id: "c2", name: "B", level: { id: "l1", name: "Senior 5" }, class_teacher_id: "demo-teacher" },
-          { id: "c3", name: "Science", level: { id: "l2", name: "Senior 6" }, class_teacher_id: "demo-teacher" },
-        ];
-      }
-      setLevels(sorted);
-      setClasses(clss.data);
-      if (sorted.length > 0) {
-        setSelectedLevel(sorted[0].id);
-        const firstClass = clss.data.find((c: any) => (c.level?.id || c.level_id) === sorted[0].id) || clss.data[0];
-        if (firstClass) setSelectedClass(firstClass.id);
-      }
-    }).catch((err) => {
-      console.error(err);
-      const demoLevels = [
-        { id: "l1", name: "Senior 5", description: "Senior 5 level" },
-        { id: "l2", name: "Senior 6", description: "Senior 6 level" },
-      ];
-      const demoClasses = [
-        { id: "c1", name: "A", level: { id: "l1", name: "Senior 5" }, class_teacher_id: "demo-teacher" },
-        { id: "c2", name: "B", level: { id: "l1", name: "Senior 5" }, class_teacher_id: "demo-teacher" },
-        { id: "c3", name: "Science", level: { id: "l2", name: "Senior 6" }, class_teacher_id: "demo-teacher" },
-      ];
-      setLevels(demoLevels);
-      setClasses(demoClasses);
-      setSelectedLevel("l1");
-      setSelectedClass("c1");
-    });
   }, [user?.id, authLoading]);
 
   // Load students for selected class (or all students when classId === ALL_KEY)
@@ -1082,31 +955,10 @@ export default function StudentsPage() {
         const sectionId = classId === ALL_KEY ? null : classId;
         const data = await supabaseStudentService.listSchoolStudents(user.school_id, sectionId, search || null);
         setStudentsByClass((prev) => ({ ...prev, [classId]: data }));
-      } else {
-        const res = await students.list({ classId, limit: 100, search: search || undefined });
-        if (res.data && res.data.length > 0) {
-          setStudentsByClass((prev) => ({ ...prev, [classId]: res.data }));
-        } else {
-          const stored = getStoredStudents().filter((s) => {
-            const matchClass = !classId || s.class?.id === classId || (s as any).class_id === classId;
-            const matchSearch = !search || `${s.user.first_name} ${s.user.last_name}`.toLowerCase().includes(search.toLowerCase());
-            return matchClass && matchSearch;
-          });
-          setStudentsByClass((prev) => ({ ...prev, [classId]: stored.length > 0 ? stored : res.data }));
-        }
       }
     } catch (err) {
-      if (!isSupabaseConfigured()) {
-        const filtered = getStoredStudents().filter((s) => {
-          const matchClass = !classId || s.class?.id === classId || (s as any).class_id === classId;
-          const matchSearch = !search || `${s.user.first_name} ${s.user.last_name}`.toLowerCase().includes(search.toLowerCase());
-          return matchClass && matchSearch;
-        });
-        setStudentsByClass((prev) => ({ ...prev, [classId]: filtered }));
-      } else {
-        show(err instanceof Error ? err.message : "Failed to load students", "error");
-        setStudentsByClass((prev) => ({ ...prev, [classId]: [] }));
-      }
+      show(err instanceof Error ? err.message : "Failed to load students", "error");
+      setStudentsByClass((prev) => ({ ...prev, [classId]: [] }));
     } finally {
       setLoading(false);
     }
@@ -1139,12 +991,10 @@ export default function StudentsPage() {
           "withdrawn",
           "Removed by school administrator"
         );
-      } else {
-        await students.remove(deleteTarget.id);
+        show(`${deleteTarget.user.first_name} removed`, "success");
+        setDeleteTarget(null);
+        loadStudents(selectedClass);
       }
-      show(`${deleteTarget.user.first_name} removed`, "success");
-      setDeleteTarget(null);
-      loadStudents(selectedClass);
     } catch (err) {
       show(err instanceof Error ? err.message : "Failed to remove", "error");
     } finally {

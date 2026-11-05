@@ -7,7 +7,7 @@ import {
   RefreshCw, X, Check, AlertCircle
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
-import { multiSchool, SchoolItem } from "@/lib/api";
+import type { SchoolItem } from "@/lib/api";
 import { supabaseSchoolService } from "@/lib/supabase/services";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
@@ -51,33 +51,15 @@ function NewSchoolModal({
     setError("");
     try {
       const generatedCode = code.trim().toUpperCase() || name.trim().slice(0, 4).toUpperCase();
-      if (isSupabaseConfigured()) {
-        try {
-          await supabaseSchoolService.provisionSchool({
-            organizationId: "00000000-0000-0000-0000-000000000001",
-            name: name.trim(),
-            code: generatedCode,
-            email: email.trim().toLowerCase(),
-            phone: phone.trim() || undefined,
-            address: address.trim() || undefined,
-          });
-          show("School node provisioned securely via Supabase RPC!", "success");
-          onSuccess();
-          onClose();
-          return;
-        } catch (supaErr) {
-          console.warn("Supabase provision_school fallback:", supaErr);
-        }
-      }
-
-      await multiSchool.create({
+      await supabaseSchoolService.provisionSchool({
+        organizationId: "00000000-0000-0000-0000-000000000001",
         name: name.trim(),
         code: generatedCode,
         email: email.trim().toLowerCase(),
         phone: phone.trim() || undefined,
         address: address.trim() || undefined,
       });
-      show("New school added to the IshuriHUB network!", "success");
+      show("School node provisioned!", "success");
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -222,10 +204,7 @@ export default function SchoolsPage() {
   const loadSchools = async () => {
     setLoading(true);
     try {
-      const res = await multiSchool.list();
-      if (res.data) {
-        setLocalSchools(res.data);
-      }
+      await refreshSchools();
     } catch {
       // Keep existing list from context
     } finally {

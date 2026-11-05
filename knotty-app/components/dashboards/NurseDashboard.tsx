@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { health, HealthRecord } from "@/lib/api";
+import { supabaseHealthService } from "@/lib/supabase/services";
+import type { HealthRecord } from "@/lib/api";
 import { Loader2, Heart, AlertTriangle, Clock, Plus, ChevronRight } from "lucide-react";
 import Link from "next/link";
 
@@ -25,8 +26,9 @@ export default function NurseDashboard() {
 
   useEffect(() => {
     if (authLoading) return;
-    health.schoolRecords({ limit: 30 })
-      .then((r) => setRecords(r.data as HealthRecord[]))
+    if (!user?.school_id) { setLoading(false); return; }
+    supabaseHealthService.schoolRecords(user.school_id, { limit: 30 })
+      .then((r) => setRecords(r))
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [authLoading]);

@@ -98,6 +98,7 @@ function WorkerModal({
   onSuccess: () => void;
 }) {
   const { show } = useToast();
+  const { user } = useAuth();
   const [form, setForm] = useState<WorkerFormState>(() => {
     if (existing) {
       return {
@@ -182,28 +183,35 @@ function WorkerModal({
         onSuccess();
         onClose();
       } else {
-        const schoolId = (window as any).__knottySchoolId as string | undefined;
+        const schoolId = (window as any).__knottySchoolId as string | undefined || user?.school_id;
         if (!schoolId) throw new Error("School not identified. Please refresh.");
+        if (!user?.id) throw new Error("Session expired. Please refresh and log in again.");
         const empCode = form.employee_code.trim() ||
-          "STF-" + Date.now().toString(36).toUpperCase().slice(-5);
-        const categories = form.role === "TEACHER" ? ["teaching"] : ["non_teaching"];
-        const { error } = await client.rpc("register_staff", {
-          p_school_id: schoolId,
-          p_employee_number: empCode,
-          p_legal_name: `${form.first_name.trim()} ${form.last_name.trim()}`,
-          p_job_title: form.job_title || form.role,
-          p_department: form.department || "General Staff",
-          p_hired_on: new Date().toISOString().split("T")[0],
-          p_categories: categories,
-          p_qualification: form.role === "TEACHER" ? "B.Ed" : null,
-          p_specialization: null,
+          form.role.slice(0, 3).toUpperCase() + "-" + Date.now().toString(36).toUpperCase().slice(-5);
+        const response = await fetch("/api/staff/provision", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            school_id: schoolId,
+            legal_name: `${form.first_name.trim()} ${form.last_name.trim()}`,
+            email: form.email.trim(),
+            role_key: form.role,
+            password: form.password || "Staff@2024",
+            actor_auth_user_id: user.id,
+            employee_number: empCode,
+            job_title: form.job_title || form.role,
+            department: form.department || "General Staff",
+            qualification: form.role === "TEACHER" ? "B.Ed" : null,
+            specialization: null,
+          }),
         });
-        if (error) throw new Error(error.message);
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Failed to register staff");
         setCredentials({
           name: `${form.first_name.trim()} ${form.last_name.trim()}`,
-          email: form.email,
+          email: form.email.trim(),
           password: form.password || "Staff@2024",
-          code: empCode,
+          code: result.employee_number || empCode,
           role: form.role,
         });
       }

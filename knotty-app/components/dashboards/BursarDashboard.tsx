@@ -1,34 +1,31 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { fees, students } from "@/lib/api";
-import { Loader2, TrendingUp, Banknote, Users, AlertCircle, ChevronRight } from "lucide-react";
+import { supabaseFeesService } from "@/lib/supabase/services";
+import { TrendingUp, Banknote, AlertCircle, ChevronRight, Users, BarChart2 } from "lucide-react";
 import Link from "next/link";
-
-const METHOD_LABEL: Record<string, string> = {
-  CASH: "Cash", MOMO: "MoMo", BANK: "Bank Transfer",
-};
 
 export default function BursarDashboard() {
   const { user, loading: authLoading } = useAuth();
-  const [summary, setSummary] = useState<{ total_collected: number; pending: number; total_students: number } | null>(null);
-  const [recentPayments, setRecentPayments] = useState<Array<{ id: string; amount: number; payment_method: string; paid_at: string; student?: { user?: { first_name?: string; last_name?: string } } }>>([]);
+  const [summary, setSummary] = useState<{
+    total_collected: number;
+    pending: number;
+    by_channel: { channel: string; total: number }[];
+  } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (authLoading) return;
-    Promise.all([
-      fees.schoolReport(),
-    ]).then(([rep]) => {
-      setSummary(rep.data as unknown as { total_collected: number; pending: number; total_students: number });
-    }).catch(console.error).finally(() => setLoading(false));
-  }, [authLoading]);
+    if (authLoading || !user?.school_id) return;
+    supabaseFeesService.getSchoolReport(user.school_id)
+      .then(setSummary)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [authLoading, user?.school_id]);
 
   const fmt = (n: number) => n.toLocaleString("en");
 
   return (
     <div className="space-y-4 overflow-y-auto h-full pr-1">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-800">Bursar Office</h1>
@@ -40,7 +37,6 @@ export default function BursarDashboard() {
         </Link>
       </div>
 
-      {/* Stats */}
       <div className="bg-white rounded-2xl shadow-sm p-4">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Fee Collection Summary</p>
         <div className="grid grid-cols-3 gap-3">
@@ -64,16 +60,15 @@ export default function BursarDashboard() {
           </div>
           <div>
             <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center mb-2">
-              <Users size={17} className="text-blue-600" />
+              <BarChart2 size={17} className="text-blue-600" />
             </div>
             <p className="text-2xl font-bold text-gray-800">
-              {loading ? <span className="h-5 w-20 bg-gray-100 rounded animate-pulse inline-block" /> : (summary?.total_students ?? "—")}
+              {loading ? <span className="h-5 w-12 bg-gray-100 rounded animate-pulse inline-block" /> : (summary?.by_channel.length ?? 0)}
             </p>
-            <p className="text-xs text-gray-400 mt-0.5">Students</p>
+            <p className="text-xs text-gray-400 mt-0.5">Channels</p>
           </div>
         </div>
 
-        {/* Collection progress bar */}
         {!loading && summary && summary.total_collected + summary.pending > 0 && (() => {
           const pct = Math.round((summary.total_collected / (summary.total_collected + summary.pending)) * 100);
           return (
@@ -90,11 +85,10 @@ export default function BursarDashboard() {
         })()}
       </div>
 
-      {/* Quick links */}
       <div className="grid grid-cols-3 gap-3">
         {[
-          { href: "/fees",     label: "Fee Payments",  sub: "Record & verify",     icon: Banknote, bg: "bg-blue-50",   ic: "text-blue-600" },
-          { href: "/students", label: "Students",       sub: "Fee status lookup",   icon: Users,    bg: "bg-green-50",  ic: "text-green-600" },
+          { href: "/fees",     label: "Fee Payments",  sub: "Record & verify",     icon: Banknote,   bg: "bg-blue-50",   ic: "text-blue-600" },
+          { href: "/students", label: "Students",       sub: "Fee status lookup",   icon: Users,      bg: "bg-green-50",  ic: "text-green-600" },
           { href: "/cards",    label: "Card Wallets",   sub: "Top-up & manage",     icon: TrendingUp, bg: "bg-purple-50", ic: "text-purple-600" },
         ].map(({ href, label, sub, icon: Icon, bg, ic }) => (
           <Link key={href} href={href}

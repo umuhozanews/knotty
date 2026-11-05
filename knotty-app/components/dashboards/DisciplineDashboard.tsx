@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { discipline, DisciplineRecord } from "@/lib/api";
+import { supabaseDisciplineService } from "@/lib/supabase/services";
+import type { DisciplineRecord } from "@/lib/api";
 import { Loader2, AlertTriangle, ShieldAlert, Clock, ChevronRight, Plus } from "lucide-react";
 import Link from "next/link";
 
@@ -24,8 +25,9 @@ export default function DisciplineDashboard() {
 
   useEffect(() => {
     if (authLoading) return;
-    discipline.schoolList({ limit: 30 })
-      .then((r) => setRecords(r.data as DisciplineRecord[]))
+    if (!user?.school_id) { setLoading(false); return; }
+    supabaseDisciplineService.schoolList(user.school_id, { limit: 30 })
+      .then((r) => setRecords(r))
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [authLoading]);

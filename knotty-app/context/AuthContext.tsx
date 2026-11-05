@@ -40,7 +40,7 @@ interface AuthContextValue {
 
 export function getDashboardPath(role: string): string {
   if (role === "STUDENT") return "/my-dashboard";
-  if (role === "TEACHER" || role === "NURSE" || role === "BURSAR" || role === "CASHIER") return "/staff-dashboard";
+  if (role === "LIBRARIAN") return "/library";
   return "/";
 }
 
@@ -146,23 +146,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   if (res.session.refresh_token) localStorage.setItem("ishuri_refresh", res.session.refresh_token);
                 }
               } catch {}
-            } else {
-              const savedUserStr = localStorage.getItem("ishuri_user");
-              if (savedUserStr) {
-                try {
-                  const savedU = JSON.parse(savedUserStr);
-                  if (savedU?.role === "admin" || savedU?.role === "ADMIN" || savedU?.email?.includes("ganzaxcelo")) {
-                    const { data: autoSign } = await client.auth.signInWithPassword({
-                      email: "ganzaxcelo@gmail.com",
-                      password: "Password123!",
-                    });
-                    if (autoSign?.session) {
-                      localStorage.setItem("ishuri_token", autoSign.session.access_token);
-                      if (autoSign.session.refresh_token) localStorage.setItem("ishuri_refresh", autoSign.session.refresh_token);
-                    }
-                  }
-                } catch {}
-              }
             }
           }
         }).catch(() => {});

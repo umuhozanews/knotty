@@ -62,12 +62,13 @@ interface StudentCard {
 }
 
 type TapResult = {
-  action: "TAP_IN" | "TAP_OUT" | "ALREADY_OUT" | "DUPLICATE";
+  action: "TAP_IN" | "TAP_OUT" | "ALREADY_OUT" | "DUPLICATE" | "DENIED";
   direction: "in" | "out";
   check_in_time: string | null;
   check_out_time: string | null;
   tap_in_points: number;
   tap_out_points: number;
+  denied_reason?: string;
 };
 
 interface GateActivityItem {
@@ -169,40 +170,70 @@ function TapResultCard({
   role?: string;
   category?: "Student" | "Staff" | "Visitor";
 }) {
-  const isIn  = result.action === "TAP_IN";
-  const isOut = result.action === "TAP_OUT";
-  const isDup = result.action === "ALREADY_OUT" || result.action === "DUPLICATE";
-  const bg    = isIn ? "bg-green-50 border-green-200" : isOut ? "bg-blue-50 border-blue-200" : "bg-gray-50 border-gray-200";
-  const icon  = isIn ? <LogIn className="w-5 h-5 text-green-600" /> : isOut ? <LogOut className="w-5 h-5 text-blue-600" /> : <Clock className="w-5 h-5 text-gray-400" />;
-  const label = isIn ? "Tapped In (Entry)" : isOut ? "Tapped Out (Exit)" : isDup ? "Already Out" : "Duplicate Tap";
+  const isIn      = result.action === "TAP_IN";
+  const isOut     = result.action === "TAP_OUT";
+  const isDenied  = result.action === "DENIED";
+  const isAlready = result.action === "ALREADY_OUT" || result.action === "DUPLICATE";
+
+  const banner = isDenied
+    ? { bg: "bg-red-600",   text: "✗ NOT ALLOWED TO ENTER",  textColor: "text-white" }
+    : isIn
+    ? { bg: "bg-green-600", text: "✓ ENTRY CONFIRMED",        textColor: "text-white" }
+    : isOut
+    ? { bg: "bg-blue-600",  text: "✓ EXIT CONFIRMED",         textColor: "text-white" }
+    : { bg: "bg-gray-400",  text: "ℹ ALREADY PROCESSED",      textColor: "text-white" };
+
+  const cardBg = isDenied
+    ? "bg-red-50 border-red-200"
+    : isIn
+    ? "bg-green-50 border-green-200"
+    : isOut
+    ? "bg-blue-50 border-blue-200"
+    : "bg-gray-50 border-gray-200";
 
   return (
-    <div className={`rounded-2xl border p-4 flex items-center gap-4 ${bg} animate-in fade-in duration-200`}>
-      <Avatar name={name} photo={photo} size={12} />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <p className="font-semibold text-gray-900 truncate">{name}</p>
-          {category && (
-            <span className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full bg-white/80 text-gray-700 border border-gray-200">
-              {category}
-            </span>
+    <div className={`rounded-2xl border overflow-hidden ${cardBg} animate-in fade-in duration-200`}>
+      {/* Status banner */}
+      <div className={`${banner.bg} px-4 py-2.5 flex items-center gap-2`}>
+        <span className={`text-sm font-extrabold tracking-wide ${banner.textColor}`}>{banner.text}</span>
+        <span className="ml-auto text-xs font-semibold text-white/80 uppercase tracking-wider">{category}</span>
+      </div>
+
+      {/* Person info */}
+      <div className="p-4 flex items-center gap-4">
+        <Avatar name={name} photo={photo} size={14} />
+        <div className="flex-1 min-w-0">
+          <p className="text-lg font-extrabold text-gray-900 truncate leading-tight">{name}</p>
+          {role && <p className="text-sm text-gray-500 truncate mt-0.5">{role}</p>}
+          {isDenied && result.denied_reason && (
+            <p className="text-xs text-red-600 font-semibold mt-1">{result.denied_reason}</p>
+          )}
+          {!isDenied && !isAlready && (
+            <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+              {result.check_in_time && (
+                <span className="flex items-center gap-1">
+                  <LogIn size={11} className="text-green-600" /> Entry {fmtTime(result.check_in_time)}
+                </span>
+              )}
+              {result.check_out_time && (
+                <span className="flex items-center gap-1">
+                  <LogOut size={11} className="text-blue-600" /> Exit {fmtTime(result.check_out_time)}
+                </span>
+              )}
+              {(result.tap_in_points + result.tap_out_points) > 0 && (
+                <span className="ml-auto font-semibold text-green-600">
+                  +{result.tap_in_points + result.tap_out_points} pts
+                </span>
+              )}
+            </div>
+          )}
+          {isAlready && (
+            <p className="text-xs text-gray-400 mt-1">
+              {result.check_in_time && `Entered: ${fmtTime(result.check_in_time)}`}
+              {result.check_out_time && ` · Exited: ${fmtTime(result.check_out_time)}`}
+            </p>
           )}
         </div>
-        {role && <p className="text-xs text-gray-500 truncate">{role}</p>}
-        <div className="flex items-center gap-2 mt-1">
-          {icon}
-          <span className="text-sm font-semibold">{label}</span>
-          <span className="text-xs text-gray-500 ml-auto font-medium">
-            {result.tap_in_points + result.tap_out_points}/4 pts
-          </span>
-        </div>
-        {(result.check_in_time || result.check_out_time) && (
-          <p className="text-xs text-gray-500 mt-1">
-            {result.check_in_time ? `Entry: ${fmtTime(result.check_in_time)}` : ""}
-            {result.check_in_time && result.check_out_time ? " · " : ""}
-            {result.check_out_time ? `Exit: ${fmtTime(result.check_out_time)}` : ""}
-          </p>
-        )}
       </div>
     </div>
   );
@@ -668,7 +699,14 @@ export default function GatePage() {
       if (studentData) {
         if (studentData.is_frozen) {
           playChime("ERROR");
-          throw new Error(`Student card for ${studentData.legal_name} is frozen`);
+          setQuickResult({
+            result: { action: "DENIED", direction: "in", check_in_time: null, check_out_time: null, tap_in_points: 0, tap_out_points: 0, denied_reason: "Card is frozen — contact the bursar" },
+            name: studentData.legal_name,
+            photo: studentData.profile_photo_path,
+            role: `${studentData.class_name} · ${studentData.admission_number}`,
+            category: "Student",
+          });
+          return;
         }
 
         const tapRes = await supabaseAttendanceService.recordVirtualStudentTapV2({
@@ -738,7 +776,14 @@ export default function GatePage() {
       if (staffData) {
         if (staffData.is_frozen) {
           playChime("ERROR");
-          throw new Error(`Staff card for ${staffData.legal_name} is frozen`);
+          setQuickResult({
+            result: { action: "DENIED", direction: "in", check_in_time: null, check_out_time: null, tap_in_points: 0, tap_out_points: 0, denied_reason: "Staff card is frozen — contact admin" },
+            name: staffData.legal_name,
+            photo: staffData.profile_photo_path,
+            role: `${staffData.job_title}${staffData.department ? " · " + staffData.department : ""}`,
+            category: "Staff",
+          });
+          return;
         }
 
         const tapRes = await supabaseAttendanceService.recordVirtualStaffTap({

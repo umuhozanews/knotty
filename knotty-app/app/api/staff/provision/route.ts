@@ -18,6 +18,8 @@ const ROLE_TITLES: Record<string, string> = {
   NURSE: "School Nurse",
   LIBRARIAN: "Librarian",
   CANTEEN: "Canteen Staff",
+  GATEKEEPER: "Gate Security Officer",
+  MATERIALS: "Materials & Inventory Officer",
   ADMIN: "Administrator",
   SCHOOL_MANAGER: "School Manager",
 };

@@ -20,7 +20,7 @@ type CardScanFull = {
   student: { id: string; name: string; class: string; student_code: string; photo: string | null; school_name: string; school_logo: string | null };
 };
 
-type TapAction = "TAP_IN" | "TAP_OUT" | "ALREADY_OUT" | "BLOCKED";
+type TapAction = "TAP_IN" | "TAP_OUT" | "ALREADY_IN" | "ALREADY_OUT" | "WINDOW_CLOSED" | "BLOCKED";
 
 interface ScanLogEntry {
   id: string;
@@ -33,10 +33,12 @@ interface ScanLogEntry {
 }
 
 const ACTION_CFG: Record<TapAction, { label: string; color: string; bg: string; border: string; glow: "green" | "blue" | "orange" | "red" | null }> = {
-  TAP_IN:      { label: "Tapped In",   color: "text-green-600",  bg: "bg-green-50",  border: "border-green-200",  glow: "green"  },
-  TAP_OUT:     { label: "Tapped Out",  color: "text-blue-600",   bg: "bg-blue-50",   border: "border-blue-200",   glow: "blue"   },
-  ALREADY_OUT: { label: "Already Out", color: "text-gray-500",   bg: "bg-gray-50",   border: "border-gray-200",   glow: null     },
-  BLOCKED:     { label: "Too Early",   color: "text-orange-600", bg: "bg-orange-50", border: "border-orange-200", glow: "orange" },
+  TAP_IN:       { label: "Tapped In",       color: "text-green-600",  bg: "bg-green-50",  border: "border-green-200",  glow: "green"  },
+  TAP_OUT:      { label: "Tapped Out",      color: "text-blue-600",   bg: "bg-blue-50",   border: "border-blue-200",   glow: "blue"   },
+  ALREADY_IN:   { label: "Already In",      color: "text-purple-600", bg: "bg-purple-50", border: "border-purple-200", glow: null     },
+  ALREADY_OUT:  { label: "Already Out",     color: "text-gray-500",   bg: "bg-gray-50",   border: "border-gray-200",   glow: null     },
+  WINDOW_CLOSED:{ label: "Window Closed",   color: "text-red-600",    bg: "bg-red-50",    border: "border-red-200",    glow: "red"    },
+  BLOCKED:      { label: "Too Early",       color: "text-orange-600", bg: "bg-orange-50", border: "border-orange-200", glow: "orange" },
 };
 
 function Avatar({ name, photo, size = 8 }: { name: string; photo: string | null; size?: number }) {
@@ -77,8 +79,43 @@ export default function AttendancePage() {
   const glowTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const qrScannerRef = useRef<any | null>(null);
 
+  function timeToMins(hhmm: string): number {
+    const [h, m] = hhmm.split(":").map(Number);
+    return h * 60 + (m || 0);
+  }
+
   async function executeScan(identifier: string, isNfcUid = false) {
     if (!activeSchool?.id) return;
+
+    // ── Time-window enforcement ─────────────────────────────────────────────
+    const now = new Date();
+    const nowMins = now.getHours() * 60 + now.getMinutes();
+    const inEndMins  = timeToMins(tapInEnd);
+    const outEndMins = timeToMins(tapOutEnd);
+
+    // Determine effective direction before hitting the API
+    let effectiveDir: "IN" | "OUT" | "BLOCKED";
+    if (scanType === "IN") {
+      effectiveDir = nowMins <= inEndMins ? "IN" : "BLOCKED";
+    } else if (scanType === "OUT") {
+      effectiveDir = nowMins <= outEndMins ? "OUT" : "BLOCKED";
+    } else {
+      // AUTO: tap-in window is 00:00–tapInEnd, tap-out is tapInEnd–tapOutEnd
+      if (nowMins <= inEndMins)       effectiveDir = "IN";
+      else if (nowMins <= outEndMins) effectiveDir = "OUT";
+      else                            effectiveDir = "BLOCKED";
+    }
+
+    if (effectiveDir === "BLOCKED") {
+      const closedAt = scanType === "OUT" || nowMins > inEndMins ? tapOutEnd : tapInEnd;
+      const label    = scanType === "OUT" || nowMins > inEndMins ? "Tap-out" : "Tap-in";
+      setGlowColor("red");
+      setTapResult({ action: "WINDOW_CLOSED", message: `${label} window closed at ${closedAt}` });
+      toast(`${label} window closed at ${closedAt}`, "error");
+      return;
+    }
+    // ───────────────────────────────────────────────────────────────────────
+
     setCardLoading(true);
     setCardData(null);
     setTapResult(null);
@@ -110,8 +147,13 @@ export default function AttendancePage() {
         direction,
       });
 
-      const action: TapAction = tapRes.action === "TAP_OUT" ? "TAP_OUT"
+      // ALREADY_IN: student was already checked in and effective direction was IN
+      // (backend auto-switched to TAP_OUT, but we know they were already inside)
+      const action: TapAction =
+        tapRes.action === "TAP_OUT"     ? "TAP_OUT"
         : tapRes.action === "ALREADY_OUT" ? "ALREADY_OUT"
+        : tapRes.action === "DUPLICATE"   ? (tapRes.direction === "in" ? "ALREADY_IN" : "ALREADY_OUT")
+        : (effectiveDir === "IN" && tapRes.direction === "out") ? "ALREADY_IN"
         : "TAP_IN";
 
       const cardDataLocal: CardScanFull = {
@@ -140,14 +182,15 @@ export default function AttendancePage() {
 
       const totalPts = tapRes.tap_in_points + tapRes.tap_out_points;
       const ptsLabel = totalPts > 0 ? ` · ${totalPts}/4 pts` : "";
-      setTapResult({
-        action,
-        message: action === "TAP_IN"
-          ? `Tapped in at ${fmtTime(tapRes.check_in_time)} (+2 pts)`
-          : action === "TAP_OUT"
-          ? `Tapped out at ${fmtTime(tapRes.check_out_time)} (+2 pts)`
-          : `Already tapped out today${ptsLabel}`,
-      });
+      const msgMap: Record<TapAction, string> = {
+        TAP_IN:        `Tapped in at ${fmtTime(tapRes.check_in_time)} (+2 pts)`,
+        TAP_OUT:       `Tapped out at ${fmtTime(tapRes.check_out_time)} (+2 pts)`,
+        ALREADY_IN:    `Already tapped in at ${fmtTime(tapRes.check_in_time)} — no second tap-in`,
+        ALREADY_OUT:   `Already tapped out today${ptsLabel}`,
+        WINDOW_CLOSED: "",
+        BLOCKED:       "",
+      };
+      setTapResult({ action, message: msgMap[action] });
 
       setScanLog((l) => [{
         id: tapRes.attendance_record_id || Date.now().toString(),
@@ -159,7 +202,8 @@ export default function AttendancePage() {
         photo: holder.profile_photo_path ?? null,
       }, ...l.slice(0, 9)]);
 
-      toast(`${holder.legal_name} — ${ACTION_CFG[action].label}${ptsLabel}`, action === "TAP_IN" ? "success" : "info");
+      const toastType = action === "TAP_IN" ? "success" : (action === "ALREADY_IN" || action === "ALREADY_OUT") ? "info" : "info";
+      toast(`${holder.legal_name} — ${ACTION_CFG[action].label}${ptsLabel}`, toastType);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Scan failed";
       setGlowColor("red");

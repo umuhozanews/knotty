@@ -41,6 +41,8 @@ const ROLE_LABELS: Record<string, string> = {
   NURSE: "School Nurse",
   DISCIPLINE: "Discipline Master",
   LIBRARIAN: "Librarian",
+  GATEKEEPER: "Gatekeeper",
+  MATERIALS: "Materials Staff",
   ADMIN: "Administrator",
 };
 
@@ -148,6 +150,12 @@ function WorkerModal({
     } else if (newRole === "LIBRARIAN") {
       dept = "Library & Media Center";
       title = "Head Librarian";
+    } else if (newRole === "GATEKEEPER") {
+      dept = "Security & Gate Control";
+      title = "Gate Security Officer";
+    } else if (newRole === "MATERIALS") {
+      dept = "Materials & Inventory";
+      title = "Materials & Inventory Officer";
     } else if (newRole === "ADMIN") {
       dept = "Executive School Administration";
       title = "Administrator";

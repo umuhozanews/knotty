@@ -24,12 +24,16 @@ export default function GatekeeperDashboard() {
     const client = getSafeBrowserClient();
     if (!client) { setLoading(false); return; }
 
-    client.rpc("get_gate_overview", { p_school_id: user.school_id })
-      .then(({ data, error }) => {
+    (async () => {
+      try {
+        const { data, error } = await client.rpc("get_gate_overview", { p_school_id: user.school_id });
         if (!error && data) setOverview((data as any)[0] ?? null);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [authLoading, user?.school_id]);
 
   const stats = [

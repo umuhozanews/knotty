@@ -365,7 +365,9 @@ export default function HealthPage() {
       const res = await supabaseHealthService.schoolRecords(user.school_id, { page: schoolPage, limit: LIMIT, search: search || undefined });
       setSchoolRecords(res);
       setSchoolTotal(res.length === LIMIT ? schoolPage * LIMIT + 1 : (schoolPage - 1) * LIMIT + res.length);
-    } catch { /* ignore */ }
+    } catch (err) {
+      if (String(err).toLowerCase().includes("permission denied")) setSchoolLoading(false);
+    }
     finally { setSchoolLoading(false); }
   }, [schoolPage, user?.school_id, search]);
 

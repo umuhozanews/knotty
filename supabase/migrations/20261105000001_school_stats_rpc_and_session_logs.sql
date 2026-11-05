@@ -133,7 +133,7 @@ AS $$
     coalesce(
       (SELECT smr.role_key FROM public.school_membership_roles smr
         WHERE smr.membership_id = sr.school_membership_id AND smr.status = 'active'
-        ORDER BY smr.created_at LIMIT 1),
+        ORDER BY smr.assigned_at LIMIT 1),
       sr.job_title
     ) AS role_key,
     ssl.event_type,

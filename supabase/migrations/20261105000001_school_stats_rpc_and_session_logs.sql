@@ -23,7 +23,11 @@ AS $$
     (SELECT COUNT(*) FROM student_records    WHERE school_id = p_school_id AND status = 'active'),
     (SELECT COUNT(*) FROM attendance_records WHERE school_id = p_school_id AND attendance_date = CURRENT_DATE AND status = 'present'),
     (SELECT COUNT(*) FROM card_assignments   WHERE school_id = p_school_id AND status = 'active' AND wallet_balance < 500),
-    (SELECT COUNT(*) FROM staff_records      WHERE school_id = p_school_id AND employment_status = 'active' AND primary_role_category = 'TEACHER'),
+    (SELECT COUNT(DISTINCT sr2.id)
+       FROM staff_records sr2
+       JOIN school_membership_roles smr2 ON smr2.membership_id = sr2.school_membership_id
+      WHERE sr2.school_id = p_school_id AND sr2.employment_status IN ('active','on_leave')
+        AND smr2.role_key = 'TEACHER' AND smr2.status = 'active'),
     (SELECT COUNT(*) FROM staff_records      WHERE school_id = p_school_id AND employment_status IN ('active','on_leave')),
     (SELECT COUNT(*) FROM library_books      WHERE school_id = p_school_id),
     (SELECT COUNT(*) FROM library_borrow_records WHERE school_id = p_school_id AND returned_at IS NULL),
@@ -125,12 +129,19 @@ AS $$
   SELECT
     ssl.id,
     ssl.staff_record_id,
-    sr.legal_name AS staff_name,
-    sr.primary_role_category AS role_key,
+    coalesce(pi.legal_name, sr.employee_number) AS staff_name,
+    coalesce(
+      (SELECT smr.role_key FROM public.school_membership_roles smr
+        WHERE smr.membership_id = sr.school_membership_id AND smr.status = 'active'
+        ORDER BY smr.created_at LIMIT 1),
+      sr.job_title
+    ) AS role_key,
     ssl.event_type,
     ssl.created_at
   FROM staff_session_logs ssl
   JOIN staff_records sr ON sr.id = ssl.staff_record_id
+  JOIN persons p ON p.id = sr.person_id
+  LEFT JOIN private.person_private_identity pi ON pi.person_id = p.id
   WHERE ssl.school_id = p_school_id
   ORDER BY ssl.created_at DESC
   LIMIT p_limit;

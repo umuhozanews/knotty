@@ -18,6 +18,7 @@ function toRecord(row: {
   student_name?: string;
   student_code?: string;
   recorder_name?: string;
+  student_visit_count?: number;
 }): DisciplineRecord {
   const nameParts = (row.student_name ?? "").trim().split(" ");
   return {
@@ -32,6 +33,8 @@ function toRecord(row: {
     parent_notified: row.parent_notified,
     recorded_at: row.recorded_at,
     created_at: row.recorded_at,
+    student_code: row.student_code,
+    student_visit_count: row.student_visit_count,
     student: row.student_id ? {
       user: {
         first_name: nameParts[0] ?? "",

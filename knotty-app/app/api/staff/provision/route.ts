@@ -99,5 +99,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: regErr.message }, { status: 400 });
   }
 
+  // Store the admin-set password hint in staff_records (best-effort)
+  if (staffId) {
+    await Promise.resolve(
+      supabaseAdmin.from("staff_records").update({ hint_password: cleanPassword }).eq("id", staffId)
+    ).catch(() => {});
+  }
+
   return NextResponse.json({ staff_id: staffId, email: cleanEmail, employee_number: employeeNumber });
 }

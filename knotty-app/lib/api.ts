@@ -4230,6 +4230,8 @@ export interface DisciplineRecord {
   created_at: string;
   student?: { user: { first_name: string; last_name: string } };
   recorder?: { first_name: string; last_name: string; role: string };
+  student_visit_count?: number;
+  student_code?: string;
 }
 
 export const discipline = {
@@ -4258,6 +4260,8 @@ export interface HealthRecord {
   recorded_at: string;
   student?: { user: { first_name: string; last_name: string } };
   recorder?: { first_name: string; last_name: string; role: string };
+  student_visit_count?: number;
+  student_code?: string;
 }
 
 export interface MedicalProfile {

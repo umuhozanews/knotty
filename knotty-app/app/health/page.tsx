@@ -3,7 +3,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import {
   WifiOff, Loader2, Heart, Plus, X, CreditCard,
   AlertCircle, CheckCircle, Clock, Activity, Pill,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Search, History,
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import VirtualCardTap from "@/components/VirtualCardTap";
@@ -277,7 +277,9 @@ export default function HealthPage() {
   const [schoolPage, setSchoolPage]         = useState(1);
   const [schoolTotal, setSchoolTotal]       = useState(0);
   const [schoolLoading, setSchoolLoading]   = useState(true);
-  const LIMIT = 20;
+  const [search, setSearch]                 = useState("");
+  const [searchInput, setSearchInput]       = useState("");
+  const LIMIT = 50;
 
   async function handleCardScan(cardNum: string, isNFC = false) {
     if (!cardNum.trim() || processingRef.current || !user?.school_id) return;
@@ -360,12 +362,12 @@ export default function HealthPage() {
     if (!user?.school_id) return;
     setSchoolLoading(true);
     try {
-      const res = await supabaseHealthService.schoolRecords(user.school_id, { page: schoolPage, limit: LIMIT });
+      const res = await supabaseHealthService.schoolRecords(user.school_id, { page: schoolPage, limit: LIMIT, search: search || undefined });
       setSchoolRecords(res);
       setSchoolTotal(res.length === LIMIT ? schoolPage * LIMIT + 1 : (schoolPage - 1) * LIMIT + res.length);
     } catch { /* ignore */ }
     finally { setSchoolLoading(false); }
-  }, [schoolPage, user?.school_id]);
+  }, [schoolPage, user?.school_id, search]);
 
   useEffect(() => { if (!authLoading) loadSchool(); }, [loadSchool, authLoading]);
 
@@ -604,47 +606,107 @@ export default function HealthPage() {
               </div>
             ) : (
               <div className="bg-white rounded-3xl flex-1 overflow-hidden flex flex-col">
-                <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0">
-                  <p className="text-sm font-bold" style={{ color: "#121212" }}>Recent Incidents</p>
-                  <p className="text-xs text-gray-400">{schoolTotal} total</p>
+                {/* Header + Search */}
+                <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-bold" style={{ color: "#121212" }}>All Health Records</p>
+                    <p className="text-xs text-gray-400">{schoolTotal} record{schoolTotal !== 1 ? "s" : ""}</p>
+                  </div>
+                  <form onSubmit={(e) => { e.preventDefault(); setSchoolPage(1); setSearch(searchInput); }} className="flex gap-2">
+                    <div className="flex-1 flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-1.5">
+                      <Search size={12} className="text-gray-400 shrink-0" />
+                      <input
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
+                        placeholder="Search by student name, ID, or incident…"
+                        className="flex-1 text-xs outline-none bg-transparent"
+                      />
+                      {searchInput && (
+                        <button type="button" onClick={() => { setSearchInput(""); setSearch(""); setSchoolPage(1); }}>
+                          <X size={11} className="text-gray-400" />
+                        </button>
+                      )}
+                    </div>
+                    <button type="submit" className="px-3 py-1.5 rounded-xl text-white text-xs font-semibold" style={{ background: "#E11D48" }}>
+                      Search
+                    </button>
+                  </form>
                 </div>
+
                 <div className="flex-1 overflow-y-auto px-4 py-3">
                   {schoolLoading ? (
                     <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-gray-300" /></div>
                   ) : schoolRecords.length === 0 ? (
                     <div className="flex flex-col items-center py-10 text-gray-300">
                       <Heart size={32} className="mb-2" />
-                      <p className="text-sm">No health incidents logged</p>
+                      <p className="text-sm">{search ? "No records match your search" : "No health incidents logged"}</p>
                     </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {schoolRecords.map((r) => {
-                        const sev = SEV_STYLE[r.severity] ?? SEV_STYLE.LOW;
-                        return (
-                          <div key={r.id} className="rounded-2xl p-3" style={{ background: "#F9F9F9" }}>
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-1.5 mb-1">
-                                  <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: sev.bg, color: sev.text }}>{r.severity}</span>
-                                  {r.student && (
-                                    <span className="text-xs font-semibold" style={{ color: "#121212" }}>
-                                      {r.student.user.first_name} {r.student.user.last_name}
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="text-sm font-medium" style={{ color: "#444" }}>{r.title}</p>
-                                {r.treatment_given && <p className="text-xs text-green-600 mt-0.5">✓ {r.treatment_given}</p>}
-                                <p className="text-xs text-gray-400 mt-1">
-                                  <Clock size={10} className="inline mr-1" />
-                                  {new Date(r.recorded_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
-                                </p>
-                              </div>
+                  ) : (() => {
+                    // Group by date
+                    const grouped: Record<string, HealthRecord[]> = {};
+                    const today = new Date().toDateString();
+                    const yesterday = new Date(Date.now() - 86400000).toDateString();
+                    schoolRecords.forEach((r) => {
+                      const d = new Date(r.recorded_at);
+                      const key = d.toDateString() === today
+                        ? "Today"
+                        : d.toDateString() === yesterday
+                        ? "Yesterday"
+                        : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+                      (grouped[key] ??= []).push(r);
+                    });
+                    return (
+                      <div className="space-y-4">
+                        {Object.entries(grouped).map(([dateLabel, recs]) => (
+                          <div key={dateLabel}>
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">{dateLabel}</p>
+                            <div className="space-y-2">
+                              {recs.map((r) => {
+                                const sev = SEV_STYLE[r.severity] ?? SEV_STYLE.LOW;
+                                const studentName = r.student
+                                  ? `${r.student.user.first_name} ${r.student.user.last_name}`.trim()
+                                  : null;
+                                const visitCount = r.student_visit_count ?? 0;
+                                return (
+                                  <div key={r.id} className="rounded-2xl p-3" style={{ background: "#F9F9F9" }}>
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                                          <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: sev.bg, color: sev.text }}>{r.severity}</span>
+                                          <span className="text-xs text-gray-400">{TYPE_LABEL[r.type] ?? r.type}</span>
+                                          {studentName && (
+                                            <span className="text-xs font-semibold" style={{ color: "#121212" }}>{studentName}</span>
+                                          )}
+                                          {visitCount > 1 && (
+                                            <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-rose-50 text-rose-600">
+                                              <History size={9} /> Visit #{visitCount}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <p className="text-sm font-medium truncate" style={{ color: "#444" }}>{r.title}</p>
+                                        {r.description && <p className="text-xs text-gray-400 mt-0.5 truncate">{r.description}</p>}
+                                        {r.treatment_given && <p className="text-xs text-green-600 mt-0.5 truncate">✓ {r.treatment_given}</p>}
+                                        {r.follow_up_required && (
+                                          <span className="inline-flex items-center gap-1 text-xs text-amber-600 mt-0.5">
+                                            <AlertCircle size={10} /> Follow-up required
+                                          </span>
+                                        )}
+                                        <p className="text-xs text-gray-400 mt-1">
+                                          <Clock size={10} className="inline mr-1" />
+                                          {new Date(r.recorded_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                                          {r.student_code && ` · ${r.student_code}`}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
                 {schoolPages > 1 && (
                   <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between flex-shrink-0">

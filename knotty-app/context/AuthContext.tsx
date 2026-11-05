@@ -89,24 +89,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const fetchSchools = useCallback(async (targetSchoolId?: string) => {
-    const schoolId = targetSchoolId || user?.school_id;
-    if (!schoolId) return;
     if (!isSupabaseConfigured()) return;
     const client = getSafeBrowserClient();
     if (!client) return;
 
-    try {
-      const { data } = await client
-        .from("schools")
-        .select("id, name, code, email, phone, address")
-        .eq("id", schoolId)
-        .maybeSingle();
+    const schoolId = targetSchoolId || user?.school_id;
 
-      if (data) {
-        const school = buildSchoolItem(data);
-        setSchoolsList([school]);
-        setActiveSchool(school);
-        try { localStorage.setItem("ishuri_active_school", JSON.stringify(school)); } catch {}
+    try {
+      if (schoolId) {
+        // Single-school staff: load their specific school
+        const { data } = await client
+          .from("schools")
+          .select("id, name, code, email, phone, address")
+          .eq("id", schoolId)
+          .maybeSingle();
+
+        if (data) {
+          const school = buildSchoolItem(data);
+          setSchoolsList([school]);
+          setActiveSchool(school);
+          try { localStorage.setItem("ishuri_active_school", JSON.stringify(school)); } catch {}
+        }
+      } else {
+        // Platform admin with no school_id: load all schools in the org
+        const { data } = await client
+          .from("schools")
+          .select("id, name, code, email, phone, address")
+          .eq("organization_id", "00000000-0000-0000-0000-000000000001")
+          .order("name");
+
+        if (data && data.length > 0) {
+          const schools = data.map(buildSchoolItem);
+          setSchoolsList(schools);
+          // Try to restore previously active school
+          try {
+            const saved = localStorage.getItem("ishuri_active_school");
+            if (saved) {
+              const savedSchool = JSON.parse(saved) as SchoolItem;
+              const match = schools.find((s) => s.id === savedSchool.id);
+              if (match) { setActiveSchool(match); return; }
+            }
+          } catch {}
+          // Default to first school
+          setActiveSchool(schools[0]);
+          try { localStorage.setItem("ishuri_active_school", JSON.stringify(schools[0])); } catch {}
+        }
       }
     } catch (err) {
       console.error("Failed to fetch school data:", err);
@@ -293,6 +320,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (data.session?.refresh_token) localStorage.setItem("ishuri_refresh", data.session.refresh_token);
     setUser(loggedUser);
     fetchSchools(targetSchoolId);
+
+    // Log the login event (best-effort, non-blocking)
+    if (targetSchoolId) {
+      void Promise.resolve(client.rpc("log_staff_session" as never, {
+        p_school_id: targetSchoolId,
+        p_auth_user_id: data.user.id,
+        p_event_type: "login",
+      } as never)).catch(() => {});
+    }
+
     return role;
   }, [fetchSchools]);
 
@@ -356,13 +393,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const logout = useCallback(() => {
+    // Log the logout event (best-effort, non-blocking)
+    if (isSupabaseConfigured() && user?.school_id && user?.id) {
+      const client = getSafeBrowserClient();
+      void Promise.resolve(client?.rpc("log_staff_session" as never, {
+        p_school_id: user.school_id,
+        p_auth_user_id: user.id,
+        p_event_type: "logout",
+      } as never)).catch(() => {});
+    }
     if (isSupabaseConfigured()) getSafeBrowserClient()?.auth.signOut().catch(() => {});
     ["ishuri_token", "ishuri_refresh", "ishuri_user", "ishuri_active_school", "ishuri_demo",
      "ishuri_demo_user", "knotty_token", "knotty_refresh", "knotty_demo", "knotty_demo_user"]
       .forEach(k => { try { localStorage.removeItem(k); } catch {} });
     setUser(null);
     setActiveSchool(null);
-  }, []);
+  }, [user?.school_id, user?.id]);
 
   return (
     <AuthContext.Provider value={{

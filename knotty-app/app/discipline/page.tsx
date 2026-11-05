@@ -3,6 +3,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Wifi, WifiOff, Loader2, AlertTriangle, Shield, ShieldAlert,
   Plus, X, CheckCircle, Search, CreditCard, ChevronLeft, ChevronRight,
+  Clock, History,
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import VirtualCardTap from "@/components/VirtualCardTap";
@@ -651,19 +652,25 @@ export default function DisciplinePage() {
             ) : (
               /* No student scanned yet — show school-wide list */
               <div className="bg-white rounded-3xl flex-1 overflow-hidden flex flex-col">
-                <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0 flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>All Records</p>
-                    <p className="text-xs text-gray-400">{schoolTotal} total</p>
+                {/* Header + Search */}
+                <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>All Discipline Records</p>
+                    <p className="text-xs text-gray-400">{schoolTotal} record{schoolTotal !== 1 ? "s" : ""}</p>
                   </div>
-                  <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-2.5 py-1.5">
-                        <Search size={12} style={{ color: "var(--text-secondary)" }} />
+                  <div className="flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-1.5">
+                    <Search size={12} className="text-gray-400 shrink-0" />
                     <input
                       value={schoolSearch}
                       onChange={(e) => setSchoolSearch(e.target.value)}
-                      placeholder="Search…"
-                      className="text-xs bg-transparent outline-none w-28"
+                      placeholder="Search by student name, ID, or offense…"
+                      className="flex-1 text-xs bg-transparent outline-none"
                     />
+                    {schoolSearch && (
+                      <button onClick={() => setSchoolSearch("")}>
+                        <X size={11} className="text-gray-400" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -673,41 +680,73 @@ export default function DisciplinePage() {
                   ) : schoolRecords.length === 0 ? (
                     <div className="flex flex-col items-center py-10 text-gray-300">
                       <AlertTriangle size={32} className="mb-2" />
-                      <p className="text-sm">No discipline records</p>
+                      <p className="text-sm">{schoolSearch ? "No records match your search" : "No discipline records"}</p>
                     </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {schoolRecords.map((r) => {
-                        const sev = SEV_STYLE[r.severity] ?? SEV_STYLE.MINOR;
-                        return (
-                          <div key={r.id} className="rounded-2xl p-3" style={{ background: "var(--surface-muted)" }}>
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1.5 flex-wrap mb-1">
-                                  <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: sev.bg, color: sev.text }}>
-                                    {r.severity}
-                                  </span>
-                                  {r.student && (
-                                    <span className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
-                                      {r.student.user.first_name} {r.student.user.last_name}
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{r.title}</p>
-                                <p className="text-xs text-gray-400 mt-0.5">
-                                  {new Date(r.recorded_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
-                                  {r.recorder && ` · ${r.recorder.first_name} ${r.recorder.last_name}`}
-                                </p>
-                              </div>
-                              {(r.marks_deducted ?? 0) > 0 && (
-                                <span className="text-sm font-bold text-red-500 flex-shrink-0">-{r.marks_deducted}</span>
-                              )}
+                  ) : (() => {
+                    const today = new Date().toDateString();
+                    const yesterday = new Date(Date.now() - 86400000).toDateString();
+                    const grouped: Record<string, typeof schoolRecords> = {};
+                    schoolRecords.forEach((r) => {
+                      const d = new Date(r.recorded_at);
+                      const key = d.toDateString() === today
+                        ? "Today"
+                        : d.toDateString() === yesterday
+                        ? "Yesterday"
+                        : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+                      (grouped[key] ??= []).push(r);
+                    });
+                    return (
+                      <div className="space-y-4">
+                        {Object.entries(grouped).map(([dateLabel, recs]) => (
+                          <div key={dateLabel}>
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">{dateLabel}</p>
+                            <div className="space-y-2">
+                              {recs.map((r) => {
+                                const sev = SEV_STYLE[r.severity] ?? SEV_STYLE.MINOR;
+                                const studentName = r.student
+                                  ? `${r.student.user.first_name} ${r.student.user.last_name}`.trim()
+                                  : null;
+                                const visitCount = r.student_visit_count ?? 0;
+                                return (
+                                  <div key={r.id} className="rounded-2xl p-3" style={{ background: "var(--surface-muted)" }}>
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                                          <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: sev.bg, color: sev.text }}>
+                                            {r.severity}
+                                          </span>
+                                          <span className="text-xs text-gray-400">{TYPE_LABEL[r.type] ?? r.type}</span>
+                                          {studentName && (
+                                            <span className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>{studentName}</span>
+                                          )}
+                                          {visitCount > 1 && (
+                                            <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-orange-50 text-orange-600">
+                                              <History size={9} /> #{visitCount} offense
+                                            </span>
+                                          )}
+                                        </div>
+                                        <p className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>{r.title}</p>
+                                        {r.description && <p className="text-xs text-gray-400 mt-0.5 truncate">{r.description}</p>}
+                                        {r.action_taken && <p className="text-xs mt-0.5 truncate" style={{ color: "var(--text-secondary)" }}>→ {r.action_taken}</p>}
+                                        <p className="text-xs text-gray-400 mt-1">
+                                          <Clock size={10} className="inline mr-1" />
+                                          {new Date(r.recorded_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                                          {r.student_code && ` · ${r.student_code}`}
+                                        </p>
+                                      </div>
+                                      {(r.marks_deducted ?? 0) > 0 && (
+                                        <span className="text-sm font-bold text-red-500 flex-shrink-0">-{r.marks_deducted}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {schoolPages > 1 && (

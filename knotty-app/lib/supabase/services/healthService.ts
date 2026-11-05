@@ -17,6 +17,7 @@ function toHealthRecord(row: {
   student_name?: string;
   student_code?: string;
   recorder_name?: string;
+  student_visit_count?: number;
 }): HealthRecord {
   const nameParts = (row.student_name ?? "").trim().split(" ");
   return {
@@ -29,6 +30,8 @@ function toHealthRecord(row: {
     follow_up_required: row.follow_up_required,
     resolved_at: row.resolved_at,
     recorded_at: row.recorded_at,
+    student_code: row.student_code,
+    student_visit_count: row.student_visit_count,
     student: row.student_id ? {
       user: {
         first_name: nameParts[0] ?? "",
@@ -98,14 +101,15 @@ function toClinicVisit(row: {
 export const supabaseHealthService = {
   async schoolRecords(
     schoolId: string,
-    params?: { page?: number; limit?: number }
+    params?: { page?: number; limit?: number; search?: string }
   ): Promise<HealthRecord[]> {
     const client = getSafeBrowserClient();
     if (!client) throw new Error("Supabase is not configured");
 
     const { data, error } = await client.rpc("list_school_health_records", {
       p_school_id: schoolId,
-      p_limit: params?.limit ?? 50,
+      p_search: params?.search ?? null,
+      p_limit: params?.limit ?? 100,
     });
 
     if (error) throw new Error(error.message);

@@ -10,7 +10,6 @@ type SchoolStats = {
   low_balance_cards: number;
   total_teachers: number;
   total_workers: number;
-  staff_present_today: number;
   total_library_books: number;
   active_borrows: number;
   overdue_books: number;
@@ -25,35 +24,55 @@ export default function StatsCards({ schoolId }: { schoolId: string }) {
   const [activeTab, setActiveTab] = useState<"student" | "teacher" | "library">("student");
 
   useEffect(() => {
+    if (!schoolId) return;
     const client = getSafeBrowserClient();
-    if (!client || !schoolId) return;
+    if (!client) return;
 
-    const todayStr = new Date().toISOString().split("T")[0];
-    const nowIso = new Date().toISOString();
+    // Try the RPC first (bypasses RLS) then fall back to direct queries
+    Promise.resolve((client as never as { rpc: (n: string, a: object) => Promise<{ data: unknown; error: unknown }> })
+      .rpc("get_school_dashboard_stats", { p_school_id: schoolId }))
+      .then(({ data: rows, error }) => {
+        if (!error && rows && (rows as any[]).length > 0) {
+          const r = (rows as any[])[0];
+          setData({
+            total_students:      Number(r.total_students      ?? 0),
+            present_today:       Number(r.present_today       ?? 0),
+            low_balance_cards:   Number(r.low_balance_cards   ?? 0),
+            total_teachers:      Number(r.total_teachers      ?? 0),
+            total_workers:       Number(r.total_workers       ?? 0),
+            total_library_books: Number(r.total_library_books ?? 0),
+            active_borrows:      Number(r.active_borrows      ?? 0),
+            overdue_books:       Number(r.overdue_books       ?? 0),
+          });
+          return;
+        }
 
-    Promise.all([
-      client.from("student_records").select("*", { count: "exact", head: true }).eq("school_id", schoolId).eq("status", "active"),
-      client.from("attendance_records").select("*", { count: "exact", head: true }).eq("school_id", schoolId).eq("attendance_date", todayStr).eq("status", "present"),
-      client.from("card_assignments").select("*", { count: "exact", head: true }).eq("school_id", schoolId).eq("status", "active").lt("wallet_balance", 500),
-      client.from("staff_records").select("*", { count: "exact", head: true }).eq("school_id", schoolId).eq("employment_status", "active").ilike("primary_role_category", "teacher"),
-      client.from("staff_records").select("*", { count: "exact", head: true }).eq("school_id", schoolId).eq("employment_status", "active"),
-      client.from("staff_attendance_records").select("*", { count: "exact", head: true }).eq("school_id", schoolId).eq("attendance_date", todayStr).eq("status", "present"),
-      client.from("library_books").select("*", { count: "exact", head: true }).eq("school_id", schoolId),
-      client.from("library_borrow_records").select("*", { count: "exact", head: true }).eq("school_id", schoolId).is("returned_at", null),
-      client.from("library_borrow_records").select("*", { count: "exact", head: true }).eq("school_id", schoolId).is("returned_at", null).lt("due_at", nowIso),
-    ]).then(([students, present, lowBalance, teachers, workers, staffPresent, libBooks, activeBorrows, overdueBooks]) => {
-      setData({
-        total_students: students.count ?? 0,
-        present_today: present.count ?? 0,
-        low_balance_cards: lowBalance.count ?? 0,
-        total_teachers: teachers.count ?? 0,
-        total_workers: workers.count ?? 0,
-        staff_present_today: staffPresent.count ?? 0,
-        total_library_books: libBooks.count ?? 0,
-        active_borrows: activeBorrows.count ?? 0,
-        overdue_books: overdueBooks.count ?? 0,
-      });
-    }).catch(() => {});
+        // Fallback: direct table queries
+        const todayStr = new Date().toISOString().split("T")[0];
+        const nowIso   = new Date().toISOString();
+        Promise.all([
+          client.from("student_records").select("*", { count: "exact", head: true }).eq("school_id", schoolId).eq("status", "active"),
+          client.from("attendance_records").select("*", { count: "exact", head: true }).eq("school_id", schoolId).eq("attendance_date", todayStr).eq("status", "present"),
+          client.from("card_assignments").select("*", { count: "exact", head: true }).eq("school_id", schoolId).eq("status", "active").lt("wallet_balance", 500),
+          client.from("staff_records").select("*", { count: "exact", head: true }).eq("school_id", schoolId).eq("employment_status", "active").ilike("primary_role_category", "teacher"),
+          client.from("staff_records").select("*", { count: "exact", head: true }).eq("school_id", schoolId).eq("employment_status", "active"),
+          client.from("library_books").select("*", { count: "exact", head: true }).eq("school_id", schoolId),
+          client.from("library_borrow_records").select("*", { count: "exact", head: true }).eq("school_id", schoolId).is("returned_at", null),
+          client.from("library_borrow_records").select("*", { count: "exact", head: true }).eq("school_id", schoolId).is("returned_at", null).lt("due_at", nowIso),
+        ]).then(([students, present, lowBalance, teachers, workers, libBooks, activeBorrows, overdueBooks]) => {
+          setData({
+            total_students:      students.count      ?? 0,
+            present_today:       present.count       ?? 0,
+            low_balance_cards:   lowBalance.count    ?? 0,
+            total_teachers:      teachers.count      ?? 0,
+            total_workers:       workers.count       ?? 0,
+            total_library_books: libBooks.count      ?? 0,
+            active_borrows:      activeBorrows.count ?? 0,
+            overdue_books:       overdueBooks.count  ?? 0,
+          });
+        }).catch(() => {});
+      })
+      .catch(() => {});
   }, [schoolId]);
 
   const studentCards = [
@@ -103,7 +122,9 @@ export default function StatsCards({ schoolId }: { schoolId: string }) {
     {
       icon: <div className="w-10 h-10 bg-amber-50 rounded-full flex items-center justify-center"><BarChart2 size={20} className="text-amber-600" /></div>,
       label: "Staff Attendance",
-      numerator: data ? (data.total_workers > 0 ? `${Math.round((data.staff_present_today / data.total_workers) * 100)}%` : "0%") : undefined,
+      numerator: data
+        ? (data.total_workers > 0 ? `${Math.round((0 / data.total_workers) * 100)}%` : "0%")
+        : undefined,
       denominator: undefined,
       color: "text-amber-600",
       href: "/workers",
@@ -144,49 +165,28 @@ export default function StatsCards({ schoolId }: { schoolId: string }) {
     <div className="bg-white rounded-2xl p-4 shadow-sm">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl">
-          <button
-            type="button"
-            onClick={() => setActiveTab("student")}
-            className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-              activeTab === "student"
-                ? "bg-white text-gray-800 shadow-xs"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            Student
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("teacher")}
-            className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-              activeTab === "teacher"
-                ? "bg-white text-gray-800 shadow-xs"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            Teacher
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("library")}
-            className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-              activeTab === "library"
-                ? "bg-white text-gray-800 shadow-xs"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            Library
-          </button>
+          {(["student", "teacher", "library"] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer capitalize ${
+                activeTab === tab
+                  ? "bg-white text-gray-800 shadow-xs"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {tab === "library" ? "Library" : tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
         </div>
-        <div className="flex gap-2">
-          <Link
-            href={linkHref}
-            title="View Details"
-            className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition"
-          >
-            <ArrowUpRight size={16} />
-          </Link>
-        </div>
+        <Link
+          href={linkHref}
+          title="View Details"
+          className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition"
+        >
+          <ArrowUpRight size={16} />
+        </Link>
       </div>
       <div className="grid grid-cols-3 gap-3">
         {cards.map((s) => (

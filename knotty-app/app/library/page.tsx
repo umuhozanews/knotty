@@ -295,23 +295,35 @@ export default function LibraryPage() {
     setStudentBorrows([]);
     setStudentHistoryList([]);
     setShowLendForm(false);
+    const cleanQuery = query.trim();
     try {
-      let s: Awaited<ReturnType<typeof supabaseLibraryService.lookupStudent>>;
+      let s: Awaited<ReturnType<typeof supabaseLibraryService.lookupStudent>> | null = null;
       try {
-        s = await supabaseLibraryService.lookupStudent(user.school_id, query.trim());
+        s = await supabaseLibraryService.lookupStudent(user.school_id, cleanQuery);
       } catch (origErr) {
-        const holder = await supabaseCanteenService.lookupCardHolderByNfcUid(user.school_id, query.trim()).catch(() => null);
-        if (holder?.card_number || holder?.admission_number) {
-          s = await supabaseLibraryService.lookupStudent(user.school_id, holder.card_number || holder.admission_number);
+        const holder = await supabaseCanteenService.lookupCardHolderByNfcUid(user.school_id, cleanQuery).catch(() => null);
+        if (holder) {
+          s = {
+            id: holder.student_id,
+            name: holder.legal_name,
+            class: holder.class_name || "",
+            card_number: holder.card_number || null,
+            has_card: Boolean(holder.card_number),
+            student_code: holder.admission_number,
+            photo: holder.profile_photo_path ?? null,
+            is_active: holder.card_status === "active",
+            is_frozen: holder.is_frozen ?? false,
+          };
         } else {
           throw origErr;
         }
       }
+      if (!s) throw new Error("Student or book tag not found");
       setStudent({
         id: s.id,
         name: s.name,
         studentClass: s.class,
-        card_number: s.card_number ?? query.trim(),
+        card_number: s.card_number ?? cleanQuery,
         wallet_balance: 0,
         student_code: s.student_code,
         photo: s.photo,
@@ -326,7 +338,7 @@ export default function LibraryPage() {
     } catch (err) {
       // If student lookup failed, check if this is a book copy tag or barcode scanned to return
       try {
-        const ret = await supabaseLibraryService.returnBook({ schoolId: user.school_id, copyTag: query.trim() });
+        const ret = await supabaseLibraryService.returnBook({ schoolId: user.school_id, copyTag: cleanQuery });
         playChime();
         toast(
           ret.fineAmount > 0
@@ -355,23 +367,35 @@ export default function LibraryPage() {
       setBookSearch("");
       setBookResults([]);
     }
+    const cleanQuery = query.trim();
     try {
-      let s: Awaited<ReturnType<typeof supabaseLibraryService.lookupStudent>>;
+      let s: Awaited<ReturnType<typeof supabaseLibraryService.lookupStudent>> | null = null;
       try {
-        s = await supabaseLibraryService.lookupStudent(user.school_id, query.trim());
+        s = await supabaseLibraryService.lookupStudent(user.school_id, cleanQuery);
       } catch (origErr) {
-        const holder = await supabaseCanteenService.lookupCardHolderByNfcUid(user.school_id, query.trim()).catch(() => null);
-        if (holder?.card_number || holder?.admission_number) {
-          s = await supabaseLibraryService.lookupStudent(user.school_id, holder.card_number || holder.admission_number);
+        const holder = await supabaseCanteenService.lookupCardHolderByNfcUid(user.school_id, cleanQuery).catch(() => null);
+        if (holder) {
+          s = {
+            id: holder.student_id,
+            name: holder.legal_name,
+            class: holder.class_name || "",
+            card_number: holder.card_number || null,
+            has_card: Boolean(holder.card_number),
+            student_code: holder.admission_number,
+            photo: holder.profile_photo_path ?? null,
+            is_active: holder.card_status === "active",
+            is_frozen: holder.is_frozen ?? false,
+          };
         } else {
           throw origErr;
         }
       }
+      if (!s) throw new Error("Student not found — check card number or student code");
       setModalStudent({
         id: s.id,
         name: s.name,
         studentClass: s.class,
-        card_number: s.card_number ?? query.trim(),
+        card_number: s.card_number ?? cleanQuery,
         wallet_balance: 0,
         student_code: s.student_code,
         photo: s.photo,

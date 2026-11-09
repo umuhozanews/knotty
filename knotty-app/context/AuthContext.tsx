@@ -1,6 +1,8 @@
 "use client";
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
+import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import { isSupabaseConfigured, getSafeBrowserClient } from "@/lib/supabase/client";
+import type { Database } from "@/lib/supabase/database.types";
 
 type User = {
   id: string;
@@ -140,6 +142,92 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user?.school_id]);
 
+  const clearAuth = useCallback(() => {
+    try {
+      localStorage.removeItem("ishuri_user");
+      localStorage.removeItem("ishuri_token");
+      localStorage.removeItem("ishuri_refresh");
+      localStorage.removeItem("ishuri_active_school");
+    } catch {}
+    setUser(null);
+    setActiveSchool(null);
+    setLoading(false);
+  }, []);
+
+  const resolveUserFromSession = useCallback(
+    async (client: SupabaseClient<Database>, session: Session): Promise<User | null> => {
+      try {
+        localStorage.setItem("ishuri_token", session.access_token);
+        if (session.refresh_token) localStorage.setItem("ishuri_refresh", session.refresh_token);
+
+        const { data: personData } = await client
+          .from("persons")
+          .select("id, status")
+          .eq("auth_user_id", session.user.id)
+          .maybeSingle();
+
+        let role = "";
+        let targetSchoolId = "";
+
+        if (personData?.status === "active") {
+          const { data: memberData } = await client
+            .from("school_memberships")
+            .select("id, school_id, status")
+            .eq("person_id", personData.id)
+            .eq("status", "active")
+            .maybeSingle();
+
+          if (memberData) {
+            targetSchoolId = memberData.school_id;
+            const { data: roleData } = await client
+              .from("school_membership_roles")
+              .select("role_key, status")
+              .eq("membership_id", memberData.id)
+              .eq("status", "active")
+              .limit(1)
+              .maybeSingle();
+
+            if (roleData?.role_key) role = roleData.role_key;
+          }
+        }
+
+        if (!role || !targetSchoolId) {
+          clearAuth();
+          window.setTimeout(() => { void client.auth.signOut(); }, 0);
+          return null;
+        }
+
+        const userMeta = (session.user.user_metadata || {}) as Record<string, unknown>;
+        const fullName = (userMeta.full_name as string) || (userMeta.name as string) || "";
+        const nameParts = fullName.split(" ");
+        const firstName = (userMeta.first_name as string) || nameParts[0] || session.user.email?.split("@")[0] || "User";
+        const lastName = (userMeta.last_name as string) || nameParts.slice(1).join(" ") || "";
+        const profilePhoto = (userMeta.avatar_url as string) || (userMeta.picture as string) || null;
+
+        const loggedUser: User = {
+          id: session.user.id,
+          role,
+          school_id: targetSchoolId,
+          first_name: firstName,
+          last_name: lastName,
+          email: session.user.email || "",
+          profile_photo: profilePhoto,
+        };
+
+        localStorage.setItem("ishuri_user", JSON.stringify(loggedUser));
+        setUser(loggedUser);
+        fetchSchools(targetSchoolId);
+        setLoading(false);
+        return loggedUser;
+      } catch (err) {
+        console.error("Error resolving Supabase session membership:", err);
+        setLoading(false);
+        return null;
+      }
+    },
+    [clearAuth, fetchSchools]
+  );
+
   useEffect(() => {
     const saved = localStorage.getItem("ishuri_user");
     if (saved) {
@@ -155,10 +243,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (isSupabaseConfigured()) {
       const client = getSafeBrowserClient();
       if (client) {
+        // Subscribe to auth state changes
+        const { data: { subscription } } = client.auth.onAuthStateChange(async (event, session) => {
+          if ((event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION") && session) {
+            await resolveUserFromSession(client, session);
+          } else if (event === "SIGNED_OUT" || !session) {
+            clearAuth();
+          }
+        });
+        authSubscription = subscription;
+
+        // Also proactively check session state
         client.auth.getSession().then(async ({ data: { session } }) => {
-          if (session?.access_token) {
-            localStorage.setItem("ishuri_token", session.access_token);
-            if (session.refresh_token) localStorage.setItem("ishuri_refresh", session.refresh_token);
+          if (session) {
+            await resolveUserFromSession(client, session);
           } else {
             const storedToken = localStorage.getItem("ishuri_token");
             const storedRefresh = localStorage.getItem("ishuri_refresh");
@@ -169,95 +267,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   refresh_token: storedRefresh,
                 });
                 if (res?.session) {
-                  localStorage.setItem("ishuri_token", res.session.access_token);
-                  if (res.session.refresh_token) localStorage.setItem("ishuri_refresh", res.session.refresh_token);
+                  await resolveUserFromSession(client, res.session);
+                  return;
                 }
               } catch {}
             }
+            clearAuth();
           }
-        }).catch(() => {});
-
-        const { data: { subscription } } = client.auth.onAuthStateChange(async (event, session) => {
-          if ((event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session) {
-            localStorage.setItem("ishuri_token", session.access_token);
-            if (session.refresh_token) localStorage.setItem("ishuri_refresh", session.refresh_token);
-
-            try {
-              const { data: personData } = await client
-                .from("persons")
-                .select("id, status")
-                .eq("auth_user_id", session.user.id)
-                .maybeSingle();
-
-              let role = "";
-              let targetSchoolId = "";
-
-              if (personData?.status === "active") {
-                const { data: memberData } = await client
-                  .from("school_memberships")
-                  .select("id, school_id, status")
-                  .eq("person_id", personData.id)
-                  .eq("status", "active")
-                  .maybeSingle();
-
-                if (memberData) {
-                  targetSchoolId = memberData.school_id;
-                  const { data: roleData } = await client
-                    .from("school_membership_roles")
-                    .select("role_key, status")
-                    .eq("membership_id", memberData.id)
-                    .eq("status", "active")
-                    .limit(1)
-                    .maybeSingle();
-
-                  if (roleData?.role_key) role = roleData.role_key;
-                }
-              }
-
-              if (!role || !targetSchoolId) {
-                localStorage.removeItem("ishuri_user");
-                setUser(null);
-                setLoading(false);
-                window.setTimeout(() => { void client.auth.signOut(); }, 0);
-                return;
-              }
-
-              const userMeta = (session.user.user_metadata || {}) as Record<string, unknown>;
-              const fullName = (userMeta.full_name as string) || (userMeta.name as string) || "";
-              const nameParts = fullName.split(" ");
-              const firstName = (userMeta.first_name as string) || nameParts[0] || session.user.email?.split("@")[0] || "User";
-              const lastName = (userMeta.last_name as string) || nameParts.slice(1).join(" ") || "";
-              const profilePhoto = (userMeta.avatar_url as string) || (userMeta.picture as string) || null;
-
-              const loggedUser: User = {
-                id: session.user.id,
-                role,
-                school_id: targetSchoolId,
-                first_name: firstName,
-                last_name: lastName,
-                email: session.user.email || "",
-                profile_photo: profilePhoto,
-              };
-
-              localStorage.setItem("ishuri_user", JSON.stringify(loggedUser));
-              setUser(loggedUser);
-              fetchSchools(targetSchoolId);
-              setLoading(false);
-            } catch (err) {
-              console.error("Error resolving Supabase session membership:", err);
-            }
-          } else if (event === "SIGNED_OUT") {
-            setUser(null);
-          }
+        }).catch(() => {
+          clearAuth();
         });
-        authSubscription = subscription;
+      } else {
+        setLoading(false);
       }
+    } else {
+      setLoading(false);
     }
 
-    setLoading(false);
-
     return () => { authSubscription?.unsubscribe(); };
-  }, [fetchSchools]);
+  }, [fetchSchools, clearAuth, resolveUserFromSession]);
 
   const login = useCallback(async (email: string, password: string) => {
     const normEmail = email.trim().toLowerCase();

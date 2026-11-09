@@ -948,7 +948,7 @@ export default function StudentsPage() {
 
   // Load students for selected class (or all students when classId === ALL_KEY)
   const loadStudents = useCallback(async (classId: string | null) => {
-    if (!classId) return;
+    if (!classId || authLoading || !user?.school_id) return;
     setLoading(true);
     try {
       if (isSupabaseConfigured() && user?.school_id) {
@@ -957,17 +957,23 @@ export default function StudentsPage() {
         setStudentsByClass((prev) => ({ ...prev, [classId]: data }));
       }
     } catch (err) {
-      show(err instanceof Error ? err.message : "Failed to load students", "error");
+      const msg = err instanceof Error ? err.message : "Failed to load students";
+      if (msg.includes("permission denied for function")) {
+        show("Session expired. Please log in again.", "error");
+      } else {
+        show(msg, "error");
+      }
       setStudentsByClass((prev) => ({ ...prev, [classId]: [] }));
     } finally {
       setLoading(false);
     }
-  }, [search, user?.school_id]);
+  }, [search, user?.school_id, authLoading, show]);
 
   useEffect(() => {
+    if (authLoading || !user?.school_id) return;
     if (searchRef.current) clearTimeout(searchRef.current);
     searchRef.current = setTimeout(() => loadStudents(selectedClass), 300);
-  }, [selectedClass, search, loadStudents]);
+  }, [selectedClass, search, loadStudents, authLoading, user?.school_id]);
 
   const isAllView = selectedClass === ALL_KEY;
   const currentClassStudents = selectedClass ? (studentsByClass[selectedClass] ?? []) : [];

@@ -21,7 +21,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   // Return null on server and first client paint — both agree, no hydration mismatch.
   if (!mounted) return null;
 
-  if (loading && !user) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg)" }}>
         <Loader2 className="animate-spin" size={32} style={{ color: "#16A34A" }} />

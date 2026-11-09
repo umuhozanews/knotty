@@ -720,7 +720,7 @@ function IssueStaffCardModal({
 // ─── Main Workers Page Component ───────────────────────────────────────────────
 export default function WorkersPage() {
   const router = useRouter();
-  const { user, activeSchool } = useAuth();
+  const { user, activeSchool, loading: authLoading } = useAuth();
   const { show } = useToast();
 
   const [loading, setLoading] = useState(true);
@@ -755,7 +755,7 @@ export default function WorkersPage() {
   // Load Workers from Supabase
   const fetchWorkers = useCallback(async () => {
     const schoolId = activeSchool?.id || user?.school_id;
-    if (!schoolId) return;
+    if (authLoading || !schoolId || !user) return;
     setLoading(true);
     try {
       const rows = await supabaseStaffService.listStaffMembers(schoolId) as any[];
@@ -817,15 +817,22 @@ export default function WorkersPage() {
       });
     } catch (err: any) {
       console.error("Error loading workers:", err);
-      show("Could not load workers list", "error");
+      const msg = err?.message || "";
+      if (msg.includes("permission denied for function")) {
+        show("Session expired. Please log in again.", "error");
+      } else {
+        show("Could not load workers list", "error");
+      }
     } finally {
       setLoading(false);
     }
-  }, [selectedRole, selectedStatus, search, show, activeSchool?.id, user?.school_id]);
+  }, [selectedRole, selectedStatus, search, show, activeSchool?.id, user?.school_id, authLoading, user]);
 
   useEffect(() => {
-    fetchWorkers();
-  }, [fetchWorkers]);
+    if (!authLoading && user) {
+      fetchWorkers();
+    }
+  }, [fetchWorkers, authLoading, user]);
 
   const handleToggleStatus = async (worker: LocalWorkerItem) => {
     const schoolId = activeSchool?.id || user?.school_id;

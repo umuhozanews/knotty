@@ -15,16 +15,16 @@ function DashboardLoader() {
   );
 }
 
-const AdminDashboard      = dynamic(() => import("@/components/dashboards/AdminDashboard"),      { loading: DashboardLoader });
-const TeacherDashboard    = dynamic(() => import("@/components/dashboards/TeacherDashboard"),    { loading: DashboardLoader });
-const NurseDashboard      = dynamic(() => import("@/components/dashboards/NurseDashboard"),      { loading: DashboardLoader });
-const DisciplineDashboard = dynamic(() => import("@/components/dashboards/DisciplineDashboard"), { loading: DashboardLoader });
-const BursarDashboard     = dynamic(() => import("@/components/dashboards/BursarDashboard"),     { loading: DashboardLoader });
-const CanteenDashboard    = dynamic(() => import("@/components/dashboards/CanteenDashboard"),    { loading: DashboardLoader });
-const GatekeeperDashboard = dynamic(() => import("@/components/dashboards/GatekeeperDashboard"), { loading: DashboardLoader });
-const MaterialsDashboard  = dynamic(() => import("@/components/dashboards/MaterialsDashboard"),  { loading: DashboardLoader });
-const StudentDashboard    = dynamic(() => import("@/components/dashboards/StudentDashboard"),    { loading: DashboardLoader });
-const ParentDashboard     = dynamic(() => import("@/components/dashboards/ParentDashboard"),     { loading: DashboardLoader });
+const AdminDashboard      = dynamic(() => import("@/components/dashboards/AdminDashboard"),      { ssr: false, loading: DashboardLoader });
+const TeacherDashboard    = dynamic(() => import("@/components/dashboards/TeacherDashboard"),    { ssr: false, loading: DashboardLoader });
+const NurseDashboard      = dynamic(() => import("@/components/dashboards/NurseDashboard"),      { ssr: false, loading: DashboardLoader });
+const DisciplineDashboard = dynamic(() => import("@/components/dashboards/DisciplineDashboard"), { ssr: false, loading: DashboardLoader });
+const BursarDashboard     = dynamic(() => import("@/components/dashboards/BursarDashboard"),     { ssr: false, loading: DashboardLoader });
+const CanteenDashboard    = dynamic(() => import("@/components/dashboards/CanteenDashboard"),    { ssr: false, loading: DashboardLoader });
+const GatekeeperDashboard = dynamic(() => import("@/components/dashboards/GatekeeperDashboard"), { ssr: false, loading: DashboardLoader });
+const MaterialsDashboard  = dynamic(() => import("@/components/dashboards/MaterialsDashboard"),  { ssr: false, loading: DashboardLoader });
+const StudentDashboard    = dynamic(() => import("@/components/dashboards/StudentDashboard"),    { ssr: false, loading: DashboardLoader });
+const ParentDashboard     = dynamic(() => import("@/components/dashboards/ParentDashboard"),     { ssr: false, loading: DashboardLoader });
 
 export default function DashboardPage() {
   const { user } = useAuth();

@@ -85,10 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const [schoolsList, setSchoolsList] = useState<SchoolItem[]>([]);
 
-  const [loading, setLoading] = useState<boolean>(() => {
-    if (typeof window === "undefined") return true;
-    return !!localStorage.getItem("ishuri_token");
-  });
+  const [loading, setLoading] = useState<boolean>(true);
 
   const fetchSchools = useCallback(async (targetSchoolId?: string) => {
     if (!isSupabaseConfigured()) return;
@@ -229,15 +226,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    const saved = localStorage.getItem("ishuri_user");
-    if (saved) {
-      try {
-        const u = JSON.parse(saved) as User;
-        setUser(u);
-        fetchSchools(u.school_id);
-      } catch {}
-    }
-
     let authSubscription: { unsubscribe: () => void } | null = null;
 
     if (isSupabaseConfigured()) {

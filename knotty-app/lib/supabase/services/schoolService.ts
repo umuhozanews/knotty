@@ -145,7 +145,7 @@ export const supabaseSchoolService = {
    */
   async listAcademicYears(schoolId: string): Promise<AcademicYearRow[]> {
     const client = getSafeBrowserClient();
-    if (!client) throw new Error("Supabase is not configured");
+    if (!client) return [];
 
     const { data, error } = await client
       .from("academic_years")
@@ -153,7 +153,13 @@ export const supabaseSchoolService = {
       .eq("school_id", schoolId)
       .order("start_date", { ascending: false });
 
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (error.code === "42501" || error.message?.includes("permission denied")) {
+        console.warn("listAcademicYears: access denied or unauthenticated session; returning empty list.");
+        return [];
+      }
+      throw new Error(error.message);
+    }
     return data || [];
   },
 
@@ -215,7 +221,7 @@ export const supabaseSchoolService = {
    */
   async listAcademicTerms(schoolId: string, academicYearId?: string): Promise<AcademicTermRow[]> {
     const client = getSafeBrowserClient();
-    if (!client) throw new Error("Supabase is not configured");
+    if (!client) return [];
 
     let query = client
       .from("academic_terms")
@@ -228,7 +234,13 @@ export const supabaseSchoolService = {
     }
 
     const { data, error } = await query;
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (error.code === "42501" || error.message?.includes("permission denied")) {
+        console.warn("listAcademicTerms: access denied or unauthenticated session; returning empty list.");
+        return [];
+      }
+      throw new Error(error.message);
+    }
     return data || [];
   },
 

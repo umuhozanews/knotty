@@ -944,7 +944,7 @@ export default function StudentsPage() {
         setSelectedClass(ALL_KEY);
       });
     }
-  }, [user?.id, authLoading]);
+  }, [user?.id, user?.school_id, authLoading]);
 
   // Load students for selected class (or all students when classId === ALL_KEY)
   const loadStudents = useCallback(async (classId: string | null) => {

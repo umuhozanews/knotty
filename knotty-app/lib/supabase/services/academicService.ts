@@ -11,7 +11,7 @@ export const supabaseAcademicService = {
    */
   async listEducationLevels(schoolId: string): Promise<EducationLevelRow[]> {
     const client = getSafeBrowserClient();
-    if (!client) throw new Error("Supabase is not configured");
+    if (!client) return [];
 
     const { data, error } = await client
       .from("education_levels")
@@ -19,7 +19,13 @@ export const supabaseAcademicService = {
       .eq("school_id", schoolId)
       .order("display_order", { ascending: true });
 
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (error.code === "42501" || error.message?.includes("permission denied")) {
+        console.warn("listEducationLevels: access denied or unauthenticated session; returning empty list.");
+        return [];
+      }
+      throw new Error(error.message);
+    }
     return data || [];
   },
 
@@ -66,7 +72,7 @@ export const supabaseAcademicService = {
    */
   async listClassSections(schoolId: string, academicYearId?: string): Promise<ClassSectionRow[]> {
     const client = getSafeBrowserClient();
-    if (!client) throw new Error("Supabase is not configured");
+    if (!client) return [];
 
     let query = client
       .from("class_sections")
@@ -79,7 +85,13 @@ export const supabaseAcademicService = {
     }
 
     const { data, error } = await query;
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (error.code === "42501" || error.message?.includes("permission denied")) {
+        console.warn("listClassSections: access denied or unauthenticated session; returning empty list.");
+        return [];
+      }
+      throw new Error(error.message);
+    }
     return data || [];
   },
 
@@ -117,7 +129,7 @@ export const supabaseAcademicService = {
    */
   async listSubjects(schoolId: string): Promise<SubjectRow[]> {
     const client = getSafeBrowserClient();
-    if (!client) throw new Error("Supabase is not configured");
+    if (!client) return [];
 
     const { data, error } = await client
       .from("subjects")
@@ -125,7 +137,13 @@ export const supabaseAcademicService = {
       .eq("school_id", schoolId)
       .order("subject_code", { ascending: true });
 
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (error.code === "42501" || error.message?.includes("permission denied")) {
+        console.warn("listSubjects: access denied or unauthenticated session; returning empty list.");
+        return [];
+      }
+      throw new Error(error.message);
+    }
     return data || [];
   },
 

@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import type { Level, Class, Student } from "@/lib/api";
-import { supabaseStudentService, supabaseAcademicService, supabaseCardService } from "@/lib/supabase/services";
+import { supabaseStudentService, supabaseAcademicService, supabaseCardService, supabaseHealthService } from "@/lib/supabase/services";
 import type { ClassSectionRow } from "@/lib/supabase/services/academicService";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
@@ -45,14 +45,15 @@ interface StudentForm {
   first_name: string; last_name: string; email: string; phone: string;
   password: string; gender: string; level_id: string; class_id: string;
   date_of_birth: string; nationality: string;
-  guardian_name: string; guardian_phone: string; guardian_email: string;
-  medical_notes: string; initial_balance: string;
+  guardian_name: string; guardian_phone: string;
+  blood_type: string; allergies: string; chronic_conditions: string; medical_notes: string;
   profile_photo: string;
 }
 const BLANK: StudentForm = {
   first_name: "", last_name: "", email: "", phone: "", password: "Ishuri@2024",
   gender: "M", level_id: "", class_id: "", date_of_birth: "", nationality: "Rwandan",
-  guardian_name: "", guardian_phone: "", guardian_email: "", medical_notes: "", initial_balance: "",
+  guardian_name: "", guardian_phone: "",
+  blood_type: "", allergies: "", chronic_conditions: "", medical_notes: "",
   profile_photo: "",
 };
 
@@ -93,6 +94,7 @@ function StudentModal({
     }
     return { ...BLANK, level_id: defaultLevelId ?? "", class_id: defaultClassId ?? "" };
   });
+  const [postSaveWarning, setPostSaveWarning] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPass, setShowPass] = useState(false);
@@ -210,6 +212,48 @@ function StudentModal({
             classSectionId: form.class_id || undefined,
             password: effectivePassword,
           });
+
+          // ── Post-provisioning: photo, medical profile, medical notes ──────
+          const warnings: string[] = [];
+
+          if (form.profile_photo) {
+            try {
+              const mimeMatch = form.profile_photo.match(/^data:([^;]+);base64,/);
+              const contentType = mimeMatch?.[1] ?? "image/jpeg";
+              const res = await fetch("/api/students/upload-photo", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ student_id: studentId, school_id: schoolId, photo_base64: form.profile_photo, content_type: contentType }),
+              });
+              if (!res.ok) warnings.push("Photo could not be saved.");
+            } catch { warnings.push("Photo could not be saved."); }
+          }
+
+          const hasHealthData = form.blood_type || form.allergies.trim() || form.chronic_conditions.trim() || form.guardian_phone.trim();
+          if (hasHealthData) {
+            try {
+              await supabaseHealthService.upsertProfile(schoolId, studentId, {
+                blood_type: form.blood_type || undefined,
+                allergies: form.allergies.trim() ? form.allergies.split(",").map((s) => s.trim()).filter(Boolean) : [],
+                chronic_conditions: form.chronic_conditions.trim() ? form.chronic_conditions.split(",").map((s) => s.trim()).filter(Boolean) : [],
+                emergency_contact_phone: form.guardian_phone.trim() || "",
+              });
+            } catch { warnings.push("Medical profile could not be saved."); }
+          }
+
+          if (form.medical_notes.trim()) {
+            try {
+              await supabaseHealthService.create(schoolId, {
+                student_id: studentId,
+                type: "CHECKUP",
+                title: "Enrollment medical note",
+                description: form.medical_notes.trim(),
+                severity: "LOW",
+              });
+            } catch { warnings.push("Medical notes could not be saved."); }
+          }
+
+          if (warnings.length > 0) setPostSaveWarning(warnings.join(" "));
           setCreatedCredentials({
             id: studentId,
             name: `${form.first_name} ${form.last_name}`,
@@ -252,7 +296,10 @@ function StudentModal({
                   <span className="text-sm font-mono font-bold text-blue-600">{createdCredentials.password}</span>
                 </div>
               </div>
-              <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mb-5">Share these credentials with the student. They can change their password after first login.</p>
+              <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mb-2">Share these credentials with the student. They can change their password after first login.</p>
+              {postSaveWarning && (
+                <p className="text-xs text-orange-600 bg-orange-50 rounded-lg px-3 py-2 mb-3">{postSaveWarning}</p>
+              )}
             </>
           ) : (
             <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 text-left mb-5">
@@ -417,34 +464,14 @@ function StudentModal({
                   </Field>
                 </div>
                 {!isEdit && (
-                  <div className="grid grid-cols-2 gap-3">
-                    {user?.role !== "TEACHER" ? (
-                      <>
-                        <Field label="Initial Wallet Balance (RWF)">
-                          <input type="number" min="0" value={form.initial_balance} onChange={set("initial_balance")} className={inp} placeholder="0" />
-                        </Field>
-                        <Field label="Login Password">
-                          <div className="relative">
-                            <input type={showPass ? "text" : "password"} value={form.password} onChange={set("password")} className={`${inp} pr-10`} />
-                            <button type="button" onClick={() => setShowPass((p) => !p)} className="absolute right-3 top-2 text-gray-400">
-                              {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
-                            </button>
-                          </div>
-                        </Field>
-                      </>
-                    ) : (
-                      <div className="col-span-2">
-                        <Field label="Login Password">
-                          <div className="relative">
-                            <input type={showPass ? "text" : "password"} value={form.password} onChange={set("password")} className={`${inp} pr-10`} />
-                            <button type="button" onClick={() => setShowPass((p) => !p)} className="absolute right-3 top-2 text-gray-400">
-                              {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
-                            </button>
-                          </div>
-                        </Field>
-                      </div>
-                    )}
-                  </div>
+                  <Field label="Login Password">
+                    <div className="relative">
+                      <input type={showPass ? "text" : "password"} value={form.password} onChange={set("password")} className={`${inp} pr-10`} />
+                      <button type="button" onClick={() => setShowPass((p) => !p)} className="absolute right-3 top-2 text-gray-400">
+                        {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
+                  </Field>
                 )}
               </>
             )}
@@ -452,12 +479,12 @@ function StudentModal({
             {tab === "guardian" && (
               <>
                 <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 text-xs text-blue-600 dark:text-blue-400">
-                  A parent account is created automatically.
+                  Guardian contact info is saved as an emergency contact. To give the guardian their own login, send them an invite from the student's profile after enrollment.
                 </div>
                 <Field label="Guardian Full Name">
                   <input value={form.guardian_name} onChange={set("guardian_name")} className={inp} placeholder="e.g. Jean Baptiste Nkusi" />
                 </Field>
-                <Field label="Guardian Phone">
+                <Field label="Guardian Phone (saved as emergency contact)">
                   <input value={form.guardian_phone} onChange={set("guardian_phone")} className={inp} placeholder="+250 7XX XXX XXX" />
                 </Field>
               </>
@@ -466,15 +493,39 @@ function StudentModal({
             {tab === "medical" && (
               <>
                 <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3 text-xs text-amber-600 dark:text-amber-400">
-                  Medical notes will be saved as a health record. You can add more conditions from the student profile.
+                  Saved to the student's medical profile. You can update it anytime from their profile page.
                 </div>
-                <Field label="Medical Conditions / Notes">
+                <Field label="Blood Type">
+                  <select value={form.blood_type} onChange={set("blood_type")} className={inp}>
+                    <option value="">Unknown</option>
+                    {["A+","A-","B+","B-","AB+","AB-","O+","O-"].map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Allergies (comma-separated)">
+                  <input
+                    value={form.allergies}
+                    onChange={set("allergies")}
+                    className={inp}
+                    placeholder="e.g. Penicillin, Peanuts"
+                  />
+                </Field>
+                <Field label="Chronic Conditions (comma-separated)">
+                  <input
+                    value={form.chronic_conditions}
+                    onChange={set("chronic_conditions")}
+                    className={inp}
+                    placeholder="e.g. Asthma, Diabetes"
+                  />
+                </Field>
+                <Field label="Additional Notes">
                   <textarea
                     value={form.medical_notes}
                     onChange={set("medical_notes")}
-                    rows={5}
+                    rows={3}
                     className={`${inp} resize-none`}
-                    placeholder="e.g. Asthmatic, allergic to penicillin, requires inhaler..."
+                    placeholder="Any other relevant medical information..."
                   />
                 </Field>
               </>

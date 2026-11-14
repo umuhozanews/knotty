@@ -65,23 +65,8 @@ function buildSchoolItem(row: { id: string; name: string; code: string; email: s
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      const saved = localStorage.getItem("ishuri_user");
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return null;
-  });
-
-  const [activeSchool, setActiveSchool] = useState<SchoolItem | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      const saved = localStorage.getItem("ishuri_active_school");
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return null;
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [activeSchool, setActiveSchool] = useState<SchoolItem | null>(null);
 
   const [schoolsList, setSchoolsList] = useState<SchoolItem[]>([]);
 

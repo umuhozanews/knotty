@@ -282,7 +282,7 @@ export default function MoreScreen() {
         {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            Built by <Text style={styles.footerBrand}>GACONDO LABS</Text>
+            Built by <Text style={styles.footerBrand}>OrynTechltd</Text>
           </Text>
         </View>
       </ScrollView>

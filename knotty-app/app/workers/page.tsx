@@ -1,20 +1,20 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import React, { useEffect, useState, useCallback } from "react";
 import {
-  Users, UserCheck, Plus, Search, Mail, Phone,
-  Briefcase, GraduationCap, Utensils, Shield, Heart,
-  BookOpen, Building2, Edit, CheckCircle2, XCircle,
+  Users, UserCheck, Plus, Briefcase, GraduationCap, Utensils,
+  Shield, Heart, BookOpen, Building2, Edit, CheckCircle2, XCircle,
   AlertCircle, RefreshCw, X, Copy, Check, QrCode,
-  ShieldCheck, Trash2, CreditCard, Wifi, StopCircle
+  ShieldCheck, Trash2, CreditCard, Wifi, StopCircle, ChevronLeft
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import { supabaseStaffService, supabaseCardService } from "@/lib/supabase/services";
 import { getSafeBrowserClient } from "@/lib/supabase/client";
 import { useNFC } from "@/hooks/useNFC";
+import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/context/ToastContext";
 
 type LocalWorkerItem = {
-  id: string; // staff_record_id
+  id: string;
   person_id: string;
   first_name: string;
   last_name: string;
@@ -30,10 +30,7 @@ type LocalWorkerItem = {
   card_number?: string | null;
   has_card?: boolean;
 };
-import { useAuth } from "@/context/AuthContext";
-import { useToast } from "@/context/ToastContext";
 
-// ─── Role Labels ──────────────────────────────────────────────────────────────
 const ROLE_LABELS: Record<string, string> = {
   TEACHER: "Teacher",
   CANTEEN: "Cantinier",
@@ -46,7 +43,26 @@ const ROLE_LABELS: Record<string, string> = {
   ADMIN: "Administrator",
 };
 
-// ─── Clean Avatar Component ───────────────────────────────────────────────────
+const ROLE_CATEGORIES: {
+  key: string;
+  label: string;
+  sub: string;
+  Icon: React.ElementType;
+  color: string;
+  bg: string;
+}[] = [
+  { key: "TEACHER",    label: "Teachers",          sub: "Class teachers & instructors",       Icon: GraduationCap, color: "#2563EB", bg: "#EFF6FF" },
+  { key: "CANTEEN",    label: "Cantiniers",         sub: "Canteen & food service staff",       Icon: Utensils,      color: "#EA580C", bg: "#FFF7ED" },
+  { key: "BURSAR",     label: "Bursars",            sub: "Finance & accounts team",            Icon: Briefcase,     color: "#16A34A", bg: "#F0FDF4" },
+  { key: "NURSE",      label: "Nurses",             sub: "Health & infirmary staff",           Icon: Heart,         color: "#DB2777", bg: "#FDF2F8" },
+  { key: "DISCIPLINE", label: "Discipline Masters", sub: "Student welfare & discipline",       Icon: Shield,        color: "#7C3AED", bg: "#F5F3FF" },
+  { key: "LIBRARIAN",  label: "Librarians",         sub: "Library & media center",             Icon: BookOpen,      color: "#0891B2", bg: "#ECFEFF" },
+  { key: "GATEKEEPER", label: "Gatekeepers",        sub: "Security & gate control",            Icon: ShieldCheck,   color: "#B45309", bg: "#FFFBEB" },
+  { key: "MATERIALS",  label: "Materials Staff",    sub: "Inventory & supply management",      Icon: Building2,     color: "#6B7280", bg: "#F9FAFB" },
+  { key: "ADMIN",      label: "Administrators",     sub: "School administration & management", Icon: UserCheck,     color: "#0F766E", bg: "#F0FDFA" },
+];
+
+// ─── Avatar ───────────────────────────────────────────────────────────────────
 function WorkerAvatar({ name, size = 9 }: { name: string; size?: number }) {
   const initials = name
     .split(" ")
@@ -54,10 +70,9 @@ function WorkerAvatar({ name, size = 9 }: { name: string; size?: number }) {
     .join("")
     .slice(0, 2)
     .toUpperCase();
-
   return (
     <div
-      className={`w-${size} h-${size} rounded-full flex items-center justify-center text-xs font-bold shrink-0 bg-orange-100 text-orange-700`}
+      className={`w-${size} h-${size} rounded-full flex items-center justify-center text-xs font-bold shrink-0`}
       style={{ background: "#DCFCE7", color: "#16A34A" }}
     >
       {initials}
@@ -396,8 +411,8 @@ function WorkerModal({
                 const isSelected = form.role === rKey;
                 return (
                   <button
-                    key={rKey}
                     type="button"
+                    key={rKey}
                     onClick={() => handleRoleChange(rKey)}
                     className={`p-2 rounded-xl border text-center text-xs font-semibold transition ${
                       isSelected
@@ -610,7 +625,6 @@ function IssueStaffCardModal({
     setError("");
     let uid = nfcUid.trim().toUpperCase();
     if (!uid) {
-      // Auto-generate 8-character hex card UID
       uid = Array.from(crypto.getRandomValues(new Uint8Array(4)))
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("")
@@ -717,28 +731,15 @@ function IssueStaffCardModal({
   );
 }
 
-// ─── Main Workers Page Component ───────────────────────────────────────────────
+// ─── Main Workers Page ─────────────────────────────────────────────────────────
 export default function WorkersPage() {
-  const router = useRouter();
   const { user, activeSchool, loading: authLoading } = useAuth();
   const { show } = useToast();
 
   const [loading, setLoading] = useState(true);
-  const [workerList, setWorkerList] = useState<LocalWorkerItem[]>([]);
-  const [stats, setStats] = useState({
-    total_workers: 0,
-    total_teachers: 0,
-    total_cantiniers: 0,
-    total_support: 0,
-    active_workers: 0,
-  });
+  const [allWorkers, setAllWorkers] = useState<LocalWorkerItem[]>([]);
+  const [selectedRole, setSelectedRole] = useState<string | null>(null);
 
-  // Filter States
-  const [search, setSearch] = useState("");
-  const [selectedRole, setSelectedRole] = useState<string>("ALL");
-  const [selectedStatus, setSelectedStatus] = useState<string>("ALL");
-
-  // Modal States
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingWorker, setEditingWorker] = useState<LocalWorkerItem | null>(null);
   const [badgeWorker, setBadgeWorker] = useState<LocalWorkerItem | null>(null);
@@ -746,13 +747,11 @@ export default function WorkersPage() {
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Expose schoolId on window so WorkerModal can access it
   useEffect(() => {
     const id = activeSchool?.id || user?.school_id;
     if (id) (window as any).__knottySchoolId = id;
   }, [activeSchool?.id, user?.school_id]);
 
-  // Load Workers from Supabase
   const fetchWorkers = useCallback(async () => {
     const schoolId = activeSchool?.id || user?.school_id;
     if (authLoading || !schoolId || !user) return;
@@ -767,15 +766,16 @@ export default function WorkersPage() {
             cardMap[c.staff_record_id] = c.card_number || "Active";
           }
         });
-      } catch {
-        // ignore
-      }
+      } catch { /* ignore */ }
 
       const nameParts = (name: string) => {
         const idx = (name ?? "").trim().indexOf(" ");
-        return idx === -1 ? { first: (name ?? "").trim(), last: "" } : { first: (name ?? "").trim().slice(0, idx), last: (name ?? "").trim().slice(idx + 1) };
+        return idx === -1
+          ? { first: (name ?? "").trim(), last: "" }
+          : { first: (name ?? "").trim().slice(0, idx), last: (name ?? "").trim().slice(idx + 1) };
       };
-      let mapped: LocalWorkerItem[] = rows.map((r) => {
+
+      const mapped: LocalWorkerItem[] = rows.map((r) => {
         const { first, last } = nameParts(r.legal_name ?? "");
         return {
           id: r.staff_record_id,
@@ -795,28 +795,8 @@ export default function WorkersPage() {
           has_card: !!cardMap[r.staff_record_id],
         };
       });
-      if (selectedRole !== "ALL") mapped = mapped.filter((w) => w.role === selectedRole);
-      if (selectedStatus === "ACTIVE") mapped = mapped.filter((w) => w.is_active);
-      if (selectedStatus === "INACTIVE") mapped = mapped.filter((w) => !w.is_active);
-      if (search.trim()) {
-        const q = search.toLowerCase();
-        mapped = mapped.filter((w) =>
-          w.full_name.toLowerCase().includes(q) ||
-          w.email.toLowerCase().includes(q) ||
-          w.employee_code.toLowerCase().includes(q)
-        );
-      }
-      setWorkerList(mapped);
-      const all = rows;
-      setStats({
-        total_workers: all.length,
-        total_teachers: all.filter((r: any) => r.primary_role_category === "TEACHER").length,
-        total_cantiniers: all.filter((r: any) => r.primary_role_category === "CANTEEN").length,
-        total_support: all.filter((r: any) => !["TEACHER", "CANTEEN"].includes(r.primary_role_category)).length,
-        active_workers: all.filter((r: any) => r.employment_status === "active").length,
-      });
+      setAllWorkers(mapped);
     } catch (err: any) {
-      console.error("Error loading workers:", err);
       const msg = err?.message || "";
       if (msg.includes("permission denied for function")) {
         show("Session expired. Please log in again.", "error");
@@ -826,12 +806,10 @@ export default function WorkersPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedRole, selectedStatus, search, show, activeSchool?.id, user?.school_id, authLoading, user]);
+  }, [show, activeSchool?.id, user?.school_id, authLoading, user]);
 
   useEffect(() => {
-    if (!authLoading && user) {
-      fetchWorkers();
-    }
+    if (!authLoading && user) fetchWorkers();
   }, [fetchWorkers, authLoading, user]);
 
   const handleToggleStatus = async (worker: LocalWorkerItem) => {
@@ -846,17 +824,14 @@ export default function WorkersPage() {
         newStatus ? "active" : "suspended",
         newStatus ? "Reactivated by admin" : "Suspended by admin"
       );
-      setWorkerList((prev) =>
+      setAllWorkers((prev) =>
         prev.map((w) =>
           w.id === worker.id
             ? { ...w, is_active: newStatus, status: newStatus ? "active" : "suspended" }
             : w
         )
       );
-      show(
-        `Staff member ${worker.full_name} is now ${newStatus ? "Active" : "Inactive"}`,
-        "success"
-      );
+      show(`${worker.full_name} is now ${newStatus ? "Active" : "Inactive"}`, "success");
     } catch (err: any) {
       show(err?.message || "Failed to update status", "error");
     } finally {
@@ -871,7 +846,7 @@ export default function WorkersPage() {
     setDeletingId(worker.id);
     try {
       await supabaseStaffService.updateStaffStatus(schoolId, worker.id, "terminated", "Removed by admin");
-      setWorkerList((prev) => prev.filter((w) => w.id !== worker.id));
+      setAllWorkers((prev) => prev.filter((w) => w.id !== worker.id));
       show(`${worker.full_name} removed from staff`, "success");
     } catch (err: any) {
       show(err?.message || "Failed to remove worker", "error");
@@ -880,23 +855,19 @@ export default function WorkersPage() {
     }
   };
 
+  const roleWorkers = selectedRole ? allWorkers.filter((w) => w.role === selectedRole) : [];
+  const selectedCat = ROLE_CATEGORIES.find((c) => c.key === selectedRole) ?? null;
+
   return (
     <DashboardShell>
-      {/* Add / Edit Modal */}
+      {/* Modals */}
       {(showAddModal || editingWorker) && (
         <WorkerModal
           existing={editingWorker}
-          onClose={() => {
-            setShowAddModal(false);
-            setEditingWorker(null);
-          }}
-          onSuccess={() => {
-            fetchWorkers();
-          }}
+          onClose={() => { setShowAddModal(false); setEditingWorker(null); }}
+          onSuccess={() => fetchWorkers()}
         />
       )}
-
-      {/* Staff ID Badge Modal */}
       {badgeWorker && (
         <StaffBadgeModal
           worker={badgeWorker}
@@ -904,8 +875,6 @@ export default function WorkersPage() {
           onClose={() => setBadgeWorker(null)}
         />
       )}
-
-      {/* Staff NFC Card Issuance Modal */}
       {cardWorker && (activeSchool?.id || user?.school_id) && (
         <IssueStaffCardModal
           worker={cardWorker}
@@ -916,361 +885,206 @@ export default function WorkersPage() {
       )}
 
       <div className="space-y-3">
-        {/* Top Header Bar with Segmented Switcher */}
-        <div className="bg-white rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg font-bold text-gray-800">
-                Workers & Staff
-              </h1>
-              {activeSchool && (
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-lg border border-[#BBF7D0]" style={{ background: "#DCFCE7", color: "#16A34A" }}>
-                  {activeSchool.name} ({activeSchool.code})
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-gray-400 mt-0.5">
-              Manage teachers, cantiniers, bursars, and administrative staff
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* Student ↔ Worker Segmented Control */}
-            <div className="flex items-center bg-gray-100 p-1 rounded-xl shrink-0">
+        {selectedRole === null ? (
+          /* ─── HOME: Role Category Blocks ─── */
+          <>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-lg font-bold text-gray-800">Workers & Staff</h1>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {loading ? "Loading..." : `${allWorkers.length} staff members`}
+                </p>
+              </div>
               <button
-                onClick={() => router.push("/students")}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-500 hover:text-gray-800 transition"
+                onClick={() => setShowAddModal(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-white text-xs font-semibold transition"
+                style={{ background: "#16A34A" }}
               >
-                <Users size={13} />
-                <span>Students</span>
-              </button>
-              <button
-                disabled
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-gray-800 shadow-xs"
-                style={{ color: "#16A34A" }}
-              >
-                <UserCheck size={13} />
-                <span>Workers</span>
+                <Plus size={14} />
+                <span>Add Worker</span>
               </button>
             </div>
 
-            {/* Add Worker Action */}
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-white text-xs font-semibold transition shrink-0"
-              style={{ background: "#16A34A" }}
-            >
-              <Plus size={14} />
-              <span>Add Worker</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Top Metric Cards - matching StatsCards.tsx */}
-        <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            <div className="bg-gray-50 rounded-2xl p-4">
-              <div className="w-10 h-10 rounded-full flex items-center justify-center mb-1" style={{ background: "#DCFCE7" }}>
-                <Users size={20} style={{ color: "#16A34A" }} />
+            {loading ? (
+              <div className="py-20 flex justify-center">
+                <RefreshCw size={22} className="animate-spin text-gray-300" />
               </div>
-              <p className="text-xs text-gray-400 mt-2 mb-1">Total Staff</p>
-              <div className="text-base font-bold text-gray-800">{stats.total_workers}</div>
-            </div>
-
-            <div className="bg-gray-50 rounded-2xl p-4">
-              <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center mb-1">
-                <GraduationCap size={20} className="text-gray-700" />
-              </div>
-              <p className="text-xs text-gray-400 mt-2 mb-1">Teachers</p>
-              <div className="text-base font-bold text-gray-800">{stats.total_teachers}</div>
-            </div>
-
-            <div className="bg-gray-50 rounded-2xl p-4">
-              <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center mb-1">
-                <Utensils size={20} className="text-gray-700" />
-              </div>
-              <p className="text-xs text-gray-400 mt-2 mb-1">Cantiniers</p>
-              <div className="text-base font-bold text-gray-800">{stats.total_cantiniers}</div>
-            </div>
-
-            <div className="bg-gray-50 rounded-2xl p-4">
-              <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center mb-1">
-                <Briefcase size={20} className="text-gray-700" />
-              </div>
-              <p className="text-xs text-gray-400 mt-2 mb-1">Support Staff</p>
-              <div className="text-base font-bold text-gray-800">{stats.total_support}</div>
-            </div>
-
-            <div className="col-span-2 sm:col-span-1 bg-gray-50 rounded-2xl p-4">
-              <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center mb-1">
-                <CheckCircle2 size={20} className="text-gray-700" />
-              </div>
-              <p className="text-xs text-gray-400 mt-2 mb-1">Active on Duty</p>
-              <div className="text-base font-bold text-gray-800">{stats.active_workers}</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Filter and Search Bar */}
-        <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-            {/* Search Input */}
-            <div className="flex items-center gap-1.5 bg-gray-50 rounded-xl px-3 py-1.5 text-xs text-gray-500 w-full sm:w-80">
-              <Search size={13} className="text-gray-400 shrink-0" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search staff by name, email, ID..."
-                className="outline-none bg-transparent w-full text-xs text-gray-700"
-              />
-              {search && (
-                <button onClick={() => setSearch("")} className="text-gray-400 hover:text-gray-600">
-                  <X size={12} />
-                </button>
-              )}
-            </div>
-
-            {/* Status dropdown */}
-            <div className="flex items-center gap-2 self-end sm:self-auto">
-              <span className="text-xs text-gray-400">Status:</span>
-              <select
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
-                className="px-2.5 py-1 rounded-xl border border-gray-200 text-xs text-gray-700 bg-white outline-none"
-              >
-                <option value="ALL">All Status</option>
-                <option value="ACTIVE">Active</option>
-                <option value="INACTIVE">Inactive</option>
-              </select>
-              <button
-                onClick={fetchWorkers}
-                title="Refresh list"
-                className="p-1.5 rounded-xl border border-gray-200 hover:bg-gray-50 text-gray-500 transition"
-              >
-                <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
-              </button>
-            </div>
-          </div>
-
-          {/* Role Filter Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-            <button
-              onClick={() => setSelectedRole("ALL")}
-              className={`px-3 py-1 rounded-xl text-xs font-semibold transition shrink-0 ${
-                selectedRole === "ALL"
-                  ? "text-white"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              }`}
-              style={selectedRole === "ALL" ? { background: "#16A34A" } : undefined}
-            >
-              All Workers ({stats.total_workers})
-            </button>
-
-            {Object.entries(ROLE_LABELS).map(([rKey, label]) => {
-              const isSel = selectedRole === rKey;
-              return (
-                <button
-                  key={rKey}
-                  onClick={() => setSelectedRole(rKey)}
-                  className={`px-3 py-1 rounded-xl text-xs font-semibold transition shrink-0 ${
-                    isSel
-                      ? "text-white"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
-                  style={isSel ? { background: "#16A34A" } : undefined}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Workers Table */}
-        <div className="bg-white rounded-2xl p-4 shadow-sm overflow-hidden">
-          {loading ? (
-            <div className="py-16 flex flex-col items-center justify-center gap-2">
-              <RefreshCw size={24} className="animate-spin text-gray-400" />
-              <p className="text-xs text-gray-400">Loading worker directory...</p>
-            </div>
-          ) : workerList.length === 0 ? (
-            <div className="py-16 flex flex-col items-center justify-center gap-2 text-center px-4">
-              <Users size={36} className="text-gray-200 mb-1" />
-              <h3 className="text-sm font-semibold text-gray-800">
-                No workers found
-              </h3>
-              <p className="text-xs text-gray-400">
-                {search || selectedRole !== "ALL" || selectedStatus !== "ALL"
-                  ? "Try clearing filters to see more results."
-                  : "No workers registered in this school yet."}
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="text-xs text-gray-400 border-b border-gray-100 pb-3 font-medium">
-                    <th className="pb-3 pl-1 font-medium">Profile</th>
-                    <th className="pb-3 font-medium">Name</th>
-                    <th className="pb-3 font-medium">Role</th>
-                    <th className="pb-3 font-medium">Department</th>
-                    <th className="pb-3 font-medium">Staff ID</th>
-                    <th className="pb-3 font-medium">Contact</th>
-                    <th className="pb-3 font-medium">NFC Card</th>
-                    <th className="pb-3 font-medium">Status</th>
-                    <th className="pb-3 pr-1 text-right font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {workerList.map((worker) => {
-                    const roleLabel = ROLE_LABELS[worker.role] || worker.role;
-                    return (
-                      <tr
-                        key={worker.id}
-                        className="hover:bg-gray-50/70 transition"
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {ROLE_CATEGORIES.map((cat) => {
+                  const count = allWorkers.filter((w) => w.role === cat.key).length;
+                  const { Icon } = cat;
+                  return (
+                    <button
+                      key={cat.key}
+                      onClick={() => setSelectedRole(cat.key)}
+                      className="bg-white rounded-2xl p-4 shadow-sm hover:shadow-md transition text-left"
+                    >
+                      <div
+                        className="w-10 h-10 rounded-xl flex items-center justify-center mb-3"
+                        style={{ background: cat.bg }}
                       >
-                        {/* Profile avatar */}
-                        <td className="py-3 pl-1">
-                          <WorkerAvatar name={worker.full_name} size={8} />
-                        </td>
-
-                        {/* Name column */}
-                        <td className="py-3">
-                          <p className="font-semibold text-gray-800 text-xs">
-                            {worker.full_name}
-                          </p>
-                          <p className="text-gray-400 text-[11px]">{worker.email}</p>
-                        </td>
-
-                        {/* Role column */}
-                        <td className="py-3">
-                          <span className="inline-block px-2 py-0.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700">
-                            {roleLabel}
-                          </span>
-                        </td>
-
-                        {/* Department column */}
-                        <td className="py-3 text-xs text-gray-600">
-                          {worker.department || "General Staff"}
-                        </td>
-
-                        {/* Staff ID column */}
-                        <td className="py-3 font-mono text-xs text-gray-600">
-                          {worker.employee_code}
-                        </td>
-
-                        {/* Phone column */}
-                        <td className="py-3 text-xs text-gray-500">
-                          {worker.phone || "—"}
-                        </td>
-
-                        {/* NFC Card column */}
-                        <td className="py-3">
-                          {worker.has_card ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              <CreditCard size={11} />
-                              <span>Linked</span>
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => setCardWorker(worker)}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 hover:bg-emerald-50 hover:text-emerald-700 text-gray-600 transition"
-                            >
-                              <Plus size={10} />
-                              <span>Issue Card</span>
-                            </button>
-                          )}
-                        </td>
-
-                        {/* Status column */}
-                        <td className="py-3">
-                          {worker.is_active ? (
-                            <span className="text-xs text-gray-700 flex items-center gap-1.5 font-medium">
-                              <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                              Active
-                            </span>
-                          ) : (
-                            <span className="text-xs text-gray-400 flex items-center gap-1.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
-                              Inactive
-                            </span>
-                          )}
-                        </td>
-
-                        {/* Actions */}
-                        <td className="py-3 pr-1 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {/* View Badge */}
-                            <button
-                              onClick={() => setBadgeWorker(worker)}
-                              title="View Staff ID Badge"
-                              className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 transition"
-                            >
-                              <QrCode size={13} />
-                            </button>
-
-                            {/* Issue / Link NFC Card */}
-                            <button
-                              onClick={() => setCardWorker(worker)}
-                              title={worker.has_card ? "Manage Staff NFC Card" : "Issue Staff NFC Card"}
-                              className={`p-1.5 rounded-lg border transition ${
-                                worker.has_card
-                                  ? "border-emerald-200 text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
-                                  : "border-gray-200 text-gray-500 hover:bg-gray-100"
-                              }`}
-                            >
-                              <CreditCard size={13} />
-                            </button>
-
-                            {/* Edit */}
-                            <button
-                              onClick={() => setEditingWorker(worker)}
-                              title="Edit Worker Info"
-                              className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 transition"
-                            >
-                              <Edit size={13} />
-                            </button>
-
-                            {/* Toggle Active */}
-                            <button
-                              onClick={() => handleToggleStatus(worker)}
-                              disabled={deactivatingId === worker.id}
-                              title={worker.is_active ? "Deactivate" : "Activate"}
-                              className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 transition"
-                            >
-                              {deactivatingId === worker.id ? (
-                                <RefreshCw size={13} className="animate-spin" />
-                              ) : worker.is_active ? (
-                                <XCircle size={13} className="text-gray-400" />
-                              ) : (
-                                <CheckCircle2 size={13} className="text-green-600" />
-                              )}
-                            </button>
-
-                            {/* Delete */}
-                            <button
-                              onClick={() => handleDelete(worker)}
-                              disabled={deletingId === worker.id}
-                              title="Remove from staff"
-                              className="p-1.5 rounded-lg border border-red-100 text-red-400 hover:bg-red-50 transition"
-                            >
-                              {deletingId === worker.id ? (
-                                <RefreshCw size={13} className="animate-spin" />
-                              ) : (
-                                <Trash2 size={13} />
-                              )}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                        <Icon size={20} style={{ color: cat.color }} />
+                      </div>
+                      <p className="text-2xl font-bold text-gray-800">{count}</p>
+                      <p className="text-sm font-semibold text-gray-700 mt-0.5">{cat.label}</p>
+                      <p className="text-xs text-gray-400 mt-0.5 truncate">{cat.sub}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        ) : (
+          /* ─── ROLE VIEW: Worker Cards ─── */
+          <>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setSelectedRole(null)}
+                  className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 transition"
+                >
+                  <ChevronLeft size={16} className="text-gray-600" />
+                </button>
+                {selectedCat && (() => {
+                  const { Icon } = selectedCat;
+                  return (
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className="w-9 h-9 rounded-xl flex items-center justify-center"
+                        style={{ background: selectedCat.bg }}
+                      >
+                        <Icon size={18} style={{ color: selectedCat.color }} />
+                      </div>
+                      <div>
+                        <h1 className="text-base font-bold text-gray-800">{selectedCat.label}</h1>
+                        <p className="text-xs text-gray-400">{roleWorkers.length} staff members</p>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-white text-xs font-semibold transition"
+                style={{ background: "#16A34A" }}
+              >
+                <Plus size={14} />
+                <span>Add Worker</span>
+              </button>
             </div>
-          )}
-        </div>
+
+            {loading ? (
+              <div className="py-16 flex justify-center">
+                <RefreshCw size={22} className="animate-spin text-gray-300" />
+              </div>
+            ) : roleWorkers.length === 0 ? (
+              <div className="bg-white rounded-2xl p-12 shadow-sm text-center">
+                <Users size={36} className="text-gray-200 mx-auto mb-3" />
+                <p className="text-sm font-semibold text-gray-700">
+                  No {selectedCat?.label ?? "staff"} yet
+                </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  Add the first staff member to this category.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {roleWorkers.map((worker) => (
+                  <div
+                    key={worker.id}
+                    className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3"
+                  >
+                    <WorkerAvatar name={worker.full_name} size={11} />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-gray-800 text-sm truncate">{worker.full_name}</p>
+                      <p className="text-xs text-gray-500 truncate">{worker.job_title || ROLE_LABELS[worker.role]}</p>
+                      <p className="text-xs text-gray-400 truncate">{worker.email}</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      {/* Status + Card badges */}
+                      <div className="flex items-center gap-1.5">
+                        {worker.is_active ? (
+                          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-50 text-green-700 border border-green-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                            Active
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+                            Inactive
+                          </span>
+                        )}
+                        {worker.has_card ? (
+                          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CreditCard size={10} />
+                            Card
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-gray-400">No card</span>
+                        )}
+                      </div>
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setBadgeWorker(worker)}
+                          title="View Staff ID Badge"
+                          className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 transition"
+                        >
+                          <QrCode size={13} />
+                        </button>
+                        <button
+                          onClick={() => setCardWorker(worker)}
+                          title={worker.has_card ? "Manage Card" : "Issue NFC Card"}
+                          className={`p-1.5 rounded-lg border transition ${
+                            worker.has_card
+                              ? "border-emerald-200 text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
+                              : "border-gray-200 text-gray-500 hover:bg-gray-100"
+                          }`}
+                        >
+                          <CreditCard size={13} />
+                        </button>
+                        <button
+                          onClick={() => setEditingWorker(worker)}
+                          title="Edit Worker"
+                          className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 transition"
+                        >
+                          <Edit size={13} />
+                        </button>
+                        <button
+                          onClick={() => handleToggleStatus(worker)}
+                          disabled={deactivatingId === worker.id}
+                          title={worker.is_active ? "Deactivate" : "Activate"}
+                          className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 transition"
+                        >
+                          {deactivatingId === worker.id ? (
+                            <RefreshCw size={13} className="animate-spin" />
+                          ) : worker.is_active ? (
+                            <XCircle size={13} className="text-gray-400" />
+                          ) : (
+                            <CheckCircle2 size={13} className="text-green-600" />
+                          )}
+                        </button>
+                        <button
+                          onClick={() => handleDelete(worker)}
+                          disabled={deletingId === worker.id}
+                          title="Remove from staff"
+                          className="p-1.5 rounded-lg border border-red-100 text-red-400 hover:bg-red-50 transition"
+                        >
+                          {deletingId === worker.id ? (
+                            <RefreshCw size={13} className="animate-spin" />
+                          ) : (
+                            <Trash2 size={13} />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </div>
     </DashboardShell>
   );

@@ -3,14 +3,16 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { isManagementRole } from "@/lib/roles";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 
-export default function DashboardShell({ children }: { children: React.ReactNode }) {
+export default function DashboardShell({ children, hideHeader }: { children: React.ReactNode; hideHeader?: boolean }) {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const hideSidebar = isManagementRole(user?.role);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -33,16 +35,16 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
   return (
     <div className="flex h-[100dvh] p-2 md:p-3 gap-2 md:gap-3 overflow-hidden relative" style={{ background: "var(--bg)" }}>
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      {sidebarOpen && (
+      {!hideSidebar && <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />}
+      {!hideSidebar && sidebarOpen && (
         <div
           className="fixed inset-0 bg-black/40 z-40 md:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <Header onMenuClick={() => setSidebarOpen(true)} />
-        <main className="flex-1 overflow-auto mt-2 md:mt-3">{children}</main>
+        {!hideHeader && <Header onMenuClick={() => setSidebarOpen(true)} hideSidebarToggle={hideSidebar} />}
+        <main className={`flex-1 overflow-auto${hideHeader ? "" : " mt-2 md:mt-3"}`}>{children}</main>
         <footer className="text-center py-1.5 text-[10px] text-gray-400">
           Built by <span className="font-bold" style={{ color: "#16A34A" }}>GACONDO LABS</span>
         </footer>

@@ -1,114 +1,215 @@
 "use client";
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
-  Wifi, WifiOff, Loader2, CreditCard, CheckCircle, Clock, XCircle,
-  Plus, X, Receipt, TrendingUp, Wallet, AlertCircle,
-  ChevronLeft, ChevronRight, Trash2,
+  GraduationCap, Bus, Wallet, MoreHorizontal,
+  ChevronRight, ChevronLeft, Loader2, Users,
+  CheckCircle, AlertCircle, Clock, X, Receipt,
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
-import VirtualCardTap from "@/components/VirtualCardTap";
-import { supabaseCanteenService, supabaseFeesService, FeeStructureRow, FeeInvoiceRow } from "@/lib/supabase/services";
-import { getSafeBrowserClient } from "@/lib/supabase/client";
-import { useNFC } from "@/hooks/useNFC";
-import { useToast } from "@/context/ToastContext";
+import { supabaseFeesService, type FeeType, type StudentFeeStatus } from "@/lib/supabase/services";
 import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/context/ToastContext";
+import { getSafeBrowserClient } from "@/lib/supabase/client";
 
-type FeeStructure = FeeStructureRow;
-type Invoice = FeeInvoiceRow & {
-  status: string;
-  lines?: Array<{ description?: string | null }>;
-  student?: {
-    user?: { first_name?: string; last_name?: string };
-    class?: { name?: string } | null;
-  };
-};
-type ScannedStudent = { id: string; name: string; class: string; student_code: string; photo: string | null };
-type RefundRequest = {
-  id: string; student_id: string; amount: number; reason: string; created_at: string; status: string;
-  wallet_transaction?: { amount?: number; student?: { user?: { first_name?: string; last_name?: string } } };
+type ClassWithLevel = {
+  id: string;
+  name: string;
+  stream_name: string | null;
+  level_name: string;
+  student_count: number;
 };
 
-const STATUS_STYLE: Record<string, { bg: string; text: string; icon: React.ReactNode }> = {
-  PAID:    { bg: "#DCFCE7", text: "#166534", icon: <CheckCircle size={12} /> },
-  PARTIAL: { bg: "#FEF9C3", text: "#854D0E", icon: <Clock size={12} /> },
-  PENDING: { bg: "#FEE2E2", text: "#991B1B", icon: <XCircle size={12} /> },
-  OVERDUE: { bg: "#FEE2E2", text: "#991B1B", icon: <AlertCircle size={12} /> },
-};
+/* ── Constants ─────────────────────────────────────────────────── */
 
-/* ── Pay Invoice Modal ─────────────────────────────────────────── */
-function PayModal({ invoice, onClose, onSuccess }: {
-  invoice: Invoice; onClose: () => void; onSuccess: () => void;
+const FEE_CATEGORIES: { type: FeeType; label: string; sub: string; icon: React.ElementType; color: string; bg: string }[] = [
+  { type: "TUITION",      label: "Tuition Fees",   sub: "School & academic fees",  icon: GraduationCap, color: "#2563EB", bg: "#EFF6FF" },
+  { type: "TRANSPORT",    label: "Transport Fees",  sub: "Bus & travel fees",        icon: Bus,           color: "#16A34A", bg: "#F0FDF4" },
+  { type: "POCKET_MONEY", label: "Pocket Money",    sub: "Student daily allowance",  icon: Wallet,        color: "#7C3AED", bg: "#F5F3FF" },
+  { type: "OTHER",        label: "Other Fees",      sub: "Uniforms, trips & more",   icon: MoreHorizontal,color: "#EA580C", bg: "#FFF7ED" },
+];
+
+const TERMS = ["Term 1", "Term 2", "Term 3"];
+const CURRENT_YEAR = new Date().getFullYear().toString();
+
+function termLabel(term: string, year: string) { return `${term} ${year}`; }
+
+/* ── Payment Modal ─────────────────────────────────────────────── */
+function PaymentModal({
+  student, feeType, termLabel: tLabel, onClose, onSuccess,
+}: {
+  student: StudentFeeStatus;
+  feeType: FeeType;
+  termLabel: string;
+  onClose: () => void;
+  onSuccess: () => void;
 }) {
-  const total = invoice.total_amount ?? (invoice as any).amount ?? 0;
-  const paid = invoice.amount_paid ?? (invoice as any).paid_amount ?? 0;
-  const remaining = Math.max(0, total - paid);
-  const [form, setForm] = useState({ amount: String(remaining), channel: "CASH", phone: "" });
-  const [loading, setLoading] = useState(false);
-  const { toast } = useToast();
-
   const { user } = useAuth();
-  async function submit(e: React.FormEvent) {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+  const [channel, setChannel] = useState<"MTN" | "AIRTEL" | "CASH" | "BANK">("MTN");
+  const [amount, setAmount] = useState(String(student.balance > 0 ? student.balance : 0));
+  const [expectedAmount, setExpectedAmount] = useState(String(student.total_amount > 0 ? student.total_amount : ""));
+  const [phone, setPhone] = useState("");
+  const [reference, setReference] = useState("");
+  const noInvoice = !student.invoice_id;
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!user?.school_id) { toast("No school selected", "error"); return; }
+    if (!user?.school_id) return;
+    const amt = parseFloat(amount);
+    const expected = parseFloat(expectedAmount);
+    if (isNaN(amt) || amt <= 0) { toast("Enter a valid amount", "error"); return; }
+    if (noInvoice && (isNaN(expected) || expected <= 0)) { toast("Enter expected fee amount", "error"); return; }
     setLoading(true);
     try {
-      await supabaseFeesService.payInvoice(user.school_id, invoice.id, {
-        amount: parseFloat(form.amount),
-        channel: form.channel,
-        phone: form.channel === "MOMO" ? form.phone : undefined,
+      // Get or create invoice
+      const invoiceId = student.invoice_id ?? await supabaseFeesService.upsertInvoice(user.school_id, {
+        studentId: student.student_id,
+        feeType,
+        termLabel: tLabel,
+        totalAmount: expected,
       });
-      toast("Payment recorded successfully", "success");
+
+      // Map channel to DB enum (CASH/MOMO/BANK)
+      const dbChannel = channel === "MTN" || channel === "AIRTEL" ? "MOMO" : channel === "BANK" ? "BANK" : "CASH";
+      const notesParts = [];
+      if (channel === "MTN" || channel === "AIRTEL") notesParts.push(`Provider: ${channel}`);
+      if (reference) notesParts.push(`Ref: ${reference}`);
+
+      await supabaseFeesService.payInvoice(user.school_id, invoiceId, {
+        amount: amt,
+        channel: dbChannel,
+        phone: phone || undefined,
+      });
+
+      // Store reference in notes if any — optional update
+      if (notesParts.length > 0) {
+        const client = getSafeBrowserClient();
+        if (client) {
+          await client.from("fee_payments")
+            .update({ notes: notesParts.join(" | ") })
+            .eq("invoice_id", invoiceId)
+            .order("created_at", { ascending: false })
+            .limit(1);
+        }
+      }
+
+      toast("Payment recorded", "success");
       onSuccess();
       onClose();
-    } catch (err) { toast(err instanceof Error ? err.message : "Error", "error"); }
-    finally { setLoading(false); }
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to record payment", "error");
+    } finally {
+      setLoading(false);
+    }
   }
+
+  const channels: { id: "MTN" | "AIRTEL" | "CASH" | "BANK"; label: string; color: string }[] = [
+    { id: "MTN",    label: "MTN MoMo",  color: "#FBBF24" },
+    { id: "AIRTEL", label: "Airtel",    color: "#EF4444" },
+    { id: "CASH",   label: "Cash",      color: "#16A34A" },
+    { id: "BANK",   label: "Bank",      color: "#2563EB" },
+  ];
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-xl">
+      <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div>
-            <p className="font-bold text-sm" style={{ color: "#121212" }}>Record Payment</p>
-            <p className="text-xs text-gray-400">Outstanding: {remaining.toLocaleString()} RWF</p>
+            <p className="font-bold text-sm text-gray-900">{student.legal_name}</p>
+            <p className="text-xs text-gray-400">{student.admission_number} · {tLabel}</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center"><X size={14} /></button>
+          <button onClick={onClose} className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center">
+            <X size={14} />
+          </button>
         </div>
-        <form onSubmit={submit} className="p-5 space-y-3">
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          {/* Fee summary */}
+          <div className="grid grid-cols-3 gap-2 text-center">
+            {[
+              { label: "Expected", value: noInvoice ? "—" : student.total_amount.toLocaleString(), color: "text-gray-700" },
+              { label: "Paid",     value: student.amount_paid.toLocaleString(),                     color: "text-green-700" },
+              { label: "Balance",  value: student.balance.toLocaleString(),                          color: student.balance > 0 ? "text-red-600" : "text-green-700" },
+            ].map((s) => (
+              <div key={s.label} className="bg-gray-50 rounded-2xl py-2 px-1">
+                <p className="text-[10px] text-gray-400 uppercase tracking-wide">{s.label}</p>
+                <p className={`text-sm font-bold ${s.color}`}>{s.value}</p>
+                <p className="text-[9px] text-gray-300">RWF</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Expected amount — only if creating new invoice */}
+          {noInvoice && (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 mb-1.5">EXPECTED FEE AMOUNT (RWF)</p>
+              <input
+                type="number" required min={1} value={expectedAmount}
+                onChange={(e) => setExpectedAmount(e.target.value)}
+                placeholder="e.g. 300000"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-400"
+              />
+            </div>
+          )}
+
+          {/* Payment channel */}
           <div>
-            <p className="text-xs font-semibold mb-1.5" style={{ color: "#666" }}>PAYMENT CHANNEL</p>
-            <div className="grid grid-cols-3 gap-1.5">
-              {[["CASH", "Cash"], ["MOMO", "MTN MoMo"], ["BANK", "Bank Transfer"]].map(([val, label]) => (
-                <button key={val} type="button" onClick={() => setForm((f) => ({ ...f, channel: val }))}
-                  className="py-1.5 rounded-xl text-xs font-medium border transition"
-                  style={form.channel === val
-                    ? { background: "#121212", color: "#fff", borderColor: "#121212" }
+            <p className="text-xs font-semibold text-gray-500 mb-1.5">PAYMENT METHOD</p>
+            <div className="grid grid-cols-4 gap-1.5">
+              {channels.map((c) => (
+                <button key={c.id} type="button"
+                  onClick={() => setChannel(c.id)}
+                  className="py-2 rounded-xl text-xs font-semibold border transition"
+                  style={channel === c.id
+                    ? { background: c.color, color: "#fff", borderColor: c.color }
                     : { background: "#fff", color: "#666", borderColor: "#e5e5e5" }}>
-                  {label}
+                  {c.label}
                 </button>
               ))}
             </div>
           </div>
+
+          {/* Amount */}
           <div>
-            <p className="text-xs font-semibold mb-1.5" style={{ color: "#666" }}>AMOUNT (RWF)</p>
-            <input type="number" required min={1} max={remaining} value={form.amount}
-              onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-400" />
+            <p className="text-xs font-semibold text-gray-500 mb-1.5">AMOUNT TO PAY (RWF)</p>
+            <input
+              type="number" required min={1}
+              value={amount} onChange={(e) => setAmount(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-400"
+            />
           </div>
-          {form.channel === "MOMO" && (
+
+          {/* Phone — for mobile money */}
+          {(channel === "MTN" || channel === "AIRTEL") && (
             <div>
-              <p className="text-xs font-semibold mb-1.5" style={{ color: "#666" }}>MOMO PHONE</p>
-              <input required placeholder="250780000000" value={form.phone}
-                onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-400" />
+              <p className="text-xs font-semibold text-gray-500 mb-1.5">PHONE NUMBER</p>
+              <input
+                type="tel" placeholder="e.g. 0780000000"
+                value={phone} onChange={(e) => setPhone(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-400"
+              />
             </div>
           )}
+
+          {/* Reference */}
+          <div>
+            <p className="text-xs font-semibold text-gray-500 mb-1.5">REFERENCE NUMBER <span className="font-normal">(optional)</span></p>
+            <input
+              placeholder="Transaction ref…"
+              value={reference} onChange={(e) => setReference(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-400"
+            />
+          </div>
+
           <div className="flex gap-2 pt-1">
-            <button type="button" onClick={onClose} className="flex-1 py-3 rounded-2xl text-sm font-medium" style={{ background: "#F5F5F5", color: "#666" }}>Cancel</button>
+            <button type="button" onClick={onClose}
+              className="flex-1 py-3 rounded-2xl text-sm font-medium bg-gray-100 text-gray-600">
+              Cancel
+            </button>
             <button type="submit" disabled={loading}
               className="flex-1 py-3 rounded-2xl text-sm font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2"
-              style={{ background: "#1D4ED8" }}>
-              {loading ? <Loader2 size={14} className="animate-spin" /> : <><Receipt size={14} /> Record</>}
+              style={{ background: "#16A34A" }}>
+              {loading ? <Loader2 size={14} className="animate-spin" /> : <><Receipt size={14} /> Record Payment</>}
             </button>
           </div>
         </form>
@@ -117,503 +218,329 @@ function PayModal({ invoice, onClose, onSuccess }: {
   );
 }
 
+/* ── Student Row ───────────────────────────────────────────────── */
+function StudentFeeRow({ s, onPay }: { s: StudentFeeStatus; onPay: (s: StudentFeeStatus) => void }) {
+  const paid = s.status === "paid";
+  const noInv = s.status === "no_invoice";
+  const partial = s.status === "partial";
+
+  let badge = { label: "Unpaid", bg: "#FEE2E2", color: "#991B1B" };
+  if (paid)    badge = { label: "Paid",    bg: "#DCFCE7", color: "#166534" };
+  if (partial) badge = { label: "Partial", bg: "#FEF9C3", color: "#854D0E" };
+  if (noInv)   badge = { label: "Not set", bg: "#F3F4F6", color: "#6B7280" };
+
+  return (
+    <div className="flex items-center gap-3 p-3 rounded-2xl bg-gray-50 hover:bg-gray-100 transition">
+      <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+        style={{ background: "linear-gradient(135deg,#16A34A,#2563EB)" }}>
+        {s.legal_name.split(" ").map((w) => w[0]).slice(0, 2).join("")}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-gray-800 truncate">{s.legal_name}</p>
+        <p className="text-xs text-gray-400">{s.admission_number}</p>
+      </div>
+      <div className="text-right flex-shrink-0 mr-2">
+        {!noInv && (
+          <>
+            <p className="text-xs font-bold text-gray-700">{s.amount_paid.toLocaleString()} / {s.total_amount.toLocaleString()}</p>
+            <p className="text-[10px] text-gray-400">RWF</p>
+          </>
+        )}
+      </div>
+      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0"
+        style={{ background: badge.bg, color: badge.color }}>
+        {badge.label}
+      </span>
+      <button
+        onClick={() => onPay(s)}
+        className="ml-1 w-7 h-7 rounded-xl flex items-center justify-center transition flex-shrink-0"
+        style={{ background: paid ? "#F0FDF4" : "#EFF6FF" }}
+        title="Record payment">
+        <Receipt size={13} style={{ color: paid ? "#16A34A" : "#2563EB" }} />
+      </button>
+    </div>
+  );
+}
+
 /* ── Main Page ─────────────────────────────────────────────────── */
 export default function FeesPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, activeSchool } = useAuth();
   const { toast } = useToast();
-  const { startListen, stopListen, listening, isSupported } = useNFC();
-  const isStaff = !["STUDENT", "PARENT"].includes(user?.role ?? "");
-  const isBursarOrAdmin = ["ADMIN", "BURSAR", "SUPER_ADMIN", "SCHOOL_ADMIN"].includes(user?.role ?? "");
-  const canViewTabs = isStaff || isBursarOrAdmin;
 
-  /* ── Scanner ───────────────────────────────────────────────── */
-  const [cardInput, setCardInput]   = useState("");
-  const [scanning, setScanning]     = useState(false);
-  const processingRef               = useRef(false);
+  const [selectedCategory, setSelectedCategory] = useState<FeeType | null>(null);
+  const [selectedTerm, setSelectedTerm] = useState("Term 1");
+  const [selectedYear, setSelectedYear] = useState(CURRENT_YEAR);
+  const [selectedClass, setSelectedClass] = useState<ClassWithLevel | null>(null);
 
-  /* ── Scanned student ───────────────────────────────────────── */
-  const [student, setStudent]           = useState<ScannedStudent | null>(null);
-  const [studentInvoices, setStudentInvoices] = useState<Invoice[]>([]);
-  const [studentLoading, setStudentLoading]   = useState(false);
-  const [payTarget, setPayTarget]             = useState<Invoice | null>(null);
+  const [classes, setClasses] = useState<ClassWithLevel[]>([]);
+  const [classesLoading, setClassesLoading] = useState(false);
+  const [students, setStudents] = useState<StudentFeeStatus[]>([]);
+  const [studentsLoading, setStudentsLoading] = useState(false);
+  const [payTarget, setPayTarget] = useState<StudentFeeStatus | null>(null);
 
-  /* ── School-wide data ──────────────────────────────────────── */
-  const [activeTab, setActiveTab]     = useState<"overview" | "invoices" | "structures" | "refunds">("overview");
-  const [report, setReport]           = useState<{ total_collected: number; pending: number; by_type: { payment_type: string; _sum: { amount: number }; _count: number }[] } | null>(null);
-  const [allInvoices, setAllInvoices] = useState<Invoice[]>([]);
-  const [structures, setStructures]   = useState<FeeStructure[]>([]);
-  const [refunds, setRefunds]         = useState<RefundRequest[]>([]);
-  const [tabLoading, setTabLoading]   = useState(false);
+  const schoolId = activeSchool?.id ?? user?.school_id ?? "";
 
-  /* ── Structure / invoice-gen modals ───────────────────────── */
-  const [showStructureModal, setShowStructureModal] = useState(false);
-  const [showGenModal, setShowGenModal]             = useState(false);
-  const [structForm, setStructForm] = useState({ name: "", applies_to: "", amount: "" });
-  const [genForm, setGenForm]       = useState({ fee_structure_id: "", due_date: "" });
-
-  /* ── Card scan ─────────────────────────────────────────────── */
-  async function handleCardScan(cardNum: string, isNFC = false) {
-    if (!cardNum.trim() || processingRef.current || !user?.school_id) return;
-    processingRef.current = true;
-    setScanning(true);
-    try {
-      let holder = isNFC
-        ? await supabaseCanteenService.lookupCardHolderByNfcUid(user.school_id, cardNum.trim())
-        : await supabaseCanteenService.lookupCardHolder(user.school_id, cardNum.trim());
-      if (!holder && !isNFC) {
-        holder = await supabaseCanteenService.lookupCardHolderByNfcUid(user.school_id, cardNum.trim()).catch(() => null);
-      }
-      if (!holder) throw new Error("Card not found");
-      const scanned: ScannedStudent = {
-        id: holder.student_id,
-        name: holder.legal_name,
-        class: holder.class_name,
-        student_code: holder.admission_number,
-        photo: holder.profile_photo_path ?? null,
-      };
-      setStudent(scanned);
-      setCardInput("");
-      setStudentLoading(true);
-      const invoices = await supabaseFeesService.listInvoices(user.school_id, { studentId: holder.student_id });
-      setStudentInvoices(invoices as Invoice[]);
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Card not found", "error");
-    } finally {
-      setScanning(false);
-      processingRef.current = false;
-      setStudentLoading(false);
-    }
-  }
-
-  const scanHandlerRef = useRef(handleCardScan);
-  scanHandlerRef.current = handleCardScan;
-
+  // Load classes with education level names and student counts
   useEffect(() => {
-    if (!authLoading && isSupported) {
-      startListen((r) => scanHandlerRef.current(r.value, r.type === "uid"));
-    }
-    return () => { stopListen(); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, isSupported]);
-
-  /* ── Load school-wide tab data ─────────────────────────────── */
-  const loadTab = useCallback(async () => {
-    if (authLoading || !user?.school_id) return;
-    setTabLoading(true);
-    try {
-      if (activeTab === "overview") {
-        const r = await supabaseFeesService.getSchoolReport(user.school_id).catch(() => null);
-        if (r) setReport({ total_collected: r.total_collected, pending: r.pending, by_type: r.by_channel.map((c) => ({ payment_type: c.channel, _sum: { amount: c.total }, _count: 0 })) });
-      } else if (activeTab === "invoices") {
-        const rows = await supabaseFeesService.listInvoices(user.school_id).catch(() => []);
-        setAllInvoices(rows as Invoice[]);
-      } else if (activeTab === "structures") {
-        const rows = await supabaseFeesService.listStructures(user.school_id).catch(() => []);
-        setStructures(rows);
-      } else if (activeTab === "refunds") {
-        setRefunds([]);
+    if (!selectedCategory || !schoolId) return;
+    setClassesLoading(true);
+    setSelectedClass(null);
+    setStudents([]);
+    const client = getSafeBrowserClient();
+    if (!client) { setClassesLoading(false); return; }
+    void (async () => {
+      try {
+        const { data, error } = await client
+          .from("class_sections")
+          .select(`id, name, stream_name, education_levels ( name ), student_class_placements ( id )`)
+          .eq("school_id", schoolId)
+          .eq("status", "active")
+          .order("name");
+        if (error) { toast(error.message, "error"); return; }
+        const mapped: ClassWithLevel[] = (data ?? []).map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          stream_name: c.stream_name ?? null,
+          level_name: c.education_levels?.name ?? "",
+          student_count: Array.isArray(c.student_class_placements) ? c.student_class_placements.length : 0,
+        }));
+        setClasses(mapped.filter((c) => c.student_count > 0));
+      } catch (e: any) {
+        toast(e.message ?? "Failed to load classes", "error");
+      } finally {
+        setClassesLoading(false);
       }
-    } catch { /* ignore */ }
-    finally { setTabLoading(false); }
-  }, [activeTab, authLoading, user?.school_id]);
+    })();
+  }, [selectedCategory, schoolId]);
 
-  useEffect(() => { loadTab(); }, [loadTab]);
+  // Load students when class selected
+  const loadStudents = useCallback(async () => {
+    if (!selectedCategory || !selectedClass || !schoolId) return;
+    setStudentsLoading(true);
+    try {
+      const tLabel = termLabel(selectedTerm, selectedYear);
+      const data = await supabaseFeesService.getClassFeeStatus(schoolId, selectedClass.id, selectedCategory, tLabel);
+      setStudents(data);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Error loading students", "error");
+    } finally {
+      setStudentsLoading(false);
+    }
+  }, [selectedCategory, selectedClass, selectedTerm, selectedYear, schoolId]);
 
-  /* ── Computed totals for scanned student ───────────────────── */
-  const totalOwed   = studentInvoices.reduce((s, i) => s + i.total_amount, 0);
-  const totalPaid   = studentInvoices.reduce((s, i) => s + i.amount_paid, 0);
-  const outstanding = totalOwed - totalPaid;
-  const allPaid     = outstanding === 0 && studentInvoices.length > 0;
+  useEffect(() => { loadStudents(); }, [loadStudents]);
+
+  // Stats for the class list overview
+  const classStats = {
+    total: students.length,
+    paid: students.filter((s) => s.status === "paid").length,
+    partial: students.filter((s) => s.status === "partial").length,
+    unpaid: students.filter((s) => s.status === "pending" || s.status === "no_invoice").length,
+    collected: students.reduce((sum, s) => sum + s.amount_paid, 0),
+    outstanding: students.reduce((sum, s) => sum + s.balance, 0),
+  };
+
+  const currentCategory = FEE_CATEGORIES.find((c) => c.type === selectedCategory);
+  const tLabel = termLabel(selectedTerm, selectedYear);
 
   return (
     <DashboardShell>
-      {payTarget && (
-        <PayModal invoice={payTarget} onClose={() => setPayTarget(null)}
-          onSuccess={async () => {
-            if (student && user?.school_id) {
-              const rows = await supabaseFeesService.listInvoices(user.school_id, { studentId: student.id });
-              setStudentInvoices(rows as Invoice[]);
-            }
-            if (activeTab === "invoices") loadTab();
-          }} />
+      {payTarget && selectedCategory && (
+        <PaymentModal
+          student={payTarget}
+          feeType={selectedCategory}
+          termLabel={tLabel}
+          onClose={() => setPayTarget(null)}
+          onSuccess={() => { setPayTarget(null); loadStudents(); }}
+        />
       )}
 
-      {/* Structure modal */}
-      {showStructureModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-xl w-full max-w-md p-6">
-            <h3 className="font-bold mb-4" style={{ color: "#121212" }}>New Fee Structure</h3>
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              if (!user?.school_id) return;
-              await supabaseFeesService.createStructure(user.school_id, { name: structForm.name, amount: parseFloat(structForm.amount), applies_to: structForm.applies_to ? structForm.applies_to.split(",").map((s) => s.trim()) : [] });
-              setShowStructureModal(false); setStructForm({ name: "", applies_to: "", amount: "" }); loadTab();
-            }} className="space-y-3">
-              <div>
-                <p className="text-xs font-semibold mb-1" style={{ color: "#666" }}>TITLE</p>
-                <input required value={structForm.name} onChange={(e) => setStructForm((f) => ({ ...f, name: e.target.value }))}
-                  placeholder="e.g. S5 Term 1 Tuition" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold mb-1" style={{ color: "#666" }}>APPLIES TO (comma separated, blank = all)</p>
-                <input value={structForm.applies_to} onChange={(e) => setStructForm((f) => ({ ...f, applies_to: e.target.value }))}
-                  placeholder="Senior 5, Senior 6" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold mb-1" style={{ color: "#666" }}>AMOUNT (RWF)</p>
-                <input required type="number" min={1} value={structForm.amount} onChange={(e) => setStructForm((f) => ({ ...f, amount: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none" />
-              </div>
-              <div className="flex gap-2 pt-1">
-                <button type="button" onClick={() => setShowStructureModal(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm">Cancel</button>
-                <button type="submit" className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white" style={{ background: "#1D4ED8" }}>Save</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <div className="h-full flex flex-col gap-4 overflow-auto px-1 pb-4">
 
-      {/* Invoice gen modal */}
-      {showGenModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-xl w-full max-w-md p-6">
-            <h3 className="font-bold mb-4" style={{ color: "#121212" }}>Generate Bulk Invoices</h3>
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              if (!user?.school_id) return;
-              const r = await supabaseFeesService.generateInvoices(user.school_id, genForm);
-              toast(`${r.count} invoices generated`, "success");
-              setShowGenModal(false); loadTab();
-            }} className="space-y-3">
+        {/* ── Category Cards ─────────────────────────────────── */}
+        {!selectedCategory ? (
+          <>
+            <div>
+              <h1 className="text-xl font-extrabold text-gray-900">Fees Management</h1>
+              <p className="text-sm text-gray-400">Select a fee category to manage payments</p>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {FEE_CATEGORIES.map((cat) => {
+                const Icon = cat.icon;
+                return (
+                  <button
+                    key={cat.type}
+                    onClick={() => setSelectedCategory(cat.type)}
+                    className="flex flex-col gap-3 p-5 rounded-3xl text-left transition hover:scale-[1.02] active:scale-100 cursor-pointer shadow-sm"
+                    style={{ background: cat.bg }}
+                  >
+                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: cat.color }}>
+                      <Icon size={24} className="text-white" />
+                    </div>
+                    <div>
+                      <p className="font-extrabold text-gray-900 leading-tight">{cat.label}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{cat.sub}</p>
+                    </div>
+                    <div className="flex items-center gap-1 text-xs font-semibold mt-auto" style={{ color: cat.color }}>
+                      Manage <ChevronRight size={13} />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        ) : !selectedClass ? (
+          /* ── Class List ──────────────────────────────────── */
+          <>
+            {/* Header */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => { setSelectedCategory(null); setClasses([]); }}
+                className="w-9 h-9 rounded-2xl flex items-center justify-center transition"
+                style={{ background: "#F0FDF4", color: "#16A34A" }}>
+                <ChevronLeft size={18} />
+              </button>
               <div>
-                <p className="text-xs font-semibold mb-1" style={{ color: "#666" }}>FEE STRUCTURE</p>
-                <select required value={genForm.fee_structure_id} onChange={(e) => setGenForm((f) => ({ ...f, fee_structure_id: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-                  <option value="">Select…</option>
-                  {structures.map((s) => <option key={s.id} value={s.id}>{s.name} — {s.amount.toLocaleString()} RWF</option>)}
-                </select>
+                <h1 className="text-xl font-extrabold text-gray-900">{currentCategory?.label}</h1>
+                <p className="text-sm text-gray-400">Select class to manage payments</p>
               </div>
-              <div>
-                <p className="text-xs font-semibold mb-1" style={{ color: "#666" }}>DUE DATE</p>
-                <input required type="date" value={genForm.due_date} onChange={(e) => setGenForm((f) => ({ ...f, due_date: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none" />
-              </div>
-              <div className="flex gap-2 pt-1">
-                <button type="button" onClick={() => setShowGenModal(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm">Cancel</button>
-                <button type="submit" className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white" style={{ background: "#1D4ED8" }}>Run Billing</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      <div className="h-full flex flex-col overflow-hidden">
-        <div className="flex items-center gap-3 px-3 md:px-4 pt-1 pb-3 flex-shrink-0">
-          <div>
-            <h1 className="text-lg font-bold" style={{ color: "#121212" }}>Fees & Finance</h1>
-            <p className="text-xs" style={{ color: "#666" }}>Tap student card to check payment status</p>
-          </div>
-        </div>
-
-        <div className="flex flex-1 gap-3 px-3 md:px-4 pb-3 md:pb-4 overflow-hidden min-h-0 flex-col lg:flex-row">
-
-          {/* ── LEFT: Scanner ───────────────────────────────── */}
-          <div className="lg:w-72 flex-shrink-0 flex flex-col gap-3">
-            <div className="bg-white rounded-3xl p-5 flex flex-col items-center gap-3">
-              <div className="w-20 h-20 rounded-full flex items-center justify-center"
-                style={{ background: listening ? "#EFF6FF" : "#F5F5F5" }}>
-                {scanning
-                  ? <Loader2 size={32} className="animate-spin" style={{ color: "#1D4ED8" }} />
-                  : listening
-                  ? <Wallet size={32} className="animate-pulse" style={{ color: "#1D4ED8" }} />
-                  : <WifiOff size={32} style={{ color: "#ccc" }} />}
-              </div>
-              <p className="text-sm font-bold text-center" style={{ color: "#121212" }}>
-                {scanning ? "Reading card…" : listening ? "Waiting for card tap…" : "NFC not available"}
-              </p>
-              <p className="text-xs text-center text-gray-400">
-                {listening ? "Student holds card near device" : "Use manual entry below"}
-              </p>
-              <div className="w-full flex gap-2 pt-1">
-                <input value={cardInput} onChange={(e) => setCardInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleCardScan(cardInput)}
-                  placeholder="Card number…"
-                  className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-xs font-mono outline-none" />
-                <button onClick={() => handleCardScan(cardInput)} disabled={scanning || !cardInput.trim()}
-                  className="px-3 py-2 rounded-xl text-white text-xs font-bold disabled:opacity-50"
-                  style={{ background: "#121212" }}>
-                  {scanning ? <Loader2 size={12} className="animate-spin" /> : <CreditCard size={13} />}
-                </button>
-              </div>
-              <VirtualCardTap onTap={(cn) => handleCardScan(cn)} busy={scanning} />
             </div>
 
-            {/* Student summary (desktop) */}
-            {student && (
-              <div className="bg-white rounded-3xl p-4 hidden lg:block">
-                <div className="flex items-center gap-3 mb-4">
-                  {student.photo
-                    ? <img src={student.photo} alt={student.name} className="w-12 h-12 rounded-2xl object-cover flex-shrink-0" />
-                    : <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-bold flex-shrink-0"
-                        style={{ background: "#EFF6FF", color: "#1D4ED8" }}>{student.name.charAt(0)}</div>}
-                  <div className="min-w-0">
-                    <p className="font-bold text-sm truncate" style={{ color: "#121212" }}>{student.name}</p>
-                    <p className="text-xs text-gray-400">{student.class}</p>
-                  </div>
-                </div>
-
-                {/* Payment status summary */}
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                  <div className="rounded-2xl p-3 text-center" style={{ background: "#DCFCE7" }}>
-                    <p className="text-xs text-green-600">Paid</p>
-                    <p className="text-sm font-bold text-green-700">{totalPaid.toLocaleString()}</p>
-                    <p className="text-[10px] text-green-600">RWF</p>
-                  </div>
-                  <div className="rounded-2xl p-3 text-center" style={{ background: outstanding > 0 ? "#FEE2E2" : "#F5F5F5" }}>
-                    <p className="text-xs" style={{ color: outstanding > 0 ? "#991B1B" : "#999" }}>Outstanding</p>
-                    <p className="text-sm font-bold" style={{ color: outstanding > 0 ? "#DC2626" : "#121212" }}>{outstanding.toLocaleString()}</p>
-                    <p className="text-[10px]" style={{ color: outstanding > 0 ? "#991B1B" : "#999" }}>RWF</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 p-3 rounded-2xl" style={{ background: allPaid ? "#DCFCE7" : "#FEF9C3" }}>
-                  {allPaid
-                    ? <><CheckCircle size={16} className="text-green-600" /><p className="text-xs font-bold text-green-700">All fees cleared</p></>
-                    : <><AlertCircle size={16} className="text-amber-600" /><p className="text-xs font-bold text-amber-700">{outstanding.toLocaleString()} RWF outstanding</p></>}
-                </div>
+            {/* Term selector */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1 bg-white rounded-2xl p-1 shadow-sm">
+                {TERMS.map((t) => (
+                  <button key={t} onClick={() => setSelectedTerm(t)}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold transition"
+                    style={selectedTerm === t
+                      ? { background: currentCategory?.color, color: "#fff" }
+                      : { color: "#666" }}>
+                    {t}
+                  </button>
+                ))}
               </div>
-            )}
-          </div>
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(e.target.value)}
+                className="bg-white rounded-2xl px-3 py-2 text-xs font-semibold text-gray-700 border-0 shadow-sm outline-none">
+                {[0, 1, 2].map((offset) => {
+                  const y = (parseInt(CURRENT_YEAR) - offset).toString();
+                  return <option key={y} value={y}>{y}</option>;
+                })}
+              </select>
+              <span className="text-xs font-medium text-gray-500 px-2 py-2 bg-white rounded-2xl shadow-sm">
+                {tLabel}
+              </span>
+            </div>
 
-          {/* ── RIGHT: Student invoices or school-wide ───────── */}
-          <div className="flex-1 flex flex-col gap-3 overflow-hidden min-h-0">
-
-            {/* Student card (mobile) */}
-            {student && (
-              <div className="bg-white rounded-3xl p-4 lg:hidden flex-shrink-0">
-                <div className="flex items-center gap-3 mb-3">
-                  {student.photo
-                    ? <img src={student.photo} alt={student.name} className="w-10 h-10 rounded-2xl object-cover flex-shrink-0" />
-                    : <div className="w-10 h-10 rounded-2xl flex items-center justify-center font-bold flex-shrink-0 text-sm"
-                        style={{ background: "#EFF6FF", color: "#1D4ED8" }}>{student.name.charAt(0)}</div>}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm truncate" style={{ color: "#121212" }}>{student.name}</p>
-                    <p className="text-xs text-gray-400">{student.class}</p>
-                  </div>
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold"
-                    style={{ background: allPaid ? "#DCFCE7" : "#FEE2E2", color: allPaid ? "#166534" : "#991B1B" }}>
-                    {allPaid ? <><CheckCircle size={11} /> Cleared</> : <>{outstanding.toLocaleString()} RWF due</>}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {student ? (
-              /* Student invoice list */
-              <div className="bg-white rounded-3xl flex-1 overflow-hidden flex flex-col">
-                <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0">
-                  <p className="text-sm font-bold" style={{ color: "#121212" }}>Invoices</p>
-                  <p className="text-xs text-gray-400">{studentInvoices.length} invoice{studentInvoices.length !== 1 ? "s" : ""}</p>
-                </div>
-                <div className="flex-1 overflow-y-auto px-4 py-3">
-                  {studentLoading ? (
-                    <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-gray-300" /></div>
-                  ) : studentInvoices.length === 0 ? (
-                    <div className="flex flex-col items-center py-10 text-gray-300">
-                      <Receipt size={32} className="mb-2" />
-                      <p className="text-sm">No invoices found for this student</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {studentInvoices.map((inv) => {
-                        const invTotal = inv.total_amount ?? (inv as any).amount ?? 0;
-                        const invPaid = inv.amount_paid ?? (inv as any).paid_amount ?? 0;
-                        const rem = Math.max(0, invTotal - invPaid);
-                        const st = STATUS_STYLE[inv.status] ?? STATUS_STYLE.PENDING;
-                        return (
-                          <div key={inv.id} className="rounded-2xl p-4" style={{ background: "#F9F9F9" }}>
-                            <div className="flex items-start justify-between gap-2 mb-3">
-                              <div>
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-semibold"
-                                    style={{ background: st.bg, color: st.text }}>
-                                    {st.icon} {inv.status}
-                                  </span>
-                                  {inv.lines?.[0]?.description && <span className="text-xs text-gray-500">{inv.lines[0].description}</span>}
-                                </div>
-                                <p className="text-xs text-gray-400">Due: {inv.due_date ? new Date(inv.due_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</p>
-                              </div>
-                              <div className="text-right flex-shrink-0">
-                                <p className="text-sm font-bold" style={{ color: "#121212" }}>{invTotal.toLocaleString()} RWF</p>
-                                <p className="text-xs text-green-600">Paid: {invPaid.toLocaleString()}</p>
-                              </div>
-                            </div>
-
-                            {/* Progress bar */}
-                            <div className="w-full h-1.5 rounded-full bg-gray-200 overflow-hidden mb-3">
-                              <div className="h-full rounded-full transition-all bg-green-500"
-                                style={{ width: `${Math.min(100, invTotal > 0 ? (invPaid / invTotal) * 100 : 100)}%` }} />
-                            </div>
-
-                            {rem > 0 && canViewTabs && (
-                              <button onClick={() => setPayTarget(inv)}
-                                className="w-full py-2 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-1"
-                                style={{ background: "#1D4ED8" }}>
-                                <Receipt size={11} /> Record Payment · {rem.toLocaleString()} RWF due
-                              </button>
-                            )}
-                            {rem === 0 && (
-                              <p className="text-center text-xs text-green-600 font-semibold flex items-center justify-center gap-1">
-                                <CheckCircle size={11} /> Fully cleared
-                              </p>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+            {/* Classes grid */}
+            {classesLoading ? (
+              <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-gray-300" /></div>
+            ) : classes.length === 0 ? (
+              <div className="text-center py-12 text-gray-400">
+                <Users size={32} className="mx-auto mb-2" />
+                <p>No active classes found</p>
               </div>
             ) : (
-              /* School-wide management panel */
-              <div className="bg-white rounded-3xl flex-1 overflow-hidden flex flex-col">
-                {/* Tab bar */}
-                {canViewTabs && (
-                  <div className="flex gap-1 p-3 border-b border-gray-100 flex-shrink-0 overflow-x-auto">
-                    {(["overview", "invoices", "structures", "refunds"] as const).map((tab) => (
-                      <button key={tab} onClick={() => setActiveTab(tab)}
-                        className="px-3 py-1.5 rounded-xl text-xs font-semibold transition whitespace-nowrap capitalize"
-                        style={activeTab === tab
-                          ? { background: "#EFF6FF", color: "#1D4ED8" }
-                          : { background: "transparent", color: "#999" }}>
-                        {tab}
-                      </button>
-                    ))}
-                    <div className="ml-auto flex gap-1 flex-shrink-0">
-                      {isBursarOrAdmin && activeTab === "structures" && (
-                        <button onClick={() => setShowStructureModal(true)}
-                          className="px-3 py-1.5 rounded-xl text-xs font-bold text-white flex items-center gap-1"
-                          style={{ background: "#1D4ED8" }}>
-                          <Plus size={11} /> Structure
-                        </button>
-                      )}
-                      {isBursarOrAdmin && activeTab === "structures" && structures.length > 0 && (
-                        <button onClick={() => { setGenForm({ fee_structure_id: structures[0].id, due_date: "" }); setShowGenModal(true); }}
-                          className="px-3 py-1.5 rounded-xl text-xs font-bold text-white flex items-center gap-1"
-                          style={{ background: "#121212" }}>
-                          <Receipt size={11} /> Bulk Bill
-                        </button>
-                      )}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {classes.map((cls) => (
+                  <button
+                    key={cls.id}
+                    onClick={() => setSelectedClass(cls)}
+                    className="flex flex-col gap-2 p-4 bg-white rounded-3xl shadow-sm hover:shadow-md transition text-left hover:scale-[1.02] active:scale-100"
+                  >
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white text-sm"
+                      style={{ background: currentCategory?.color ?? "#16A34A" }}>
+                      {(cls.level_name || cls.name).slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      {cls.level_name && <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{cls.level_name}</p>}
+                      <p className="font-bold text-gray-800 text-sm leading-tight">{cls.name}</p>
+                      {cls.stream_name && <p className="text-xs text-gray-400">{cls.stream_name}</p>}
+                    </div>
+                    <div className="flex items-center justify-between mt-auto">
+                      <span className="text-xs text-gray-400 flex items-center gap-1"><Users size={11} />{cls.student_count} students</span>
+                      <span className="text-xs font-semibold flex items-center gap-0.5" style={{ color: currentCategory?.color }}>
+                        View <ChevronRight size={12} />
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+          /* ── Student List ─────────────────────────────────── */
+          <>
+            {/* Header */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => { setSelectedClass(null); setStudents([]); }}
+                className="w-9 h-9 rounded-2xl flex items-center justify-center transition"
+                style={{ background: "#F0FDF4", color: "#16A34A" }}>
+                <ChevronLeft size={18} />
+              </button>
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-wide">{selectedClass.level_name}</p>
+                <h1 className="text-xl font-extrabold text-gray-900">{selectedClass.name}</h1>
+                <p className="text-sm text-gray-400">{currentCategory?.label} · {tLabel}</p>
+              </div>
+            </div>
+
+            {/* Stats */}
+            {!studentsLoading && students.length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { label: "Total Students", value: classStats.total,     color: "#2563EB", bg: "#EFF6FF", Icon: Users },
+                  { label: "Fully Paid",     value: classStats.paid,      color: "#16A34A", bg: "#F0FDF4", Icon: CheckCircle },
+                  { label: "Partial",        value: classStats.partial,   color: "#D97706", bg: "#FFFBEB", Icon: Clock },
+                  { label: "Unpaid",         value: classStats.unpaid,    color: "#DC2626", bg: "#FEF2F2", Icon: AlertCircle },
+                ].map((s) => (
+                  <div key={s.label} className="rounded-2xl px-4 py-3 flex items-center gap-3" style={{ background: s.bg }}>
+                    <s.Icon size={18} style={{ color: s.color }} className="flex-shrink-0" />
+                    <div>
+                      <p className="text-xl font-extrabold" style={{ color: s.color }}>{s.value}</p>
+                      <p className="text-xs text-gray-500">{s.label}</p>
                     </div>
                   </div>
-                )}
-
-                <div className="flex-1 overflow-y-auto px-4 py-3">
-                  {tabLoading ? (
-                    <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-gray-300" /></div>
-                  ) : activeTab === "overview" ? (
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="rounded-2xl p-4" style={{ background: "#DCFCE7" }}>
-                          <div className="flex items-center gap-2 mb-1"><CheckCircle size={16} className="text-green-600" /><p className="text-xs text-green-600">Total Collected</p></div>
-                          <p className="text-xl font-bold text-green-700">{(report?.total_collected ?? 0).toLocaleString()} RWF</p>
-                        </div>
-                        <div className="rounded-2xl p-4" style={{ background: "#FEF9C3" }}>
-                          <div className="flex items-center gap-2 mb-1"><Clock size={16} className="text-amber-600" /><p className="text-xs text-amber-600">Pending</p></div>
-                          <p className="text-xl font-bold text-amber-700">{(report?.pending ?? 0).toLocaleString()} RWF</p>
-                        </div>
-                      </div>
-                      <div className="rounded-2xl p-4" style={{ background: "#EFF6FF" }}>
-                        <div className="flex items-center gap-2 mb-1"><TrendingUp size={16} className="text-blue-600" /><p className="text-xs text-blue-600">Projected Total</p></div>
-                        <p className="text-xl font-bold text-blue-700">{((report?.total_collected ?? 0) + (report?.pending ?? 0)).toLocaleString()} RWF</p>
-                      </div>
-                      {report?.by_type && report.by_type.length > 0 ? (
-                        <div className="space-y-1">
-                          <p className="text-xs font-semibold px-1" style={{ color: "#666" }}>BREAKDOWN BY TYPE</p>
-                          {report.by_type.map((item) => (
-                            <div key={item.payment_type} className="flex items-center justify-between rounded-xl px-3 py-2" style={{ background: "#F9F9F9" }}>
-                              <span className="text-xs font-medium" style={{ color: "#444" }}>{item.payment_type}</span>
-                              <span className="text-xs font-bold" style={{ color: "#121212" }}>{(item._sum.amount ?? 0).toLocaleString()} RWF <span className="font-normal text-gray-400">({item._count})</span></span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="rounded-2xl p-6 text-center border border-dashed border-gray-200">
-                          <Receipt size={24} className="mx-auto text-gray-300 mb-2" />
-                          <p className="text-xs font-semibold text-gray-500">School Fee Operations Ready</p>
-                          <p className="text-[10px] text-gray-400 mt-1">Tap student card to check fees or view Invoices, Structures, and Refunds above</p>
-                        </div>
-                      )}
-                    </div>
-                  ) : activeTab === "invoices" ? (
-                    <div className="space-y-2">
-                      {allInvoices.length === 0
-                        ? <p className="text-center text-sm text-gray-400 py-8">No invoices found</p>
-                        : allInvoices.map((inv) => {
-                          const invTotal = inv.total_amount ?? (inv as any).amount ?? 0;
-                          const invPaid = inv.amount_paid ?? (inv as any).paid_amount ?? 0;
-                          const rem = Math.max(0, invTotal - invPaid);
-                          const st = STATUS_STYLE[inv.status] ?? STATUS_STYLE.PENDING;
-                          return (
-                            <div key={inv.id} className="rounded-2xl p-3 flex items-center gap-3" style={{ background: "#F9F9F9" }}>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-0.5">
-                                  <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full font-semibold" style={{ background: st.bg, color: st.text }}>{st.icon} {inv.status}</span>
-                                  <span className="text-xs font-semibold truncate" style={{ color: "#121212" }}>{inv.student?.user?.first_name} {inv.student?.user?.last_name}</span>
-                                </div>
-                                <p className="text-xs text-gray-400">{inv.student?.class?.name} · {invTotal.toLocaleString()} RWF total</p>
-                              </div>
-                              {rem > 0 && (
-                                <button onClick={() => setPayTarget(inv)}
-                                  className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-white flex-shrink-0"
-                                  style={{ background: "#1D4ED8" }}>
-                                  Pay {rem.toLocaleString()}
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
-                    </div>
-                  ) : activeTab === "structures" ? (
-                    <div className="space-y-2">
-                      {structures.length === 0
-                        ? <p className="text-center text-sm text-gray-400 py-8">No fee structures yet</p>
-                        : structures.map((s) => (
-                          <div key={s.id} className="rounded-2xl p-3 flex items-center gap-3" style={{ background: "#F9F9F9" }}>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold" style={{ color: "#121212" }}>{s.name}</p>
-                              <p className="text-xs text-gray-400">{s.amount.toLocaleString()} RWF
-                                {s.applies_to?.length ? ` · ${s.applies_to.join(", ")}` : " · All students"}
-                              </p>
-                            </div>
-                            <button onClick={async () => { if (confirm("Delete?")) { const client = getSafeBrowserClient(); if (client && user?.school_id) { await client.from("fee_structures").update({ is_active: false }).eq("id", s.id).eq("school_id", user.school_id); } loadTab(); } }}
-                              className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 flex-shrink-0"><Trash2 size={13} /></button>
-                          </div>
-                        ))}
-                    </div>
-                  ) : activeTab === "refunds" ? (
-                    <div className="space-y-2">
-                      {refunds.length === 0
-                        ? <p className="text-center text-sm text-gray-400 py-8">No refund requests</p>
-                        : refunds.map((r) => (
-                          <div key={r.id} className="rounded-2xl p-3" style={{ background: "#F9F9F9" }}>
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex-1">
-                                <p className="text-xs font-semibold" style={{ color: "#121212" }}>{r.wallet_transaction?.student?.user?.first_name} {r.wallet_transaction?.student?.user?.last_name}</p>
-                                <p className="text-xs text-gray-500">{r.reason}</p>
-                                <p className="text-xs font-bold mt-0.5" style={{ color: "#121212" }}>{r.wallet_transaction?.amount?.toLocaleString()} RWF</p>
-                              </div>
-                              <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={r.status === "APPROVED" ? { background: "#DCFCE7", color: "#166534" } : r.status === "PENDING" ? { background: "#FEF9C3", color: "#854D0E" } : { background: "#FEE2E2", color: "#991B1B" }}>{r.status}</span>
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  ) : null}
+                ))}
+              </div>
+            )}
+            {!studentsLoading && students.length > 0 && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl px-4 py-3 bg-green-50">
+                  <p className="text-xs text-green-600">Total Collected</p>
+                  <p className="text-lg font-extrabold text-green-700">{classStats.collected.toLocaleString()} <span className="text-xs font-normal">RWF</span></p>
+                </div>
+                <div className="rounded-2xl px-4 py-3 bg-red-50">
+                  <p className="text-xs text-red-500">Outstanding</p>
+                  <p className="text-lg font-extrabold text-red-600">{classStats.outstanding.toLocaleString()} <span className="text-xs font-normal">RWF</span></p>
                 </div>
               </div>
             )}
-          </div>
-        </div>
+
+            {/* Student list */}
+            <div className="bg-white rounded-3xl shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                <p className="text-sm font-bold text-gray-800">{studentsLoading ? "Loading…" : `${students.length} students`}</p>
+              </div>
+              {studentsLoading ? (
+                <div className="flex justify-center py-10"><Loader2 size={22} className="animate-spin text-gray-300" /></div>
+              ) : students.length === 0 ? (
+                <div className="text-center py-10 text-gray-400">
+                  <Users size={28} className="mx-auto mb-2" />
+                  <p className="text-sm">No students in this class</p>
+                </div>
+              ) : (
+                <div className="p-3 space-y-2">
+                  {students.map((s) => (
+                    <StudentFeeRow key={s.student_id} s={s} onPay={setPayTarget} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </DashboardShell>
   );

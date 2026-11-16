@@ -3528,9 +3528,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     }
     return json as T;
   } catch (backendError) {
-    console.warn(`Backend request failed for ${path}:`, backendError);
     if (typeof window !== "undefined" && (getDemoStorage("ishuri_demo") === "true" || getDemoStorage("knotty_demo") === "true")) {
       return localResult !== undefined ? localResult : handleDemoRequest<T>(path, options);
+    }
+    // Silently return empty response when the Express backend is not running.
+    // The app is fully Supabase-based; Express API calls are legacy and non-critical.
+    if (backendError instanceof Error && backendError.message.includes("Is the backend running?")) {
+      return (isMutation ? { success: false } : { success: true, data: [], pagination: { total: 0, page: 1, limit: 10, pages: 1 } }) as unknown as T;
     }
     throw backendError;
   }

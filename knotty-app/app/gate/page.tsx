@@ -5,10 +5,9 @@ import {
   LogIn, LogOut, Search, RefreshCw, CheckCircle, XCircle,
   Clock, AlertTriangle, X, ChevronRight, Building2, Phone,
   IdCard, Briefcase, User, Hash, Wifi, StopCircle, Smartphone,
-  Sparkles, Check, ArrowRightLeft,
+  Check, ArrowRightLeft,
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
-import VirtualCardTap from "@/components/VirtualCardTap";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 import { useNFC } from "@/hooks/useNFC";
@@ -59,6 +58,7 @@ interface StudentCard {
   wallet_balance: number;
   card_status: string;
   is_frozen: boolean;
+  issued_at?: string | null;
 }
 
 type TapResult = {
@@ -157,82 +157,167 @@ function StatCard({ icon: Icon, label, value, color }: { icon: any; label: strin
   );
 }
 
+function fmtDate(s: string | null | undefined) {
+  if (!s) return "—";
+  return new Date(s).toLocaleDateString("en-RW", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+function addYears(iso: string, n: number) {
+  const d = new Date(iso);
+  d.setFullYear(d.getFullYear() + n);
+  return d.toISOString();
+}
+
 function TapResultCard({
   result,
   name,
   photo,
-  role,
+  schoolName,
   category,
+  field1Label, field1Value,
+  field2Label, field2Value,
+  field3Label, field3Value,
+  field4Label, field4Value,
+  materials,
 }: {
   result: TapResult;
   name: string;
   photo: string | null;
-  role?: string;
+  schoolName?: string;
   category?: "Student" | "Staff" | "Visitor";
+  field1Label?: string; field1Value?: string;
+  field2Label?: string; field2Value?: string;
+  field3Label?: string; field3Value?: string;
+  field4Label?: string; field4Value?: string;
+  materials?: string[];
 }) {
-  const isIn      = result.action === "TAP_IN";
-  const isOut     = result.action === "TAP_OUT";
-  const isDenied  = result.action === "DENIED";
-  const isAlready = result.action === "ALREADY_OUT" || result.action === "DUPLICATE";
+  const isIn     = result.action === "TAP_IN";
+  const isOut    = result.action === "TAP_OUT";
+  const isDenied = result.action === "DENIED";
 
-  const banner = isDenied
-    ? { bg: "bg-red-600",   text: "✗ NOT ALLOWED TO ENTER",  textColor: "text-white" }
-    : isIn
-    ? { bg: "bg-green-600", text: "✓ ENTRY CONFIRMED",        textColor: "text-white" }
-    : isOut
-    ? { bg: "bg-blue-600",  text: "✓ EXIT CONFIRMED",         textColor: "text-white" }
-    : { bg: "bg-gray-400",  text: "ℹ ALREADY PROCESSED",      textColor: "text-white" };
+  const bannerBg    = isDenied ? "#DC2626" : isIn ? "#16A34A" : isOut ? "#2563EB" : "#6B7280";
+  const bannerText  = isDenied ? "✗  NOT ALLOWED TO ENTER"
+                    : isIn     ? "✓  ENTRY CONFIRMED"
+                    : isOut    ? "✓  EXIT CONFIRMED"
+                    :            "ℹ  ALREADY PROCESSED";
 
-  const cardBg = isDenied
-    ? "bg-red-50 border-red-200"
-    : isIn
-    ? "bg-green-50 border-green-200"
-    : isOut
-    ? "bg-blue-50 border-blue-200"
-    : "bg-gray-50 border-gray-200";
+  const initials = name.split(" ").map((p) => p[0]).filter(Boolean).join("").slice(0, 2).toUpperCase();
+  const hue = (name.charCodeAt(0) * 37) % 360;
+
+  const fields = [
+    field1Label ? { label: field1Label, value: field1Value ?? "—" } : null,
+    field2Label ? { label: field2Label, value: field2Value ?? "—" } : null,
+    field3Label ? { label: field3Label, value: field3Value ?? "—" } : null,
+    field4Label ? { label: field4Label, value: field4Value ?? "—" } : null,
+  ].filter(Boolean) as { label: string; value: string }[];
 
   return (
-    <div className={`rounded-2xl border overflow-hidden ${cardBg} animate-in fade-in duration-200`}>
+    <div className="rounded-2xl overflow-hidden shadow-lg" style={{ border: "2px solid #E5E7EB" }}>
       {/* Status banner */}
-      <div className={`${banner.bg} px-4 py-2.5 flex items-center gap-2`}>
-        <span className={`text-sm font-extrabold tracking-wide ${banner.textColor}`}>{banner.text}</span>
-        <span className="ml-auto text-xs font-semibold text-white/80 uppercase tracking-wider">{category}</span>
+      <div className="px-4 py-2.5 flex items-center justify-between" style={{ background: bannerBg }}>
+        <span className="text-white font-extrabold text-sm tracking-widest">{bannerText}</span>
+        {category && (
+          <span className="text-white/80 text-xs font-semibold uppercase tracking-wider">{category}</span>
+        )}
       </div>
 
-      {/* Person info */}
-      <div className="p-4 flex items-center gap-4">
-        <Avatar name={name} photo={photo} size={14} />
-        <div className="flex-1 min-w-0">
-          <p className="text-lg font-extrabold text-gray-900 truncate leading-tight">{name}</p>
-          {role && <p className="text-sm text-gray-500 truncate mt-0.5">{role}</p>}
-          {isDenied && result.denied_reason && (
-            <p className="text-xs text-red-600 font-semibold mt-1">{result.denied_reason}</p>
-          )}
-          {!isDenied && !isAlready && (
-            <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
-              {result.check_in_time && (
-                <span className="flex items-center gap-1">
-                  <LogIn size={11} className="text-green-600" /> Entry {fmtTime(result.check_in_time)}
-                </span>
-              )}
-              {result.check_out_time && (
-                <span className="flex items-center gap-1">
-                  <LogOut size={11} className="text-blue-600" /> Exit {fmtTime(result.check_out_time)}
-                </span>
-              )}
-              {(result.tap_in_points + result.tap_out_points) > 0 && (
-                <span className="ml-auto font-semibold text-green-600">
-                  +{result.tap_in_points + result.tap_out_points} pts
-                </span>
-              )}
-            </div>
-          )}
-          {isAlready && (
-            <p className="text-xs text-gray-400 mt-1">
-              {result.check_in_time && `Entered: ${fmtTime(result.check_in_time)}`}
-              {result.check_out_time && ` · Exited: ${fmtTime(result.check_out_time)}`}
+      {/* ID card body */}
+      <div className="bg-white relative overflow-hidden">
+        {/* Red wave decorations — top right */}
+        <div className="absolute top-0 right-0 w-28 h-16 rounded-bl-[70px]" style={{ background: "#DC2626", opacity: 0.12 }} />
+        <div className="absolute top-0 right-0 w-16 h-8 rounded-bl-[50px]" style={{ background: "#DC2626", opacity: 0.18 }} />
+
+        {/* School name */}
+        <div className="px-4 pt-3 pb-1 relative z-10">
+          <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest truncate">
+            {schoolName ?? "SCHOOL"}
+          </p>
+        </div>
+
+        {/* Photo + info */}
+        <div className="flex gap-3 px-4 pb-3 relative z-10">
+          {/* Photo */}
+          <div className="flex-shrink-0">
+            {photo ? (
+              <img
+                src={photo}
+                alt={name}
+                className="w-20 rounded-xl object-cover border border-gray-200"
+                style={{ height: "100px" }}
+              />
+            ) : (
+              <div
+                className="w-20 rounded-xl flex items-center justify-center text-white text-2xl font-black border border-gray-200"
+                style={{ height: "100px", background: `hsl(${hue},55%,55%)` }}
+              >
+                {initials}
+              </div>
+            )}
+          </div>
+
+          {/* Info */}
+          <div className="flex-1 min-w-0 flex flex-col justify-center">
+            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Full Name</p>
+            <p className="text-base font-black text-gray-900 uppercase leading-tight break-words">
+              {name}
             </p>
-          )}
+
+            {fields.length > 0 && (
+              <div className="grid grid-cols-2 gap-x-3 gap-y-2 mt-2">
+                {fields.map((f) => (
+                  <div key={f.label}>
+                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider leading-none">{f.label}</p>
+                    <p className="text-xs font-bold text-gray-800 mt-0.5 leading-tight">{f.value}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Assigned materials */}
+        {materials && materials.length > 0 && (
+          <div className="px-4 pb-3 relative z-10">
+            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Assigned Items</p>
+            <div className="flex flex-wrap gap-1.5">
+              {materials.map((m) => (
+                <span key={m} className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-gray-100 text-gray-700 border border-gray-200">
+                  {m}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Denied reason */}
+        {isDenied && result.denied_reason && (
+          <div className="px-4 pb-3 relative z-10">
+            <p className="text-xs font-semibold text-red-600">{result.denied_reason}</p>
+          </div>
+        )}
+
+        {/* Footer: times + branding */}
+        <div className="flex items-center justify-between px-4 py-2 border-t border-gray-100 bg-gray-50 relative z-10">
+          <div className="flex items-center gap-3 text-[11px] text-gray-500">
+            {result.check_in_time && (
+              <span className="flex items-center gap-1">
+                <LogIn size={10} className="text-green-600" />
+                {fmtTime(result.check_in_time)}
+              </span>
+            )}
+            {result.check_out_time && (
+              <span className="flex items-center gap-1">
+                <LogOut size={10} className="text-blue-600" />
+                {fmtTime(result.check_out_time)}
+              </span>
+            )}
+            {(result.tap_in_points + result.tap_out_points) > 0 && (
+              <span className="font-semibold text-green-600">
+                +{result.tap_in_points + result.tap_out_points} pts
+              </span>
+            )}
+          </div>
+          <span className="text-xs font-black tracking-tight" style={{ color: "#16A34A" }}>KNOTTY</span>
         </div>
       </div>
     </div>
@@ -453,8 +538,12 @@ export default function GatePage() {
     result: TapResult;
     name: string;
     photo: string | null;
-    role: string;
     category: "Student" | "Staff" | "Visitor";
+    f1l?: string; f1v?: string;
+    f2l?: string; f2v?: string;
+    f3l?: string; f3v?: string;
+    f4l?: string; f4v?: string;
+    materials?: string[];
   } | null>(null);
   const [quickError, setQuickError] = useState("");
   const [recentActivity, setRecentActivity] = useState<GateActivityItem[]>([]);
@@ -462,6 +551,7 @@ export default function GatePage() {
   // Student scan tab
   const [studentCardInput, setStudentCardInput] = useState("");
   const [studentCard, setStudentCard] = useState<StudentCard | null>(null);
+  const [studentIssuedAt, setStudentIssuedAt] = useState<string | null>(null);
   const [studentLookupLoading, setStudentLookupLoading] = useState(false);
   const [studentTapResult, setStudentTapResult] = useState<TapResult | null>(null);
   const [studentTapLoading, setStudentTapLoading] = useState(false);
@@ -470,6 +560,7 @@ export default function GatePage() {
   // Staff scan tab
   const [staffCardInput, setStaffCardInput] = useState("");
   const [staffCard, setStaffCard] = useState<StaffCard | null>(null);
+  const [staffIssuedAt, setStaffIssuedAt] = useState<string | null>(null);
   const [staffLookupLoading, setStaffLookupLoading] = useState(false);
   const [staffTapResult, setStaffTapResult] = useState<TapResult | null>(null);
   const [staffTapLoading, setStaffTapLoading] = useState(false);
@@ -615,8 +706,11 @@ export default function GatePage() {
           result: tapRes,
           name: matchingVisit.full_name,
           photo: null,
-          role: `Visiting: ${matchingVisit.host_name || "School"} · ${matchingVisit.purpose}`,
           category: "Visitor",
+          f1l: "Host",    f1v: matchingVisit.host_name || "School",
+          f2l: "Purpose", f2v: matchingVisit.purpose,
+          f3l: "Status",  f3v: dir === "in" ? "Admitted" : "Departed",
+          f4l: "Pass Ref", f4v: matchingVisit.pass_reference || "—",
         });
 
         setRecentActivity((prev) => [
@@ -653,6 +747,7 @@ export default function GatePage() {
               wallet_balance: Number(holder.wallet_balance || 0),
               card_status: holder.card_status,
               is_frozen: holder.is_frozen,
+              issued_at: (holder as any).issued_at ?? null,
             };
           }
         } else {
@@ -684,6 +779,7 @@ export default function GatePage() {
                   wallet_balance: Number(holder.wallet_balance || 0),
                   card_status: holder.card_status,
                   is_frozen: holder.is_frozen,
+                  issued_at: (holder as any).issued_at ?? null,
                 };
               }
             } catch {
@@ -697,14 +793,57 @@ export default function GatePage() {
 
       // If Student found, execute tap
       if (studentData) {
-        if (studentData.is_frozen) {
+        const issuedAt: string | null = studentData.issued_at ?? null;
+
+        const classDisplay = [studentData.education_level_name, studentData.class_name].filter(Boolean).join(" ") || "—";
+
+        // Fetch assigned materials (non-critical)
+        let materials: string[] = [];
+        try {
+          const cl2 = getSafeBrowserClient();
+          if (cl2) {
+            const { data: items } = await cl2.rpc("get_student_assigned_items", {
+              p_school_id: schoolId,
+              p_student_id: studentData.student_id,
+            });
+            materials = (items || []).map((i: any) => i.item_name as string);
+          }
+        } catch { /* non-critical */ }
+
+        // Check gate ban (non-critical — ban overrides frozen check below)
+        let gateBanned = false;
+        let gateBanReason = "";
+        try {
+          const cl3 = getSafeBrowserClient();
+          if (cl3) {
+            const { data: banRows } = await cl3.rpc("check_gate_ban", {
+              p_school_id: schoolId,
+              p_student_id: studentData.student_id,
+            });
+            if (banRows && (banRows as any[]).length > 0) {
+              gateBanned = true;
+              gateBanReason = (banRows as any[])[0].reason || "Banned from entry";
+            }
+          }
+        } catch { /* non-critical */ }
+
+        if (studentData.is_frozen || gateBanned) {
           playChime("ERROR");
           setQuickResult({
-            result: { action: "DENIED", direction: "in", check_in_time: null, check_out_time: null, tap_in_points: 0, tap_out_points: 0, denied_reason: "Card is frozen — contact the bursar" },
+            result: {
+              action: "DENIED", direction: "in",
+              check_in_time: null, check_out_time: null,
+              tap_in_points: 0, tap_out_points: 0,
+              denied_reason: gateBanned ? gateBanReason : "Card is frozen — contact the bursar",
+            },
             name: studentData.legal_name,
             photo: studentData.profile_photo_path,
-            role: `${studentData.class_name} · ${studentData.admission_number}`,
             category: "Student",
+            f1l: "Class",       f1v: classDisplay,
+            f2l: "Reg Number",  f2v: studentData.admission_number,
+            f3l: "Issue Date",  f3v: fmtDate(issuedAt),
+            f4l: "Expiry Date", f4v: issuedAt ? fmtDate(addYears(issuedAt, 3)) : "—",
+            materials,
           });
           return;
         }
@@ -724,8 +863,12 @@ export default function GatePage() {
           result: tapRes,
           name: studentData.legal_name,
           photo: studentData.profile_photo_path,
-          role: `${studentData.class_name} · ${studentData.admission_number}`,
           category: "Student",
+          f1l: "Class",       f1v: classDisplay,
+          f2l: "Reg Number",  f2v: studentData.admission_number,
+          f3l: "Issue Date",  f3v: fmtDate(issuedAt),
+          f4l: "Expiry Date", f4v: issuedAt ? fmtDate(addYears(issuedAt, 3)) : "—",
+          materials,
         });
 
         setRecentActivity((prev) => [
@@ -774,14 +917,27 @@ export default function GatePage() {
 
       // If Staff found, execute staff tap
       if (staffData) {
+        // Fetch card issued_at for ID card display
+        let staffIssuedAt: string | null = null;
+        try {
+          const cl = getSafeBrowserClient();
+          if (cl && staffData.card_assignment_id) {
+            const { data: ca } = await cl.from("card_assignments").select("issued_at").eq("id", staffData.card_assignment_id).single();
+            staffIssuedAt = ca?.issued_at ?? null;
+          }
+        } catch { /* non-critical */ }
+
         if (staffData.is_frozen) {
           playChime("ERROR");
           setQuickResult({
             result: { action: "DENIED", direction: "in", check_in_time: null, check_out_time: null, tap_in_points: 0, tap_out_points: 0, denied_reason: "Staff card is frozen — contact admin" },
             name: staffData.legal_name,
             photo: staffData.profile_photo_path,
-            role: `${staffData.job_title}${staffData.department ? " · " + staffData.department : ""}`,
             category: "Staff",
+            f1l: "Job Title",   f1v: staffData.job_title,
+            f2l: "Staff #",     f2v: staffData.employee_number,
+            f3l: "Department",  f3v: staffData.department || "—",
+            f4l: "Issue Date",  f4v: fmtDate(staffIssuedAt),
           });
           return;
         }
@@ -810,8 +966,11 @@ export default function GatePage() {
           result: convertedRes,
           name: staffData.legal_name,
           photo: staffData.profile_photo_path,
-          role: `${staffData.job_title}${staffData.department ? ` · ${staffData.department}` : ""}`,
           category: "Staff",
+          f1l: "Job Title",   f1v: staffData.job_title,
+          f2l: "Staff #",     f2v: staffData.employee_number,
+          f3l: "Department",  f3v: staffData.department || "—",
+          f4l: "Issue Date",  f4v: fmtDate(staffIssuedAt),
         });
 
         setRecentActivity((prev) => [
@@ -877,6 +1036,7 @@ export default function GatePage() {
     setStudentLookupLoading(true);
     setStudentError("");
     setStudentCard(null);
+    setStudentIssuedAt(null);
     setStudentTapResult(null);
 
     try {
@@ -935,6 +1095,15 @@ export default function GatePage() {
 
       if (!resolved) throw new Error("No student card found with that number or UID");
       setStudentCard(resolved);
+
+      // Fetch issued_at for ID card display
+      try {
+        const cl = getSafeBrowserClient();
+        if (cl && resolved.card_assignment_id) {
+          const { data: ca } = await cl.from("card_assignments").select("issued_at").eq("id", resolved.card_assignment_id).single();
+          setStudentIssuedAt(ca?.issued_at ?? null);
+        }
+      } catch { /* non-critical */ }
     } catch (err: any) {
       setStudentError(err?.message || "Card not found");
       playChime("ERROR");
@@ -978,6 +1147,7 @@ export default function GatePage() {
     setStaffLookupLoading(true);
     setStaffError("");
     setStaffCard(null);
+    setStaffIssuedAt(null);
     setStaffTapResult(null);
     try {
       const result = await supabaseAttendanceService.lookupStaffCardHolder({
@@ -986,6 +1156,15 @@ export default function GatePage() {
       });
       if (!result) throw new Error("No staff member found matching that input");
       setStaffCard(result as StaffCard);
+
+      // Fetch issued_at for ID card display
+      try {
+        const cl = getSafeBrowserClient();
+        if (cl && result.card_assignment_id) {
+          const { data: ca } = await cl.from("card_assignments").select("issued_at").eq("id", result.card_assignment_id).single();
+          setStaffIssuedAt(ca?.issued_at ?? null);
+        }
+      } catch { /* non-critical */ }
     } catch (err: any) {
       setStaffError(err?.message || "Staff not found");
       playChime("ERROR");
@@ -1060,16 +1239,16 @@ export default function GatePage() {
     }
   }
 
-  const TABS: { key: GateMode; icon: any; label: string }[] = [
-    { key: "home",    icon: Home,      label: "Overview" },
-    { key: "student", icon: Users,     label: "Student" },
-    { key: "staff",   icon: Briefcase, label: "Staff" },
-    { key: "visitor", icon: UserPlus,  label: "Visitors" },
+  const TABS: { key: GateMode; icon: any; label: string; color: string; active: string }[] = [
+    { key: "home",    icon: Home,      label: "Overview", color: "bg-gray-100 text-gray-700",   active: "bg-gray-900 text-white" },
+    { key: "student", icon: Users,     label: "Students", color: "bg-emerald-50 text-emerald-700", active: "bg-emerald-600 text-white" },
+    { key: "staff",   icon: Briefcase, label: "Staff",    color: "bg-blue-50 text-blue-700",    active: "bg-blue-600 text-white" },
+    { key: "visitor", icon: UserPlus,  label: "Visitors", color: "bg-violet-50 text-violet-700", active: "bg-violet-600 text-white" },
   ];
 
   if (authLoading) {
     return (
-      <DashboardShell>
+      <DashboardShell hideHeader>
         <div className="flex items-center justify-center py-20">
           <RefreshCw className="w-6 h-6 text-gray-400 animate-spin" />
         </div>
@@ -1078,68 +1257,50 @@ export default function GatePage() {
   }
 
   return (
-    <DashboardShell>
-      {/* Top Bar with Tabs and NFC Toggle */}
-      <div className="px-4 pt-3 pb-0 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
-        <div className="flex gap-1 bg-gray-100 p-1 rounded-2xl flex-1 max-w-md">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setMode(t.key)}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-xl transition-all ${
-                mode === t.key
-                  ? "bg-white text-gray-900 shadow-sm"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              <t.icon className="w-3.5 h-3.5" />
-              <span>{t.label}</span>
-            </button>
-          ))}
+    <DashboardShell hideHeader>
+      {/* Big Tab Nav */}
+      <div className="px-3 pt-3 pb-0">
+        <div className="grid grid-cols-4 gap-2 mb-3">
+          {TABS.map((t) => {
+            const isActive = mode === t.key;
+            return (
+              <button
+                key={t.key}
+                onClick={() => setMode(t.key)}
+                className={`flex flex-col items-center justify-center gap-1.5 py-4 rounded-2xl font-semibold transition-all ${isActive ? t.active : t.color}`}
+              >
+                <t.icon className="w-6 h-6" />
+                <span className="text-sm">{t.label}</span>
+              </button>
+            );
+          })}
         </div>
 
-        {/* Global NFC Listener Toggle */}
-        <div className="flex items-center gap-2">
-          {nfcSupported && (
-            <button
-              onClick={toggleNFC}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition ${
-                listening
-                  ? "bg-red-50 text-red-600 border-red-200 animate-pulse"
-                  : "bg-white text-gray-700 border-gray-200 hover:border-gray-300 shadow-sm"
-              }`}
-              title={listening ? "Stop NFC reader" : "Start NFC reader for real cards"}
-            >
-              {listening ? (
-                <>
-                  <StopCircle className="w-3.5 h-3.5 text-red-600" />
-                  <span>Listening for NFC…</span>
-                </>
-              ) : (
-                <>
-                  <Wifi className="w-3.5 h-3.5 text-gray-600" />
-                  <span>NFC Reader</span>
-                </>
-              )}
-            </button>
-          )}
-
-          {/* Direction toggle */}
+        {/* Direction + NFC controls */}
+        <div className="flex items-center justify-between gap-2 mb-1">
           <div className="inline-flex bg-gray-100 p-0.5 rounded-xl text-xs">
             {(["auto", "in", "out"] as const).map((dir) => (
               <button
                 key={dir}
                 onClick={() => setDirectionChoice(dir)}
-                className={`px-2.5 py-1 rounded-lg font-medium capitalize transition ${
-                  directionChoice === dir
-                    ? "bg-white text-gray-900 shadow-xs font-semibold"
-                    : "text-gray-500 hover:text-gray-700"
+                className={`px-3 py-1.5 rounded-lg font-semibold capitalize transition ${
+                  directionChoice === dir ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
                 }`}
               >
                 {dir === "auto" ? "Smart" : dir}
               </button>
             ))}
           </div>
+          {nfcSupported && (
+            <button
+              onClick={toggleNFC}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition ${
+                listening ? "bg-red-50 text-red-600 border-red-200 animate-pulse" : "bg-white text-gray-700 border-gray-200 hover:border-gray-300"
+              }`}
+            >
+              {listening ? <><StopCircle className="w-3.5 h-3.5" /><span>NFC Active</span></> : <><Wifi className="w-3.5 h-3.5" /><span>NFC</span></>}
+            </button>
+          )}
         </div>
       </div>
 
@@ -1154,44 +1315,18 @@ export default function GatePage() {
                   <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center">
                     <Shield className="w-4 h-4 text-emerald-400" />
                   </div>
-                  <div>
-                    <h2 className="text-sm font-bold tracking-tight">Universal Gate Scanner</h2>
-                    <p className="text-[11px] text-gray-400">Scan student, staff, or visitor cards</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <VirtualCardTap
-                    busy={quickProcessing}
-                    onTap={(cn) => {
-                      setQuickInput(cn);
-                      processUniversalInput(cn);
-                    }}
-                  />
-                  {nfcSupported && (
-                    <button
-                      onClick={toggleNFC}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition ${
-                        listening
-                          ? "bg-red-500/20 text-red-300 border-red-500/40 animate-pulse"
-                          : "bg-white/10 text-white border-white/20 hover:bg-white/20"
-                      }`}
-                    >
-                      <Wifi className="w-3.5 h-3.5" />
-                      <span>{listening ? "NFC Active" : "NFC"}</span>
-                    </button>
-                  )}
+                  <h2 className="text-sm font-bold tracking-tight">Gate Scanner</h2>
                 </div>
               </div>
 
-              {/* Input Form */}
+              {/* Input Form — NFC card tap fills this automatically */}
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
                   processUniversalInput(quickInput);
                 }}
-                className="flex gap-2"
               >
-                <div className="relative flex-1">
+                <div className="relative">
                   <CreditCard className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input
                     type="text"
@@ -1200,44 +1335,13 @@ export default function GatePage() {
                       setQuickInput(e.target.value);
                       setQuickError("");
                     }}
-                    placeholder="Scan NFC, Card #, ADM-..., STF-..., or VIS-..."
-                    className="w-full pl-10 pr-4 py-2.5 bg-white/10 border border-white/15 rounded-2xl text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-400/50 font-mono"
+                    placeholder="Tap NFC card to scan…"
+                    autoFocus
+                    className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/15 rounded-2xl text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-400/50 font-mono"
                   />
                 </div>
-                <button
-                  type="submit"
-                  disabled={quickProcessing || !quickInput.trim()}
-                  className="px-5 py-2.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-gray-950 font-bold text-sm disabled:opacity-40 transition flex items-center gap-1.5 shrink-0"
-                >
-                  {quickProcessing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                  <span>Scan</span>
-                </button>
               </form>
 
-              {/* Quick presets for testing */}
-              <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-white/10 text-xs">
-                <span className="text-gray-400 font-medium">Quick Test:</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setQuickInput("AC4C1107");
-                    processUniversalInput("AC4C1107", true);
-                  }}
-                  className="px-2.5 py-1 bg-white/10 hover:bg-white/20 rounded-lg text-emerald-300 font-mono transition"
-                >
-                  Josiane (Student: AC4C1107)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setQuickInput("STF-GATE-01");
-                    processUniversalInput("STF-GATE-01");
-                  }}
-                  className="px-2.5 py-1 bg-white/10 hover:bg-white/20 rounded-lg text-blue-300 font-mono transition"
-                >
-                  David (Staff: STF-GATE-01)
-                </button>
-              </div>
 
               {quickError && (
                 <div className="flex items-center gap-2 p-3 bg-red-500/15 border border-red-500/30 rounded-xl text-xs text-red-200">
@@ -1247,15 +1351,18 @@ export default function GatePage() {
               )}
 
               {quickResult && (
-                <div className="bg-white rounded-2xl p-4 text-gray-900 shadow-md">
-                  <TapResultCard
-                    result={quickResult.result}
-                    name={quickResult.name}
-                    photo={quickResult.photo}
-                    role={quickResult.role}
-                    category={quickResult.category}
-                  />
-                </div>
+                <TapResultCard
+                  result={quickResult.result}
+                  name={quickResult.name}
+                  photo={quickResult.photo}
+                  schoolName={activeSchool?.name}
+                  category={quickResult.category}
+                  field1Label={quickResult.f1l} field1Value={quickResult.f1v}
+                  field2Label={quickResult.f2l} field2Value={quickResult.f2v}
+                  field3Label={quickResult.f3l} field3Value={quickResult.f3v}
+                  field4Label={quickResult.f4l} field4Value={quickResult.f4v}
+                  materials={quickResult.materials}
+                />
               )}
             </div>
 
@@ -1349,13 +1456,6 @@ export default function GatePage() {
                   <CreditCard className="w-4 h-4 text-emerald-600" /> Student Card Scan
                 </h2>
                 <div className="flex items-center gap-2">
-                  <VirtualCardTap
-                    busy={studentLookupLoading}
-                    onTap={(cn) => {
-                      setStudentCardInput(cn);
-                      lookupStudentCardWithVal(cn);
-                    }}
-                  />
                   {nfcSupported && (
                     <button
                       onClick={toggleNFC}
@@ -1395,20 +1495,6 @@ export default function GatePage() {
                 </button>
               </div>
 
-              {/* Quick test chip */}
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                <span>Quick:</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStudentCardInput("AC4C1107");
-                    lookupStudentCardWithVal("AC4C1107", true);
-                  }}
-                  className="text-emerald-600 font-mono hover:underline"
-                >
-                  Tumukunde Josiane (AC4C1107)
-                </button>
-              </div>
 
               {studentError && (
                 <div className="flex items-center gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
@@ -1455,8 +1541,12 @@ export default function GatePage() {
                   result={studentTapResult}
                   name={studentCard.legal_name}
                   photo={studentCard.profile_photo_path}
-                  role={studentCard.class_name}
+                  schoolName={activeSchool?.name}
                   category="Student"
+                  field1Label="Class"       field1Value={[studentCard.education_level_name, studentCard.class_name].filter(Boolean).join(" ") || "—"}
+                  field2Label="Reg Number"  field2Value={studentCard.admission_number}
+                  field3Label="Issue Date"  field3Value={fmtDate(studentIssuedAt)}
+                  field4Label="Expiry Date" field4Value={studentIssuedAt ? fmtDate(addYears(studentIssuedAt, 3)) : "—"}
                 />
                 <button
                   onClick={() => {
@@ -1519,26 +1609,6 @@ export default function GatePage() {
                 </button>
               </div>
 
-              {/* Quick staff select pills */}
-              {activeStaffList.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs">
-                  <span className="text-gray-400 font-medium">Active Staff:</span>
-                  {activeStaffList.map((s) => (
-                    <button
-                      key={s.staff_record_id}
-                      type="button"
-                      onClick={() => {
-                        setStaffCard(s);
-                        setStaffCardInput(s.employee_number || s.legal_name);
-                        setStaffError("");
-                      }}
-                      className="px-2 py-0.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium transition"
-                    >
-                      {s.legal_name} ({s.employee_number || s.job_title})
-                    </button>
-                  ))}
-                </div>
-              )}
 
               {staffError && (
                 <div className="flex items-center gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
@@ -1585,8 +1655,12 @@ export default function GatePage() {
                   result={staffTapResult}
                   name={staffCard.legal_name}
                   photo={staffCard.profile_photo_path}
-                  role={`${staffCard.job_title}${staffCard.department ? ` · ${staffCard.department}` : ""}`}
+                  schoolName={activeSchool?.name}
                   category="Staff"
+                  field1Label="Job Title"   field1Value={staffCard.job_title}
+                  field2Label="Staff #"     field2Value={staffCard.employee_number}
+                  field3Label="Department"  field3Value={staffCard.department || "—"}
+                  field4Label="Issue Date"  field4Value={fmtDate(staffIssuedAt)}
                 />
                 <button
                   onClick={() => {

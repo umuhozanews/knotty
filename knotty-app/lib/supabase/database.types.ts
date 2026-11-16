@@ -874,15 +874,19 @@ type RawTables = {
       fee_structures: {
         Row: {
           id: string; school_id: string; name: string; amount: number;
-          applies_to: string[]; is_active: boolean; created_at: string; updated_at: string;
+          applies_to: string[]; is_active: boolean;
+          fee_type: string; other_fee_name: string | null;
+          created_at: string; updated_at: string;
         };
         Insert: {
           id?: string; school_id: string; name: string; amount: number;
-          applies_to?: string[]; is_active?: boolean; created_at?: string; updated_at?: string;
+          applies_to?: string[]; is_active?: boolean;
+          fee_type?: string; other_fee_name?: string | null;
+          created_at?: string; updated_at?: string;
         };
         Update: {
           name?: string; amount?: number; applies_to?: string[];
-          is_active?: boolean; updated_at?: string;
+          is_active?: boolean; fee_type?: string; other_fee_name?: string | null; updated_at?: string;
         };
       };
       fee_invoices: {
@@ -890,18 +894,21 @@ type RawTables = {
           id: string; school_id: string; student_id: string; fee_structure_id: string | null;
           title: string; total_amount: number; amount_paid: number; due_date: string | null;
           status: "pending" | "partial" | "paid" | "overdue" | "cancelled";
+          fee_type: string; term_label: string | null;
           created_at: string; updated_at: string;
         };
         Insert: {
           id?: string; school_id: string; student_id: string; fee_structure_id?: string | null;
           title: string; total_amount: number; amount_paid?: number; due_date?: string | null;
           status?: "pending" | "partial" | "paid" | "overdue" | "cancelled";
+          fee_type?: string; term_label?: string | null;
           created_at?: string; updated_at?: string;
         };
         Update: {
           title?: string; total_amount?: number; amount_paid?: number;
           due_date?: string | null;
-          status?: "pending" | "partial" | "paid" | "overdue" | "cancelled"; updated_at?: string;
+          status?: "pending" | "partial" | "paid" | "overdue" | "cancelled";
+          fee_type?: string; term_label?: string | null; updated_at?: string;
         };
       };
       fee_payments: {
@@ -916,6 +923,41 @@ type RawTables = {
           phone?: string | null; notes?: string | null; created_by_person_id?: string | null; created_at?: string;
         };
         Update: { notes?: string | null; };
+      };
+      school_materials: {
+        Row: {
+          id: string; school_id: string; name: string;
+          category: "kitchen" | "it_tools" | "garden" | "labs" | "dormitory";
+          item_code: string | null; unit: string; quantity: number; min_quantity: number;
+          unit_cost: number; supplier: string | null; location: string | null; notes: string | null;
+          created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; school_id: string; name: string;
+          category: "kitchen" | "it_tools" | "garden" | "labs" | "dormitory";
+          item_code?: string | null; unit?: string; quantity?: number; min_quantity?: number;
+          unit_cost?: number; supplier?: string | null; location?: string | null; notes?: string | null;
+          created_at?: string; updated_at?: string;
+        };
+        Update: {
+          name?: string; category?: "kitchen" | "it_tools" | "garden" | "labs" | "dormitory";
+          item_code?: string | null; unit?: string; quantity?: number; min_quantity?: number;
+          unit_cost?: number; supplier?: string | null; location?: string | null; notes?: string | null;
+          updated_at?: string;
+        };
+      };
+      material_transactions: {
+        Row: {
+          id: string; school_id: string; material_id: string;
+          type: "stock_in" | "stock_out" | "damage" | "return";
+          quantity: number; note: string | null; created_at: string;
+        };
+        Insert: {
+          id?: string; school_id: string; material_id: string;
+          type: "stock_in" | "stock_out" | "damage" | "return";
+          quantity: number; note?: string | null; created_at?: string;
+        };
+        Update: { note?: string | null; };
       };
       notifications: {
         Row: {
@@ -1649,6 +1691,7 @@ export type Database = {
           wallet_balance: number;
           card_status: string;
           is_frozen: boolean;
+          issued_at: string | null;
         }[];
       };
       top_up_wallet: {
@@ -1844,6 +1887,18 @@ export type Database = {
       get_gate_overview: {
         Args: { p_school_id: string };
         Returns: Json;
+      };
+      get_student_assigned_items: {
+        Args: { p_school_id: string; p_student_id: string };
+        Returns: { id: string; item_name: string; item_code: string | null; assigned_at: string }[];
+      };
+      get_school_stats: {
+        Args: { p_school_id: string };
+        Returns: Json;
+      };
+      check_gate_ban: {
+        Args: { p_school_id: string; p_student_id?: string | null; p_staff_record_id?: string | null };
+        Returns: { is_banned: boolean; reason: string; banned_until: string | null }[];
       };
       search_visitor_profiles: {
         Args: { p_school_id: string; p_query: string; p_limit?: number };

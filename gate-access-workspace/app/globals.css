@@ -1,0 +1,217 @@
+﻿@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Font */
+  --font-sans: Arial, Helvetica, sans-serif;
+
+  /* Brand colors — green primary, blue secondary */
+  --color-brand:        #16A34A;
+  --color-brand-light:  #DCFCE7;
+  --color-brand-dark:   #15803D;
+  --color-gold:         #2563EB;
+
+  /* Standardised corner radii */
+  --radius-sm:  4px;
+  --radius-md:  6px;
+  --radius-lg:  8px;
+  --radius-xl:  8px;
+  --radius-2xl: 10px;
+  --radius-3xl: 12px;
+}
+
+/* ── Design tokens ───────────────────────────────── */
+:root {
+  color-scheme: light;
+  --bg:             #F2FBF5;
+  --card:           #ffffff;
+  --border:         #C8E6D4;
+  --text-primary:   #111827;
+  --text-secondary: #374151;
+  --text-muted:     #6B7280;
+  --accent:         #16A34A;
+  --accent-light:   #DCFCE7;
+  --gold:           #2563EB;
+}
+
+.dark {
+  color-scheme: dark;
+  --bg:             #0D1410;
+  --card:           #162019;
+  --border:         #1F3527;
+  --text-primary:   #F0FDF4;
+  --text-secondary: #D1FAE5;
+  --text-muted:     #86EFAC;
+  --accent:         #4ADE80;
+  --accent-light:   #14532D;
+  --gold:           #60A5FA;
+  --color-brand:        #4ADE80;
+  --color-brand-light:  #14532D;
+  --color-brand-dark:   #86EFAC;
+  --color-gold:         #60A5FA;
+}
+
+:root { --text-readable: #374151; --text-subtle: #6B7280; }
+.dark { --text-readable: #D1FAE5; --text-subtle: #86EFAC; }
+:root {
+  --surface-muted: #ECFDF5;
+  --severity-minor-bg: #FEF3C7;
+  --severity-minor-text: #713F12;
+  --severity-moderate-bg: #FEE2E2;
+  --severity-moderate-text: #15803D;
+  --severity-serious-bg: #FEE2E2;
+  --severity-serious-text: #991B1B;
+}
+.dark {
+  --surface-muted: #1A2E22;
+  --severity-minor-bg: #422006;
+  --severity-minor-text: #FDE68A;
+  --severity-moderate-bg: #450A0A;
+  --severity-moderate-text: #FCA5A5;
+  --severity-serious-bg: #450A0A;
+  --severity-serious-text: #FCA5A5;
+}
+
+/* ── Base ────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  background-color: var(--bg) !important;
+  color:            var(--text-primary) !important;
+  font-family:      'Plus Jakarta Sans', sans-serif !important;
+  font-size:        15px;
+  overflow-x:       hidden;
+}
+
+.dark body { background-color: var(--bg) !important; color: var(--text-primary) !important; }
+
+/* ── Remap orange utilities → green ─────────────────── */
+.bg-orange-50  { background-color: var(--accent-light) !important; }
+.bg-orange-100 { background-color: color-mix(in srgb, var(--accent) 14%, var(--card)) !important; }
+.bg-orange-500, .bg-orange-600 { background-color: var(--accent) !important; }
+.text-orange-400, .text-orange-500, .text-orange-600 { color: var(--accent) !important; }
+.text-orange-700 { color: var(--color-brand-dark) !important; }
+.border-orange-200, .border-orange-300, .border-orange-400, .border-orange-500 { border-color: var(--accent) !important; }
+.hover\:border-orange-300:hover { border-color: var(--accent) !important; }
+
+/* ── Remap amber utilities → blue (warning states) ── */
+.bg-amber-50  { background-color: #EFF6FF !important; }
+.bg-amber-100 { background-color: #DBEAFE !important; }
+.bg-amber-400, .bg-amber-500, .bg-amber-600 { background-color: #2563EB !important; }
+.text-amber-400, .text-amber-500, .text-amber-600 { color: #2563EB !important; }
+.text-amber-700 { color: #1D4ED8 !important; }
+.border-amber-200, .border-amber-300, .border-amber-400, .border-amber-500 { border-color: #93C5FD !important; }
+.from-amber-400 { --tw-gradient-from: #60A5FA !important; }
+.to-amber-600   { --tw-gradient-to:   #2563EB !important; }
+
+/* ── Keep secondary copy readable ────────────────── */
+.text-gray-400, .text-gray-500, .text-stone-400, .text-stone-500, .text-neutral-400, .text-neutral-500 { color: var(--text-readable) !important; }
+.dark .text-gray-400, .dark .text-gray-500, .dark .text-stone-400, .dark .text-stone-500, .dark .text-neutral-400, .dark .text-neutral-500 { color: var(--text-readable) !important; }
+
+/* ── Font sizes — bump floor and small utility sizes ─ */
+[class~="text-[8px]"], [class~="text-[9px]"], [class~="text-[10px]"], [class~="text-[11px]"] { font-size: 13px !important; line-height: 1.45 !important; }
+.text-xs { font-size: 13.5px !important; line-height: 1.5  !important; }
+.text-sm { font-size: 15px   !important; line-height: 1.55 !important; }
+
+/* ── Teal → green complement ─────────────────────── */
+.from-teal-400 { --tw-gradient-from: #34D399 !important; }
+.to-teal-400   { --tw-gradient-to:   #34D399 !important; }
+
+/* ── Card containers (div only, not img/span/input) ─ */
+div.bg-white {
+  border:     1px solid var(--border);
+  box-shadow: none !important;
+}
+
+div.bg-white img,
+div.bg-white div.bg-white img {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* ── Flatten standard shadow utilities ────────────── */
+.shadow-sm,
+.shadow,
+.shadow-md,
+.shadow-lg,
+.shadow-xl,
+.shadow-2xl,
+.shadow-inner {
+  box-shadow: none !important;
+}
+
+/* ── Rounded corners ─────────────────────────────── */
+.rounded-sm  { border-radius:  4px !important; }
+.rounded-md  { border-radius:  6px !important; }
+.rounded-lg  { border-radius:  8px !important; }
+.rounded-xl  { border-radius:  8px !important; }
+.rounded-2xl { border-radius: 10px !important; }
+.rounded-3xl { border-radius: 12px !important; }
+
+/* ── Inputs & Selects ────────────────────────────── */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+select,
+textarea {
+  border:           1px solid var(--border) !important;
+  border-radius:    8px !important;
+  background-color: var(--card) !important;
+  color:            var(--text-primary) !important;
+  outline:          none !important;
+  box-shadow:       none !important;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent) !important;
+}
+
+/* ── Tables ──────────────────────────────────────── */
+table { border-collapse: collapse !important; }
+th {
+  background-color: var(--bg) !important;
+  color:            var(--text-primary) !important;
+  font-weight:      700 !important;
+  border-bottom:    1px solid var(--border) !important;
+}
+td { border-bottom: 1px solid var(--border) !important; }
+
+/* Honor the selected theme across legacy utility and hard-coded surfaces. */
+.dark div.bg-white, .dark .bg-white { background-color: var(--card) !important; border-color: var(--border) !important; }
+.dark [class*="bg-gray-50"], .dark [class*="bg-gray-100"], .dark [class*="bg-[#F5F5F5]"], .dark [class*="bg-[#fcf9f8]"] { background-color: var(--bg) !important; }
+.dark [class*="border-gray-100"], .dark [class*="border-gray-200"], .dark [class*="border-gray-300"] { border-color: var(--border) !important; }
+.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), .dark select, .dark textarea { background-color: var(--card) !important; color: var(--text-primary) !important; border-color: var(--border) !important; }
+.dark th { background-color: var(--bg) !important; color: var(--text-primary) !important; border-color: var(--border) !important; }
+.dark td { border-color: var(--border) !important; }
+.dark nav a.bg-blue-50.text-blue-700 { background-color: var(--accent-light) !important; color: var(--accent) !important; border-color: var(--border) !important; }
+
+/* These two legacy screens use fixed palette classes in their markup. */
+.materials-page { background-color: var(--bg) !important; color: var(--text-primary) !important; }
+.materials-page [class*="bg-[#ffffff]"] { background-color: var(--card) !important; }
+.materials-page [class*="bg-[#fcf9f8]"] { background-color: var(--surface-muted) !important; }
+.materials-page [class*="text-[#121212]"] { color: var(--text-primary) !important; }
+.materials-page [class*="border-[#dcd9d9]"] { border-color: var(--border) !important; }
+.materials-page [class*="text-gray-200"], .materials-page [class*="text-gray-300"] { color: var(--text-subtle) !important; }
+.materials-action { background-color: var(--accent) !important; border: 1px solid var(--accent) !important; color: #fff !important; }
+.materials-action:hover { background-color: var(--color-brand-dark) !important; color: #fff !important; }
+.materials-action:disabled { opacity: .55; }
+
+/* ── Sidebar active-link override ────────────────── */
+nav a.bg-blue-50.text-blue-700 {
+  background-color: var(--accent-light) !important;
+  color:            var(--accent) !important;
+  border:           1px solid var(--border) !important;
+}
+nav a.bg-blue-50.text-blue-700 * { color: var(--accent) !important; }
+
+/* Sidebar role-badge */
+.from-blue-50.to-green-50 {
+  background: var(--accent-light) !important;
+  border: 1px solid var(--border) !important;
+}
+
+/* ── Scrollbars ──────────────────────────────────── */
+::-webkit-scrollbar       { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+/* ── Loader ──────────────────────────────────────── */
+.animate-spin { color: var(--accent) !important; }

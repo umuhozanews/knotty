@@ -608,6 +608,9 @@ function StudentRow({ s, idx, onEdit, onDelete, onIssue, onStatus, issuing, isCl
           {s.gender && <span className={`text-xs px-1.5 py-0.5 rounded-md font-medium ${s.gender === "M" ? "bg-blue-50 text-blue-500" : "bg-pink-50 text-pink-500"}`}>{s.gender === "M" ? "M" : "F"}</span>}
         </div>
         <p className="text-xs text-gray-400 font-mono">{s.student_code}{age ? ` · ${age}y` : ""}</p>
+        {(s.level?.name || s.class?.name) && (
+          <p className="text-[11px] text-gray-400 mt-0.5">{[s.level?.name, s.class?.name].filter(Boolean).join(" · ")}</p>
+        )}
         {user?.role !== "TEACHER" && (
           s.card ? (
             <p className="text-[11px] font-bold text-blue-600 dark:text-blue-400 mt-0.5 sm:hidden">
@@ -982,14 +985,7 @@ export default function StudentsPage() {
           });
         setLevels(sorted);
         setClasses(mappedClasses);
-        if (sorted.length > 0) {
-          setSelectedLevel(sorted[0].id);
-          const first = mappedClasses.find((c) => c.level.id === sorted[0].id) || mappedClasses[0];
-          if (first) setSelectedClass(first.id);
-          else setSelectedClass(ALL_KEY);
-        } else {
-          setSelectedClass(ALL_KEY);
-        }
+        setSelectedClass(ALL_KEY);
       }).catch((err) => {
         console.error("Failed to load levels/classes from Supabase:", err);
         setSelectedClass(ALL_KEY);
@@ -1110,7 +1106,7 @@ export default function StudentsPage() {
                   >
                     <span>{level.name}</span>
                     <span className={`text-xs font-normal ${isLevelOpen ? "text-blue-600/70" : "text-gray-400"}`}>
-                      {level._count?.students ?? 0}
+                      {studentsByClass[ALL_KEY]?.filter(s => s.level?.id === level.id).length ?? 0}
                     </span>
                   </button>
                   {isLevelOpen && levelClasses.map((cls) => (
@@ -1121,7 +1117,7 @@ export default function StudentsPage() {
                     >
                       <span>Class {cls.name}</span>
                       <span className={`${selectedClass === cls.id ? "text-white/80" : "text-gray-400"}`}>
-                        {studentsByClass[cls.id]?.length ?? cls._count?.students ?? 0}
+                        {studentsByClass[cls.id]?.length ?? studentsByClass[ALL_KEY]?.filter(s => s.class?.id === cls.id).length ?? 0}
                       </span>
                     </button>
                   ))}

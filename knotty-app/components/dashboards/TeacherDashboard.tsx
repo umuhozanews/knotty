@@ -22,11 +22,6 @@ export default function TeacherDashboard() {
   return (
     <div className="flex gap-3 h-full overflow-hidden">
       <div className="flex-1 flex flex-col gap-3 overflow-y-auto min-w-0 pr-1">
-        <div>
-          <h1 className="text-xl font-bold text-gray-800">Welcome, {user?.first_name}</h1>
-          <p className="text-sm text-gray-400">Teacher Dashboard · {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</p>
-        </div>
-
         <section className="rounded-2xl bg-white p-4 shadow-sm">
           <div className="mb-3">
             <h2 className="text-sm font-bold text-gray-800">Timetable</h2>

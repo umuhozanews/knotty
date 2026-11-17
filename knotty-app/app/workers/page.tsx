@@ -237,6 +237,7 @@ function WorkerModal({
           code: result.employee_number || empCode,
           role: form.role,
         });
+        onSuccess(); // refresh the list immediately while user reads credentials
       }
     } catch (err: any) {
       setError(err?.message || "Failed to save worker record");
@@ -746,6 +747,7 @@ export default function WorkersPage() {
   const [cardWorker, setCardWorker] = useState<LocalWorkerItem | null>(null);
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteConfirmWorker, setDeleteConfirmWorker] = useState<LocalWorkerItem | null>(null);
 
   useEffect(() => {
     const id = activeSchool?.id || user?.school_id;
@@ -840,9 +842,9 @@ export default function WorkersPage() {
   };
 
   const handleDelete = async (worker: LocalWorkerItem) => {
-    if (!confirm(`Remove ${worker.full_name} from staff? This will terminate their record.`)) return;
     const schoolId = activeSchool?.id || user?.school_id;
     if (!schoolId) return;
+    setDeleteConfirmWorker(null);
     setDeletingId(worker.id);
     try {
       await supabaseStaffService.updateStaffStatus(schoolId, worker.id, "terminated", "Removed by admin");
@@ -882,6 +884,28 @@ export default function WorkersPage() {
           onClose={() => setCardWorker(null)}
           onSuccess={() => fetchWorkers()}
         />
+      )}
+      {deleteConfirmWorker && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-xl p-6 w-full max-w-sm">
+            <div className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-4">
+              <Trash2 size={22} className="text-red-500" />
+            </div>
+            <p className="font-bold text-gray-900 text-center">Remove staff member?</p>
+            <p className="text-sm text-gray-500 text-center mt-1">
+              <span className="font-semibold text-gray-700">{deleteConfirmWorker.full_name}</span> will be terminated and can no longer log in.
+            </p>
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => setDeleteConfirmWorker(null)}
+                className="flex-1 py-3 rounded-2xl text-sm bg-gray-100 text-gray-600 font-medium">Cancel</button>
+              <button onClick={() => handleDelete(deleteConfirmWorker)}
+                disabled={deletingId === deleteConfirmWorker.id}
+                className="flex-1 py-3 rounded-2xl text-sm font-bold text-white bg-red-500 disabled:opacity-50 flex items-center justify-center gap-2">
+                {deletingId === deleteConfirmWorker.id ? <RefreshCw size={14} className="animate-spin" /> : "Remove"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="space-y-3">
@@ -1066,7 +1090,7 @@ export default function WorkersPage() {
                           )}
                         </button>
                         <button
-                          onClick={() => handleDelete(worker)}
+                          onClick={() => setDeleteConfirmWorker(worker)}
                           disabled={deletingId === worker.id}
                           title="Remove from staff"
                           className="p-1.5 rounded-lg border border-red-100 text-red-400 hover:bg-red-50 transition"

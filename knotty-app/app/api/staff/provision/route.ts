@@ -62,11 +62,21 @@ export async function POST(req: NextRequest) {
     : `${prefix}-${Date.now().toString(36).slice(-5).toUpperCase()}`;
   const jobTitle = jobTitleOverride ? clean(jobTitleOverride) : (ROLE_TITLES[role_key] ?? role_key);
 
+  // Split legal name for metadata
+  const nameParts = cleanName.trim().split(/\s+/);
+  const firstName = nameParts[0] ?? cleanName;
+  const lastName = nameParts.slice(1).join(" ");
+
   // 1. Create auth user
   const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
     email: cleanEmail,
     password: cleanPassword,
     email_confirm: true,
+    user_metadata: {
+      full_name: cleanName,
+      first_name: firstName,
+      last_name: lastName,
+    },
   });
 
   if (authErr) {

@@ -41,9 +41,19 @@ interface AuthContextValue {
 }
 
 export function getDashboardPath(role: string): string {
-  if (role === "STUDENT") return "/my-dashboard";
-  if (role === "LIBRARIAN") return "/library";
-  return "/";
+  switch (role) {
+    case "STUDENT":    return "/my-dashboard";
+    case "PARENT":     return "/my-dashboard";
+    case "LIBRARIAN":  return "/library";
+    case "CANTEEN":    return "/canteen";
+    case "GATEKEEPER": return "/gate";
+    case "NURSE":      return "/health";
+    case "DISCIPLINE": return "/discipline";
+    case "BURSAR":     return "/fees";
+    case "TEACHER":    return "/attendance";
+    case "MATERIALS":  return "/materials";
+    default:           return "/";
+  }
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);

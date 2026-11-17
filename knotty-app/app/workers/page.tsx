@@ -4,7 +4,7 @@ import {
   Users, UserCheck, Plus, Briefcase, GraduationCap, Utensils,
   Shield, Heart, BookOpen, Building2, Edit, CheckCircle2, XCircle,
   AlertCircle, RefreshCw, X, Copy, Check, QrCode,
-  ShieldCheck, Trash2, CreditCard, Wifi, StopCircle, ChevronLeft
+  ShieldCheck, Trash2, CreditCard, Wifi, StopCircle, ChevronLeft, KeyRound
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import { supabaseStaffService, supabaseCardService } from "@/lib/supabase/services";
@@ -768,6 +768,148 @@ function IssueStaffCardModal({
   );
 }
 
+// ─── Reset Password Modal ─────────────────────────────────────────────────────
+function ResetPasswordModal({
+  worker,
+  onClose,
+}: {
+  worker: LocalWorkerItem;
+  onClose: () => void;
+}) {
+  const { user } = useAuth();
+  const { show } = useToast();
+  const [newPassword, setNewPassword] = useState("Staff@2024");
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  async function handleReset() {
+    setError("");
+    if (newPassword.length < 8) { setError("Password must be at least 8 characters"); return; }
+    setLoading(true);
+    try {
+      // Look up the staff member's auth_user_id via their person_id
+      const client = getSafeBrowserClient();
+      if (!client) throw new Error("Not connected");
+      const { data: personRow } = await client
+        .from("persons")
+        .select("auth_user_id")
+        .eq("id", worker.person_id)
+        .maybeSingle();
+      if (!personRow?.auth_user_id) throw new Error("Could not find staff auth account");
+
+      const resp = await fetch("/api/staff/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          staff_auth_user_id: personRow.auth_user_id,
+          new_password: newPassword,
+          actor_auth_user_id: user?.id,
+        }),
+      });
+      const result = await resp.json();
+      if (!resp.ok) throw new Error(result.error || "Reset failed");
+      setDone(true);
+      show(`Password reset for ${worker.full_name}`, "success");
+    } catch (err: any) {
+      setError(err?.message || "Failed to reset password");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function copyPassword() {
+    navigator.clipboard.writeText(newPassword);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl p-6 w-full max-w-sm border border-gray-200">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-xl bg-orange-50 flex items-center justify-center">
+              <KeyRound size={18} className="text-orange-500" />
+            </div>
+            <div>
+              <p className="font-bold text-sm text-gray-800">Reset Password</p>
+              <p className="text-xs text-gray-400">{worker.full_name}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100">
+            <X size={16} />
+          </button>
+        </div>
+
+        {done ? (
+          <div className="text-center py-4">
+            <div className="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-3">
+              <CheckCircle2 size={24} className="text-green-600" />
+            </div>
+            <p className="font-semibold text-gray-800 mb-1">Password Updated</p>
+            <p className="text-xs text-gray-500 mb-4">
+              New login credentials for <span className="font-semibold">{worker.full_name}</span>:
+            </p>
+            <div className="bg-gray-50 rounded-xl p-3 text-left mb-4 border border-gray-100">
+              <p className="text-xs text-gray-400">Email</p>
+              <p className="text-sm font-mono font-semibold text-gray-800">{worker.email}</p>
+              <p className="text-xs text-gray-400 mt-2">New Password</p>
+              <p className="text-sm font-mono font-bold text-green-700">{newPassword}</p>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={copyPassword}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50">
+                {copied ? <Check size={13} className="text-green-600" /> : <Copy size={13} />}
+                {copied ? "Copied" : "Copy"}
+              </button>
+              <button onClick={onClose}
+                className="flex-1 py-2 rounded-xl text-white text-xs font-semibold"
+                style={{ background: "#16A34A" }}>
+                Done
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {error && (
+              <div className="mb-3 p-2.5 rounded-xl bg-red-50 text-red-600 text-xs border border-red-100 flex items-center gap-1.5">
+                <AlertCircle size={13} className="shrink-0" />
+                {error}
+              </div>
+            )}
+            <label className="text-xs font-semibold text-gray-600 mb-1.5 block">New Password</label>
+            <div className="flex gap-2 mb-4">
+              <input
+                type="text"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono outline-none"
+              />
+              <button onClick={copyPassword}
+                className="px-3 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50">
+                {copied ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={onClose}
+                className="flex-1 py-2 rounded-xl text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200">
+                Cancel
+              </button>
+              <button onClick={handleReset} disabled={loading}
+                className="flex-1 py-2 rounded-xl text-white text-xs font-semibold bg-orange-500 hover:bg-orange-600 disabled:opacity-50 flex items-center justify-center gap-1.5">
+                {loading ? <RefreshCw size={13} className="animate-spin" /> : <KeyRound size={13} />}
+                Reset Password
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Workers Page ─────────────────────────────────────────────────────────
 export default function WorkersPage() {
   const { user, activeSchool, loading: authLoading } = useAuth();
@@ -784,6 +926,7 @@ export default function WorkersPage() {
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteConfirmWorker, setDeleteConfirmWorker] = useState<LocalWorkerItem | null>(null);
+  const [resetPasswordWorker, setResetPasswordWorker] = useState<LocalWorkerItem | null>(null);
 
   useEffect(() => {
     const id = activeSchool?.id || user?.school_id;
@@ -920,6 +1063,12 @@ export default function WorkersPage() {
           schoolId={activeSchool?.id || user?.school_id || ""}
           onClose={() => setCardWorker(null)}
           onSuccess={() => fetchWorkers()}
+        />
+      )}
+      {resetPasswordWorker && (
+        <ResetPasswordModal
+          worker={resetPasswordWorker}
+          onClose={() => setResetPasswordWorker(null)}
         />
       )}
       {deleteConfirmWorker && (
@@ -1111,6 +1260,13 @@ export default function WorkersPage() {
                           className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 transition"
                         >
                           <Edit size={13} />
+                        </button>
+                        <button
+                          onClick={() => setResetPasswordWorker(worker)}
+                          title="Reset Password"
+                          className="p-1.5 rounded-lg border border-orange-100 text-orange-400 hover:bg-orange-50 transition"
+                        >
+                          <KeyRound size={13} />
                         </button>
                         <button
                           onClick={() => handleToggleStatus(worker)}

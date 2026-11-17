@@ -926,38 +926,57 @@ type RawTables = {
       };
       school_materials: {
         Row: {
-          id: string; school_id: string; name: string;
-          category: "kitchen" | "it_tools" | "garden" | "labs" | "dormitory";
-          item_code: string | null; unit: string; quantity: number; min_quantity: number;
-          unit_cost: number; supplier: string | null; location: string | null; notes: string | null;
-          created_at: string; updated_at: string;
+          id: string; school_id: string; item_code: string; name: string;
+          category: "kitchen" | "catering" | "garden" | "academics" | "laboratory" | "maintenance" | "sports" | "it_office" | "dormitory";
+          location: string; unit: string; quantity: number; min_quantity: number;
+          unit_cost: number; supplier: string | null; description: string | null;
+          is_active: boolean; created_at: string; updated_at: string;
         };
         Insert: {
-          id?: string; school_id: string; name: string;
-          category: "kitchen" | "it_tools" | "garden" | "labs" | "dormitory";
-          item_code?: string | null; unit?: string; quantity?: number; min_quantity?: number;
-          unit_cost?: number; supplier?: string | null; location?: string | null; notes?: string | null;
-          created_at?: string; updated_at?: string;
+          id?: string; school_id: string; item_code: string; name: string;
+          category: "kitchen" | "catering" | "garden" | "academics" | "laboratory" | "maintenance" | "sports" | "it_office" | "dormitory";
+          location?: string; unit?: string; quantity?: number; min_quantity?: number;
+          unit_cost?: number; supplier?: string | null; description?: string | null;
+          is_active?: boolean; created_at?: string; updated_at?: string;
         };
         Update: {
-          name?: string; category?: "kitchen" | "it_tools" | "garden" | "labs" | "dormitory";
-          item_code?: string | null; unit?: string; quantity?: number; min_quantity?: number;
-          unit_cost?: number; supplier?: string | null; location?: string | null; notes?: string | null;
-          updated_at?: string;
+          name?: string;
+          category?: "kitchen" | "catering" | "garden" | "academics" | "laboratory" | "maintenance" | "sports" | "it_office" | "dormitory";
+          location?: string; unit?: string; quantity?: number; min_quantity?: number;
+          unit_cost?: number; supplier?: string | null; description?: string | null;
+          is_active?: boolean; updated_at?: string;
         };
       };
       material_transactions: {
         Row: {
           id: string; school_id: string; material_id: string;
-          type: "stock_in" | "stock_out" | "damage" | "return";
-          quantity: number; note: string | null; created_at: string;
+          transaction_type: "stock_in" | "stock_out" | "damage_disposal" | "return";
+          quantity: number; unit_cost: number; total_cost: number;
+          reference_number: string | null; notes: string | null;
+          created_by_person_id: string | null; created_at: string;
         };
         Insert: {
           id?: string; school_id: string; material_id: string;
-          type: "stock_in" | "stock_out" | "damage" | "return";
-          quantity: number; note?: string | null; created_at?: string;
+          transaction_type: "stock_in" | "stock_out" | "damage_disposal" | "return";
+          quantity: number; unit_cost?: number; total_cost?: number;
+          reference_number?: string | null; notes?: string | null;
+          created_by_person_id?: string | null; created_at?: string;
         };
-        Update: { note?: string | null; };
+        Update: { notes?: string | null; };
+      };
+      student_assigned_items: {
+        Row: {
+          id: string; school_id: string; material_id: string | null; student_id: string;
+          item_name: string; quantity: number;
+          issued_at: string; expected_return_at: string | null; returned_at: string | null;
+          notes: string | null; created_at: string;
+        };
+        Insert: {
+          id?: string; school_id: string; material_id?: string | null; student_id: string;
+          item_name: string; quantity?: number;
+          issued_at?: string; expected_return_at?: string | null; notes?: string | null; created_at?: string;
+        };
+        Update: { returned_at?: string | null; notes?: string | null; };
       };
       notifications: {
         Row: {

@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, ClipboardCheck, CreditCard, ShoppingCart,
   Banknote, AlertTriangle, Settings, LogOut, ChevronRight,
   Heart, User, CalendarDays, Wallet, X, Library,
-  UserCheck, Building2, Smartphone, Activity, Shield, Package, ScrollText,
+  UserCheck, Building2, Smartphone, Activity, Shield, Package, ScrollText, ClipboardList,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { isManagementRole } from "@/lib/roles";
@@ -24,6 +24,7 @@ const ALL_NAV = [
 
   // ── Attendance — teacher and discipline mark it ──
   { icon: ClipboardCheck,  label: "Attendance",    href: "/attendance",     roles: ["ADMIN","TEACHER","DISCIPLINE"] },
+  { icon: ClipboardList,   label: "Class Register",href: "/class-attendance",roles: ["ADMIN","TEACHER","DISCIPLINE"] },
 
   // ── Library — librarian manages; admin oversees ──
   { icon: Library,         label: "Library",       href: "/library",        roles: ["ADMIN","LIBRARIAN"] },

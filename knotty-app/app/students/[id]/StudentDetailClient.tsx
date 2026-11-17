@@ -739,22 +739,24 @@ export default function StudentProfilePage() {
 
         {/* ── Profile Hero ────────────────────────────────────────────────── */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm overflow-hidden">
-          <div className="h-20 bg-[#121212] border-b border-[#dcd9d9]/20" />
-          <div className="px-6 pb-5 -mt-10 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-            <div className="flex items-end gap-4">
-              <div className="w-20 h-20 rounded-2xl overflow-hidden flex-shrink-0 border-4 border-white dark:border-gray-900 shadow-md">
+          <div className="h-32 bg-gradient-to-br from-[#15803D] via-[#16A34A] to-[#4ADE80] relative">
+            <div className="absolute inset-0 opacity-20" style={{ backgroundImage: "radial-gradient(circle at 20% 50%, white 1px, transparent 1px), radial-gradient(circle at 80% 20%, white 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
+          </div>
+          <div className="px-6 pb-6 -mt-12 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+            <div className="flex items-end gap-5">
+              <div className="w-24 h-24 rounded-2xl overflow-hidden flex-shrink-0 border-4 border-white dark:border-gray-900 shadow-lg">
                 {profile.user.profile_photo ? (
                   <img src={profile.user.profile_photo} className="w-full h-full object-cover" alt={name} />
                 ) : (
-                  <div className="w-full h-full bg-[#121212] flex items-center justify-center text-white text-2xl font-bold">
+                  <div className="w-full h-full bg-gradient-to-br from-[#15803D] to-[#16A34A] flex items-center justify-center text-white text-3xl font-bold">
                     {initials}
                   </div>
                 )}
               </div>
               <div className="pb-1">
-                <h1 className="text-xl font-bold text-gray-800 dark:text-gray-100">{name}</h1>
-                <p className="text-sm text-gray-400">{profile.level?.name} · Class {profile.class?.name}</p>
-                <p className="text-xs text-gray-400 font-mono">{profile.student_code}{age ? ` · ${age} years old` : ""}</p>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{name}</h1>
+                <p className="text-sm font-medium text-gray-500 mt-0.5">{profile.level?.name} · Class {profile.class?.name}</p>
+                <p className="text-xs text-gray-400 font-mono mt-0.5">{profile.student_code}{age ? ` · ${age} years old` : ""}</p>
               </div>
             </div>
             <div className="pb-1 text-left sm:text-right">

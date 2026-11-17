@@ -739,45 +739,37 @@ export default function StudentProfilePage() {
 
         {/* ── Profile Hero ────────────────────────────────────────────────── */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm overflow-hidden">
-          <div className="h-32 bg-gradient-to-br from-[#15803D] via-[#16A34A] to-[#4ADE80] relative">
-            <div className="absolute inset-0 opacity-20" style={{ backgroundImage: "radial-gradient(circle at 20% 50%, white 1px, transparent 1px), radial-gradient(circle at 80% 20%, white 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
-          </div>
-          <div className="px-6 pb-6 -mt-12 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-            <div className="flex items-end gap-5">
-              <div className="w-24 h-24 rounded-2xl overflow-hidden flex-shrink-0 border-4 border-white dark:border-gray-900 shadow-lg">
-                {profile.user.profile_photo ? (
-                  <img src={profile.user.profile_photo} className="w-full h-full object-cover" alt={name} />
-                ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-[#15803D] to-[#16A34A] flex items-center justify-center text-white text-3xl font-bold">
-                    {initials}
-                  </div>
-                )}
-              </div>
-              <div className="pb-1">
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{name}</h1>
-                <p className="text-sm font-medium text-gray-500 mt-0.5">{profile.level?.name} · Class {profile.class?.name}</p>
-                <p className="text-xs text-gray-400 font-mono mt-0.5">{profile.student_code}{age ? ` · ${age} years old` : ""}</p>
-              </div>
-            </div>
-            <div className="pb-1 text-left sm:text-right">
-              {profile.card ? (
-                <div className="flex flex-col items-start sm:items-end gap-1.5">
-                  <div className="flex items-center gap-1.5 justify-start sm:justify-end">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${profile.card.is_frozen ? "bg-blue-50 text-blue-500" : "bg-green-50 text-green-600"}`}>
-                      {profile.card.is_frozen ? "Frozen" : "Active"}
-                    </span>
-                    <span className="text-xs text-gray-400 font-mono">{profile.card.card_number}</span>
-                  </div>
-                  {user?.role !== "TEACHER" && (
-                    <div className="text-left sm:text-right">
-                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Wallet Balance</p>
-                      <p className="text-xs font-bold text-blue-600 dark:text-blue-400 mt-0.5">
-                        {profile.card.wallet_balance.toLocaleString()} <span className="text-[10px] font-normal text-blue-500/80">RWF</span>
-                      </p>
+          <div className="bg-gradient-to-br from-[#15803D] to-[#16A34A] px-6 py-6">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-5 min-w-0">
+                <div className="w-20 h-20 rounded-2xl overflow-hidden flex-shrink-0 border-2 border-white/30 shadow-lg">
+                  {profile.user.profile_photo ? (
+                    <img src={profile.user.profile_photo} className="w-full h-full object-cover" alt={name} />
+                  ) : (
+                    <div className="w-full h-full bg-white/20 flex items-center justify-center text-white text-2xl font-bold">
+                      {initials}
                     </div>
                   )}
                 </div>
-              ) : null}
+                <div className="min-w-0">
+                  <h1 className="text-2xl font-bold text-white truncate">{name}</h1>
+                  <p className="text-base text-green-100 mt-1">{profile.level?.name} · Class {profile.class?.name}</p>
+                  <p className="text-sm text-green-100/70 font-mono mt-0.5">{profile.student_code}{age ? ` · ${age} years old` : ""}</p>
+                </div>
+              </div>
+              {profile.card && (
+                <div className="flex-shrink-0 text-right">
+                  <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${profile.card.is_frozen ? "bg-blue-100 text-blue-700" : "bg-white/20 text-white border border-white/30"}`}>
+                    {profile.card.is_frozen ? "Frozen" : "Active"}
+                  </span>
+                  <p className="text-xs text-green-100/70 font-mono mt-1">{profile.card.card_number}</p>
+                  {user?.role !== "TEACHER" && (
+                    <p className="text-base font-bold text-white mt-1">
+                      {profile.card.wallet_balance.toLocaleString()} <span className="text-xs font-normal text-green-100/70">RWF</span>
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

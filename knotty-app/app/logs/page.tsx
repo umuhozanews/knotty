@@ -191,7 +191,7 @@ export default function LogsPage() {
       // ── Material transactions ───────────────────────────────────────────
       client
         .from("material_transactions")
-        .select("id, material_id, type, quantity, note, created_at")
+        .select("id, material_id, transaction_type, quantity, notes, created_at")
         .eq("school_id", schoolId)
         .order("created_at", { ascending: false })
         .limit(LIMIT)
@@ -200,8 +200,8 @@ export default function LogsPage() {
             collected.push({
               id: `mat-${r.id}`,
               kind: "material",
-              title: `Material ${r.type.replace("_", " ")}`,
-              detail: `Qty: ${r.quantity}${r.note ? ` · ${r.note}` : ""}`,
+              title: `Material ${r.transaction_type.replace("_", " ")}`,
+              detail: `Qty: ${r.quantity}${r.notes ? ` · ${r.notes}` : ""}`,
               ts: r.created_at,
             });
           });

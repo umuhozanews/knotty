@@ -1,20 +1,21 @@
 "use client";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   ChevronLeft, Plus, Loader2, X, Search, Pencil,
   ArrowDownCircle, History, Package, AlertTriangle,
   CheckCircle2, PackageOpen, ChefHat, Utensils, Leaf,
   BookOpen, FlaskConical, Wrench, Trophy, Monitor, Bed,
   LucideIcon, ArrowUpCircle, RotateCcw, Trash2,
-  UserRound, Calendar,
+  UserRound,
 } from "lucide-react";
+import { getSafeBrowserClient } from "@/lib/supabase/client";
 import DashboardShell from "@/components/DashboardShell";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 import {
   supabaseMaterialsService, STOCK_CATEGORIES,
   type MaterialCategory, type StockItemWithStatus,
-  type StockTransaction, type StudentAssignment, type MoveType,
+  type StockTransactionWithPerson, type StudentAssignment, type MoveType,
 } from "@/lib/supabase/services/materialsService";
 
 /* ── Category icon map ──────────────────────────────────────────────────────── */
@@ -195,6 +196,8 @@ function AddEditModal({
 }
 
 /* ── Move Stock modal ───────────────────────────────────────────────────────── */
+type StudentHit = { id: string; name: string; student_code: string; class_name?: string };
+
 function MoveStockModal({
   item, schoolId, onClose, onSaved,
 }: {
@@ -211,22 +214,71 @@ function MoveStockModal({
   const [ref, setRef] = useState("");
   const [notes, setNotes] = useState("");
   const [assignStudent, setAssignStudent] = useState(false);
-  const [studentName, setStudentName] = useState("");
   const [expectedReturn, setExpectedReturn] = useState("");
 
+  /* ── Student search ─────────────────────────────────────────────────── */
+  const [studentQuery, setStudentQuery] = useState("");
+  const [studentHits, setStudentHits] = useState<StudentHit[]>([]);
+  const [selectedStudent, setSelectedStudent] = useState<StudentHit | null>(null);
+  const [searchingStudents, setSearchingStudents] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  async function doStudentSearch(q: string) {
+    if (q.trim().length < 2) { setStudentHits([]); return; }
+    setSearchingStudents(true);
+    try {
+      const client = getSafeBrowserClient();
+      if (!client) return;
+      const { data } = await client.rpc("list_school_students", {
+        p_school_id: schoolId,
+        p_class_section_id: null,
+        p_search: q.trim(),
+      });
+      setStudentHits(
+        ((data ?? []) as Array<{ student_id: string; legal_name: string; admission_number: string; class_section_name: string | null }>)
+          .slice(0, 6)
+          .map(s => ({
+            id: s.student_id,
+            name: s.legal_name ?? "",
+            student_code: s.admission_number ?? "",
+            class_name: s.class_section_name ?? undefined,
+          }))
+      );
+    } catch { /* silent */ }
+    finally { setSearchingStudents(false); }
+  }
+
+  function handleStudentInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const q = e.target.value;
+    setStudentQuery(q);
+    setSelectedStudent(null);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => doStudentSearch(q), 300);
+  }
+
+  function clearStudentSelection() {
+    setSelectedStudent(null);
+    setStudentQuery("");
+    setStudentHits([]);
+  }
+
+  /* ── Submit ─────────────────────────────────────────────────────────── */
   const isAddition = type === "stock_in" || type === "return";
 
   const moveTypes: { id: MoveType; label: string; color: string; Icon: LucideIcon }[] = [
-    { id: "stock_in",        label: "Stock In",       color: "#16A34A", Icon: ArrowDownCircle },
-    { id: "stock_out",       label: "Issue Out",      color: "#2563EB", Icon: ArrowUpCircle },
-    { id: "return",          label: "Return",         color: "#7C3AED", Icon: RotateCcw },
-    { id: "damage_disposal", label: "Damage",         color: "#DC2626", Icon: Trash2 },
+    { id: "stock_in",        label: "Stock In",  color: "#16A34A", Icon: ArrowDownCircle },
+    { id: "stock_out",       label: "Issue Out", color: "#2563EB", Icon: ArrowUpCircle },
+    { id: "return",          label: "Return",    color: "#7C3AED", Icon: RotateCcw },
+    { id: "damage_disposal", label: "Damage",    color: "#DC2626", Icon: Trash2 },
   ];
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const q = parseFloat(qty);
     if (!q || q <= 0) { toast("Enter a valid quantity", "error"); return; }
+    if (type === "stock_out" && assignStudent && !selectedStudent) {
+      toast("Select a student from the search results", "error"); return;
+    }
     setLoading(true);
     try {
       await supabaseMaterialsService.recordMovement(schoolId, {
@@ -236,8 +288,8 @@ function MoveStockModal({
         unitCost: unitCost ? parseFloat(unitCost) : undefined,
         referenceNumber: ref.trim() || undefined,
         notes: notes.trim() || undefined,
-        studentId: (type === "stock_out" && assignStudent) ? undefined : undefined,
-        studentName: (type === "stock_out" && assignStudent && studentName.trim()) ? studentName.trim() : undefined,
+        studentId: (type === "stock_out" && assignStudent && selectedStudent) ? selectedStudent.id : undefined,
+        studentName: (type === "stock_out" && assignStudent && selectedStudent) ? selectedStudent.name : undefined,
         expectedReturnAt: (type === "stock_out" && assignStudent && expectedReturn) ? expectedReturn : undefined,
       });
       toast("Stock updated", "success");
@@ -263,7 +315,8 @@ function MoveStockModal({
             <p className="text-xs font-semibold text-gray-500 mb-2">MOVEMENT TYPE</p>
             <div className="grid grid-cols-4 gap-1.5">
               {moveTypes.map((t) => (
-                <button key={t.id} type="button" onClick={() => { setType(t.id); setAssignStudent(false); }}
+                <button key={t.id} type="button"
+                  onClick={() => { setType(t.id); setAssignStudent(false); clearStudentSelection(); }}
                   className="py-2.5 rounded-xl text-xs font-semibold border transition flex flex-col items-center gap-1"
                   style={type === t.id
                     ? { background: t.color, color: "#fff", borderColor: t.color }
@@ -281,7 +334,7 @@ function MoveStockModal({
               <input required type="number" min={0.01} step="0.01" value={qty} onChange={(e) => setQty(e.target.value)}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-400" />
             </div>
-            {!isAddition ? null : (
+            {isAddition && (
               <div>
                 <p className="text-xs font-semibold text-gray-500 mb-1">UNIT COST (RWF)</p>
                 <input type="number" min={0} step="1" value={unitCost} onChange={(e) => setUnitCost(e.target.value)}
@@ -306,17 +359,52 @@ function MoveStockModal({
           {type === "stock_out" && (
             <div className="border border-gray-100 rounded-2xl p-3 space-y-3">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={assignStudent} onChange={(e) => setAssignStudent(e.target.checked)}
+                <input type="checkbox" checked={assignStudent}
+                  onChange={(e) => { setAssignStudent(e.target.checked); clearStudentSelection(); }}
                   className="w-4 h-4 rounded accent-green-600" />
                 <span className="text-sm font-medium text-gray-700">Assign to a student</span>
               </label>
               {assignStudent && (
                 <>
                   <div>
-                    <p className="text-xs font-semibold text-gray-500 mb-1">STUDENT NAME</p>
-                    <input value={studentName} onChange={(e) => setStudentName(e.target.value)}
-                      placeholder="Student full name"
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
+                    <p className="text-xs font-semibold text-gray-500 mb-1">STUDENT</p>
+                    {selectedStudent ? (
+                      <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-3 py-2">
+                        <div>
+                          <p className="text-sm font-semibold text-green-900">{selectedStudent.name}</p>
+                          <p className="text-xs text-green-600">{selectedStudent.student_code}{selectedStudent.class_name ? ` · ${selectedStudent.class_name}` : ""}</p>
+                        </div>
+                        <button type="button" onClick={clearStudentSelection}>
+                          <X size={14} className="text-green-500" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <div className="relative">
+                          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
+                          <input value={studentQuery} onChange={handleStudentInput}
+                            placeholder="Type name or admission number…"
+                            className="w-full pl-8 pr-8 border border-gray-200 rounded-xl py-2.5 text-sm outline-none focus:border-gray-400" />
+                          {searchingStudents && <Loader2 size={12} className="animate-spin absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />}
+                        </div>
+                        {studentHits.length > 0 && (
+                          <div className="absolute z-10 mt-0.5 w-full border border-gray-200 rounded-xl bg-white shadow-lg overflow-hidden max-h-40 overflow-y-auto">
+                            {studentHits.map(s => (
+                              <button key={s.id} type="button"
+                                onClick={() => { setSelectedStudent(s); setStudentHits([]); setStudentQuery(""); }}
+                                className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm flex items-center gap-2 border-b border-gray-50 last:border-0">
+                                <UserRound size={13} className="text-gray-400 flex-shrink-0" />
+                                <span className="font-medium truncate">{s.name}</span>
+                                <span className="text-gray-400 text-xs ml-auto flex-shrink-0 pl-2">{s.student_code}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {studentQuery.length >= 2 && !searchingStudents && studentHits.length === 0 && (
+                          <p className="text-xs text-gray-400 mt-1 px-1">No students found</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <p className="text-xs font-semibold text-gray-500 mb-1">EXPECTED RETURN DATE</p>
@@ -350,7 +438,7 @@ function HistoryModal({
   schoolId: string;
   onClose: () => void;
 }) {
-  const [txns, setTxns] = useState<StockTransaction[]>([]);
+  const [txns, setTxns] = useState<StockTransactionWithPerson[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -394,6 +482,7 @@ function HistoryModal({
                     {cfg.sign}{t.quantity.toLocaleString()} {item.unit}
                     {t.unit_cost > 0 && <span className="text-xs font-normal text-gray-400 ml-1">@ {t.unit_cost.toLocaleString()} RWF</span>}
                   </p>
+                  {t.person?.legal_name && <p className="text-xs text-gray-400 mt-0.5">by {t.person.legal_name}</p>}
                   {t.reference_number && <p className="text-xs text-gray-400 font-mono mt-0.5">Ref: {t.reference_number}</p>}
                   {t.notes && <p className="text-xs text-gray-500 mt-0.5">{t.notes}</p>}
                 </div>
@@ -472,6 +561,8 @@ export default function MaterialsPage() {
   const [editTarget, setEditTarget] = useState<StockItemWithStatus | null>(null);
   const [moveTarget, setMoveTarget] = useState<StockItemWithStatus | null>(null);
   const [historyTarget, setHistoryTarget] = useState<StockItemWithStatus | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<StockItemWithStatus | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadSummary = useCallback(async () => {
     if (!schoolId) return;
@@ -492,14 +583,17 @@ export default function MaterialsPage() {
   useEffect(() => { loadSummary(); }, [loadSummary]);
   useEffect(() => { loadItems(); }, [loadItems]);
 
-  async function handleDelete(item: StockItemWithStatus) {
-    if (!confirm(`Remove "${item.name}" from inventory?`)) return;
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      await supabaseMaterialsService.deleteItem(schoolId, item.id);
+      await supabaseMaterialsService.deleteItem(schoolId, deleteTarget.id);
       toast("Item removed", "success");
+      setDeleteTarget(null);
       loadItems();
       loadSummary();
     } catch (e) { toast(e instanceof Error ? e.message : "Error", "error"); }
+    finally { setDeleting(false); }
   }
 
   function afterMutation() { loadItems(); loadSummary(); }
@@ -533,6 +627,26 @@ export default function MaterialsPage() {
       )}
       {historyTarget && (
         <HistoryModal item={historyTarget} schoolId={schoolId} onClose={() => setHistoryTarget(null)} />
+      )}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-xl p-6 w-full max-w-sm">
+            <div className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-4">
+              <Trash2 size={22} className="text-red-500" />
+            </div>
+            <p className="font-bold text-gray-900 text-center">Remove item?</p>
+            <p className="text-sm text-gray-500 text-center mt-1">
+              <span className="font-semibold text-gray-700">"{deleteTarget.name}"</span> will be removed from inventory. This cannot be undone.
+            </p>
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => setDeleteTarget(null)} className="flex-1 py-3 rounded-2xl text-sm bg-gray-100 text-gray-600 font-medium">Cancel</button>
+              <button onClick={confirmDelete} disabled={deleting}
+                className="flex-1 py-3 rounded-2xl text-sm font-bold text-white bg-red-500 disabled:opacity-50 flex items-center justify-center gap-2">
+                {deleting ? <Loader2 size={14} className="animate-spin" /> : "Remove"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="h-full flex flex-col gap-4 overflow-auto px-1 pb-6">
@@ -661,7 +775,7 @@ export default function MaterialsPage() {
                     onEdit={() => setEditTarget(item)}
                     onMove={() => setMoveTarget(item)}
                     onHistory={() => setHistoryTarget(item)}
-                    onDelete={() => handleDelete(item)}
+                    onDelete={() => setDeleteTarget(item)}
                   />
                 ))}
               </div>

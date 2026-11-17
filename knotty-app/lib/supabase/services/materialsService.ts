@@ -13,6 +13,10 @@ export type StockItemWithStatus = StockItem & {
   status: "in_stock" | "low_stock" | "out_of_stock";
 };
 
+export type StockTransactionWithPerson = StockTransaction & {
+  person: { legal_name: string } | null;
+};
+
 export type MoveType = "stock_in" | "stock_out" | "damage_disposal" | "return";
 
 export function getItemStatus(item: { quantity: number; min_quantity: number }): "in_stock" | "low_stock" | "out_of_stock" {
@@ -194,18 +198,18 @@ export const supabaseMaterialsService = {
     return { ...updated, status: getItemStatus(updated) };
   },
 
-  async listTransactions(schoolId: string, materialId: string): Promise<StockTransaction[]> {
+  async listTransactions(schoolId: string, materialId: string): Promise<StockTransactionWithPerson[]> {
     const client = getSafeBrowserClient();
     if (!client) throw new Error("Not configured");
     const { data, error } = await client
       .from("material_transactions")
-      .select("*")
+      .select("*, person:created_by_person_id(legal_name)")
       .eq("school_id", schoolId)
       .eq("material_id", materialId)
       .order("created_at", { ascending: false })
       .limit(30);
     if (error) throw new Error(error.message);
-    return data ?? [];
+    return (data ?? []) as StockTransactionWithPerson[];
   },
 
   async listStudentAssignments(schoolId: string, studentId: string): Promise<StudentAssignment[]> {

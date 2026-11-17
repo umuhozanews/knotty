@@ -390,17 +390,19 @@ function RegisterVisitorModal({
     hostSearchTimeout.current = setTimeout(async () => {
       const client = getSafeBrowserClient();
       if (!client) return;
-      const q = `${v.trim()}%`;
+      const q = v.trim().toLowerCase();
       const [staffRes, studRes] = await Promise.all([
-        client.from("staff_records").select("id, legal_name, job_title")
-          .eq("school_id", schoolId).ilike("legal_name", q).eq("employment_status", "active").limit(6),
-        client.from("students").select("id, legal_name, admission_number")
-          .eq("school_id", schoolId).ilike("legal_name", q).limit(6),
+        client.rpc("list_school_staff_members", { p_school_id: schoolId }),
+        client.rpc("list_school_students", { p_school_id: schoolId, p_search: q }),
       ]);
-      const suggestions = [
-        ...(staffRes.data ?? []).map((s: any) => ({ name: s.legal_name, subtitle: s.job_title ?? "Staff" })),
-        ...(studRes.data ?? []).map((s: any) => ({ name: s.legal_name, subtitle: `Student · ${s.admission_number}` })),
-      ];
+      const staffMatches = (staffRes.data ?? [])
+        .filter((s: any) => s.legal_name?.toLowerCase().startsWith(q) && s.employment_status === "active")
+        .slice(0, 6)
+        .map((s: any) => ({ name: s.legal_name, subtitle: s.job_title ?? "Staff" }));
+      const studentMatches = (studRes.data ?? [])
+        .slice(0, 6)
+        .map((s: any) => ({ name: s.legal_name, subtitle: `Student · ${s.admission_number}` }));
+      const suggestions = [...staffMatches, ...studentMatches];
       setHostSuggestions(suggestions);
       setShowHostSuggestions(suggestions.length > 0);
     }, 100);

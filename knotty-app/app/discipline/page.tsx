@@ -268,18 +268,17 @@ export default function DisciplinePage() {
   const { toast } = useToast();
   const { startListen, stopListen, listening, isSupported } = useNFC();
 
-  /* ── Scanner state ─────────────────────────────────────────── */
+  const [view, setView] = useState<"home" | "scan" | "records">("home");
+
   const [cardInput, setCardInput] = useState("");
   const [scanning, setScanning] = useState(false);
 
-  /* ── Student + records ─────────────────────────────────────── */
   const [student, setStudent]       = useState<ScannedStudent | null>(null);
   const [records, setRecords]       = useState<DisciplineRecord[]>([]);
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [showOffenseModal, setShowOffenseModal] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  /* ── Direct marks deduction ────────────────────────────────── */
   async function handleAdjustMarks(recordId: string, delta: number) {
     if (!user?.school_id) return;
     const rec = records.find(r => r.id === recordId);
@@ -290,7 +289,7 @@ export default function DisciplinePage() {
     setRecords(prev => prev.map(r => r.id === recordId ? { ...r, marks_deducted: newMarks } : r));
     try {
       await supabaseDisciplineService.update(user.school_id, recordId, { marks_deducted: newMarks });
-      toast(`Marks updated: -${newMarks} (${delta > 0 ? `+${delta} deducted` : `${Math.abs(delta)} restored`})`, "success");
+      toast(`Marks updated: -${newMarks}`, "success");
       loadSchool();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to update marks", "error");
@@ -300,7 +299,6 @@ export default function DisciplinePage() {
     }
   }
 
-  /* ── School-wide list (bottom) ─────────────────────────────── */
   const [schoolRecords, setSchoolRecords]     = useState<DisciplineRecord[]>([]);
   const [schoolTotal, setSchoolTotal]         = useState(0);
   const [schoolPage, setSchoolPage]           = useState(1);
@@ -309,10 +307,8 @@ export default function DisciplinePage() {
   const [schoolLoading, setSchoolLoading]     = useState(true);
   const LIMIT = 20;
 
-  /* ── Processing guard ──────────────────────────────────────── */
   const processingRef = useRef(false);
 
-  /* ── Fetch records for scanned student ─────────────────────── */
   const loadStudentRecords = useCallback(async (studentId: string) => {
     if (!user?.school_id) return;
     setRecordsLoading(true);
@@ -324,7 +320,6 @@ export default function DisciplinePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.school_id]);
 
-  /* ── Card scan handler ─────────────────────────────────────── */
   async function handleCardScan(cardNum: string, isNFC = false) {
     if (!cardNum.trim() || processingRef.current || !user?.school_id) return;
     processingRef.current = true;
@@ -343,7 +338,7 @@ export default function DisciplinePage() {
           photo: holder.profile_photo_path ?? null,
         };
       } else {
-        let scanned: { id: string; name: string; class: string; card_number: string | null; student_code: string; photo: string | null };
+        let scanned: ScannedStudent;
         try {
           scanned = await supabaseLibraryService.lookupStudent(user.school_id, cardNum.trim());
         } catch (origErr) {
@@ -374,12 +369,11 @@ export default function DisciplinePage() {
     }
   }
 
-  // Ref so the NFC callback always calls the latest handleCardScan (avoids stale closure)
   const scanHandlerRef = useRef(handleCardScan);
   scanHandlerRef.current = handleCardScan;
 
-  /* ── Start NFC on mount ────────────────────────────────────── */
   useEffect(() => {
+    if (view !== "scan") { stopListen(); return; }
     if (!authLoading && isSupported) {
       startListen((result) => {
         scanHandlerRef.current(result.value, result.type === "uid");
@@ -387,9 +381,8 @@ export default function DisciplinePage() {
     }
     return () => { stopListen(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, isSupported]);
+  }, [authLoading, isSupported, view]);
 
-  /* ── School-wide records ───────────────────────────────────── */
   const loadSchool = useCallback(async () => {
     if (!user?.school_id) return;
     setSchoolLoading(true);
@@ -407,13 +400,17 @@ export default function DisciplinePage() {
     return () => clearTimeout(t);
   }, [schoolSearch]);
 
-  /* ── Computed marks ────────────────────────────────────────── */
   const totalDeducted = records.reduce((s, r) => s + (r.marks_deducted !== undefined ? Number(r.marks_deducted) : (r.severity === "SERIOUS" ? 5 : r.severity === "MODERATE" ? 3 : 1)), 0);
   const currentMarks  = Math.max(0, TOTAL_MARKS - totalDeducted);
   const marksPct      = (currentMarks / TOTAL_MARKS) * 100;
   const marksColor    = currentMarks >= 30 ? "#16a34a" : currentMarks >= 20 ? "#d97706" : "#dc2626";
+  const schoolPages   = Math.ceil(schoolTotal / LIMIT);
 
-  const schoolPages = Math.ceil(schoolTotal / LIMIT);
+  function goHome() {
+    setView("home");
+    setStudent(null);
+    setRecords([]);
+  }
 
   return (
     <DashboardShell>
@@ -422,352 +419,278 @@ export default function DisciplinePage() {
           student={student}
           schoolId={user?.school_id ?? ""}
           onClose={() => setShowOffenseModal(false)}
-          onSuccess={(rec) => {
-            setRecords((prev) => [rec, ...prev]);
-            loadSchool();
-          }}
+          onSuccess={(rec) => { setRecords((prev) => [rec, ...prev]); loadSchool(); }}
         />
       )}
 
-      <div className="h-full flex flex-col overflow-hidden">
+      <div className="space-y-3">
 
-        {/* ── Top bar ──────────────────────────────────────────── */}
-        <div className="flex items-center gap-3 px-3 md:px-4 pt-1 pb-3 flex-shrink-0">
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          {view !== "home" && (
+            <button onClick={goHome}
+              className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 transition shrink-0">
+              <ChevronLeft size={16} className="text-gray-600" />
+            </button>
+          )}
           <div>
-            <h1 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>Discipline</h1>
-            <p className="text-xs" style={{ color: "var(--text-secondary)" }}>Tap student card to view records</p>
+            <h1 className="text-lg font-bold text-gray-800">
+              {view === "home" ? "Discipline" : view === "scan" ? "Scan Student" : "All Records"}
+            </h1>
+            {view === "home" && <p className="text-xs text-gray-400 mt-0.5">Student discipline management</p>}
           </div>
         </div>
 
-        <div className="flex flex-1 gap-3 px-3 md:px-4 pb-3 md:pb-4 overflow-hidden min-h-0 flex-col lg:flex-row">
+        {/* Home: 2 blocks */}
+        {view === "home" && (
+          <div className="grid grid-cols-2 gap-3">
+            <button onClick={() => setView("scan")}
+              className="bg-white rounded-2xl p-4 shadow-sm hover:shadow-md transition text-left">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: "#FEF2F2" }}>
+                <Shield size={20} style={{ color: "#C62828" }} />
+              </div>
+              <p className="text-sm font-semibold text-gray-700">Scan Student</p>
+              <p className="text-xs text-gray-400 mt-0.5">View & record offenses</p>
+            </button>
 
-          {/* ── LEFT: Scanner ─────────────────────────────────── */}
-          <div className="lg:w-72 flex-shrink-0 flex flex-col gap-3">
+            <button onClick={() => setView("records")}
+              className="bg-white rounded-2xl p-4 shadow-sm hover:shadow-md transition text-left">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: "#F9FAFB" }}>
+                <ShieldAlert size={20} style={{ color: "#374151" }} />
+              </div>
+              {schoolLoading
+                ? <div className="h-7 w-10 bg-gray-100 rounded-lg animate-pulse mb-0.5" />
+                : <p className="text-2xl font-bold text-gray-800">{schoolTotal}</p>}
+              <p className="text-sm font-semibold text-gray-700">All Records</p>
+              <p className="text-xs text-gray-400 mt-0.5">School-wide discipline log</p>
+            </button>
+          </div>
+        )}
 
-            {/* NFC panel */}
-            <div className="bg-white rounded-3xl p-5 flex flex-col items-center gap-3">
-              <div
-                className="w-20 h-20 rounded-full flex items-center justify-center"
-                style={{ background: listening ? "var(--severity-serious-bg)" : "var(--surface-muted)" }}
-              >
+        {/* Scan view */}
+        {view === "scan" && (
+          <div className="space-y-3">
+            <div className="bg-white rounded-2xl p-5 flex flex-col items-center gap-3">
+              <div className="w-20 h-20 rounded-full flex items-center justify-center"
+                style={{ background: listening ? "var(--severity-serious-bg)" : "#F5F5F5" }}>
                 {scanning
                   ? <Loader2 size={32} className="animate-spin" style={{ color: "#C62828" }} />
                   : listening
                   ? <Shield size={32} className="animate-pulse" style={{ color: "#C62828" }} />
-                  : <WifiOff size={32} style={{ color: "var(--text-secondary)" }} />}
+                  : <WifiOff size={32} style={{ color: "#ccc" }} />}
               </div>
-              <p className="text-sm font-bold text-center" style={{ color: "var(--text-primary)" }}>
+              <p className="text-sm font-bold text-center text-gray-800">
                 {scanning ? "Reading card…" : listening ? "Waiting for card tap…" : "NFC not available"}
               </p>
               <p className="text-xs text-center text-gray-400">
-                {listening
-                  ? "Student holds NFC card or phone near device"
-                  : "Use manual card entry below"}
+                {listening ? "Student holds NFC card or phone near device" : "Use manual entry below"}
               </p>
-
-              {/* Manual entry */}
               <div className="w-full flex gap-2 pt-1">
-                <input
-                  value={cardInput}
-                  onChange={(e) => setCardInput(e.target.value)}
+                <input value={cardInput} onChange={(e) => setCardInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleCardScan(cardInput)}
                   placeholder="Card number…"
-                  className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-xs font-mono outline-none"
-                />
-                <button
-                  onClick={() => handleCardScan(cardInput)}
-                  disabled={scanning || !cardInput.trim()}
+                  className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-xs font-mono outline-none" />
+                <button onClick={() => handleCardScan(cardInput)} disabled={scanning || !cardInput.trim()}
                   className="px-3 py-2 rounded-xl text-xs font-bold disabled:opacity-50"
-                  style={{ background: "var(--accent)", color: "var(--bg)" }}
-                >
+                  style={{ background: "var(--accent)", color: "var(--bg)" }}>
                   {scanning ? <Loader2 size={12} className="animate-spin" /> : <CreditCard size={13} />}
                 </button>
               </div>
-
               <VirtualCardTap onTap={(cn) => handleCardScan(cn)} busy={scanning} />
             </div>
 
-            {/* Student card (desktop side panel) */}
             {student && (
-              <div className="bg-white rounded-3xl p-4 hidden lg:block">
-                <div className="flex items-center gap-3 mb-4">
-                  {student.photo
-                    ? <img src={student.photo} alt={student.name} className="w-12 h-12 rounded-2xl object-cover flex-shrink-0" />
-                    : (
-                      <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 text-lg font-bold"
-                        style={{ background: "var(--surface-muted)", color: "var(--text-primary)" }}>
-                        {student.name.charAt(0)}
-                      </div>
-                    )}
-                  <div className="min-w-0">
-                    <p className="font-bold text-sm truncate" style={{ color: "var(--text-primary)" }}>{student.name}</p>
-                    <p className="text-xs text-gray-400">{student.class}</p>
-                    <p className="text-xs text-gray-400">{student.student_code}</p>
+              <>
+                <div className="bg-white rounded-2xl p-4">
+                  <div className="flex items-center gap-3 mb-4">
+                    {student.photo
+                      ? <img src={student.photo} alt={student.name} className="w-12 h-12 rounded-2xl object-cover shrink-0" />
+                      : <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 text-lg font-bold"
+                          style={{ background: "var(--surface-muted)", color: "var(--text-primary)" }}>
+                          {student.name.charAt(0)}
+                        </div>}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-sm truncate" style={{ color: "var(--text-primary)" }}>{student.name}</p>
+                      <p className="text-xs text-gray-400">{student.class} · {student.student_code}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-xl font-bold" style={{ color: marksColor }}>{currentMarks}<span className="text-xs font-normal text-gray-400">/{TOTAL_MARKS}</span></p>
+                      <p className="text-xs text-gray-400">marks left</p>
+                    </div>
                   </div>
-                </div>
-
-                {/* Marks score */}
-                <div className="rounded-2xl p-3 mb-3" style={{ background: "var(--surface-muted)" }}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>DISCIPLINE MARKS</span>
-                    <span className="text-lg font-bold" style={{ color: marksColor }}>{currentMarks}<span className="text-xs font-normal text-gray-400">/{TOTAL_MARKS}</span></span>
-                  </div>
-                  <div className="w-full h-2 rounded-full bg-gray-200 overflow-hidden">
+                  <div className="w-full h-1.5 rounded-full bg-gray-200 overflow-hidden mb-4">
                     <div className="h-full rounded-full transition-all" style={{ width: `${marksPct}%`, background: marksColor }} />
                   </div>
-                  {totalDeducted > 0 && (
-                    <p className="text-xs text-gray-400 mt-1.5">{totalDeducted} marks deducted across {records.length} offense{records.length !== 1 ? "s" : ""}</p>
-                  )}
+                  <button onClick={() => setShowOffenseModal(true)}
+                    className="w-full py-2.5 rounded-2xl text-sm font-bold text-white flex items-center justify-center gap-2"
+                    style={{ background: "#C62828" }}>
+                    <Plus size={14} /> Record New Offense
+                  </button>
                 </div>
 
-                <button
-                  onClick={() => setShowOffenseModal(true)}
-                  className="w-full py-2.5 rounded-2xl text-sm font-bold text-white flex items-center justify-center gap-2"
-                  style={{ background: "#C62828" }}
-                >
-                  <Plus size={14} /> Record New Offense
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* ── RIGHT: Student detail + records ───────────────── */}
-          <div className="flex-1 flex flex-col gap-3 overflow-hidden min-h-0">
-
-            {/* Student card (mobile, shows after scan) */}
-            {student && (
-              <div className="bg-white rounded-3xl p-4 lg:hidden flex-shrink-0">
-                <div className="flex items-center gap-3 mb-3">
-                  {student.photo
-                    ? <img src={student.photo} alt={student.name} className="w-11 h-11 rounded-2xl object-cover flex-shrink-0" />
-                    : (
-                      <div className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 font-bold"
-                        style={{ background: "var(--surface-muted)", color: "var(--text-primary)" }}>
-                        {student.name.charAt(0)}
+                <div className="bg-white rounded-2xl overflow-hidden">
+                  <div className="px-4 py-3 border-b border-gray-100">
+                    <p className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Offense History</p>
+                    <p className="text-xs text-gray-400">{records.length} record{records.length !== 1 ? "s" : ""}</p>
+                  </div>
+                  <div className="p-4">
+                    {recordsLoading ? (
+                      <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-gray-300" /></div>
+                    ) : records.length === 0 ? (
+                      <div className="flex flex-col items-center py-10">
+                        <CheckCircle size={32} className="mb-2 text-green-300" />
+                        <p className="text-sm font-medium text-green-500">No offenses on record</p>
+                        <p className="text-xs mt-1 text-gray-400">Clean discipline record</p>
                       </div>
-                    )}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm truncate" style={{ color: "var(--text-primary)" }}>{student.name}</p>
-                    <p className="text-xs text-gray-400">{student.class} · {student.student_code}</p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-xl font-bold" style={{ color: marksColor }}>{currentMarks}<span className="text-xs font-normal text-gray-400">/{TOTAL_MARKS}</span></p>
-                    <p className="text-xs text-gray-400">marks left</p>
-                  </div>
-                </div>
-                <div className="w-full h-1.5 rounded-full bg-gray-200 overflow-hidden mb-3">
-                  <div className="h-full rounded-full transition-all" style={{ width: `${marksPct}%`, background: marksColor }} />
-                </div>
-                <button
-                  onClick={() => setShowOffenseModal(true)}
-                  className="w-full py-2.5 rounded-2xl text-sm font-bold text-white flex items-center justify-center gap-2"
-                  style={{ background: "#C62828" }}
-                >
-                  <Plus size={14} /> Record New Offense
-                </button>
-              </div>
-            )}
-
-            {/* Student records or empty/no-scan state */}
-            {student ? (
-              <div className="bg-white rounded-3xl flex-1 overflow-hidden flex flex-col">
-                <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0">
-                  <p className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Offense History</p>
-                  <p className="text-xs text-gray-400">{records.length} record{records.length !== 1 ? "s" : ""}</p>
-                </div>
-                <div className="flex-1 overflow-y-auto px-4 py-3">
-                  {recordsLoading ? (
-                    <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-gray-300" /></div>
-                  ) : records.length === 0 ? (
-                    <div className="flex flex-col items-center py-10 text-gray-300">
-                      <CheckCircle size={32} className="mb-2 text-green-300" />
-                      <p className="text-sm font-medium text-green-500">No offenses on record</p>
-                      <p className="text-xs mt-1">This student has a clean discipline record</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {records.map((r) => {
-                        const sev = SEV_STYLE[r.severity] ?? SEV_STYLE.MINOR;
-                        return (
-                          <div key={r.id} className="rounded-2xl p-3" style={{ background: "var(--surface-muted)" }}>
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1.5 flex-wrap mb-1">
-                                  <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: sev.bg, color: sev.text }}>
-                                    {r.severity}
-                                  </span>
-                                  <span className="text-xs text-gray-400">{TYPE_LABEL[r.type] ?? r.type}</span>
-                                </div>
-                                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{r.title}</p>
-                                {r.description && <p className="text-xs text-gray-500 mt-0.5">{r.description}</p>}
-                                {r.action_taken && <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>→ {r.action_taken}</p>}
-                                <p className="text-xs text-gray-400 mt-1">
-                                  {new Date(r.recorded_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
-                                  {r.recorder && ` · ${r.recorder.first_name} ${r.recorder.last_name}`}
-                                </p>
-                              </div>
-                              <div className="flex-shrink-0 flex flex-col items-end gap-1.5">
-                                <div className="text-right">
-                                  <span className="text-sm font-bold text-red-500">
-                                    -{r.marks_deducted !== undefined ? r.marks_deducted : (r.severity === "SERIOUS" ? 5 : r.severity === "MODERATE" ? 3 : 1)}
-                                  </span>
-                                  <p className="text-[10px] text-gray-400">marks deducted</p>
-                                </div>
-                                {/* Direct quick marks deduction buttons */}
-                                <div className="flex items-center gap-1">
-                                  <span className="text-[9px] font-bold text-gray-400">Deduct:</span>
-                                  {[1, 2, 5].map((pts) => (
-                                    <button
-                                      key={pts}
-                                      type="button"
-                                      disabled={updatingId === r.id}
-                                      onClick={() => handleAdjustMarks(r.id, pts)}
-                                      title={`Directly deduct ${pts} more mark(s)`}
-                                      className="px-1.5 py-0.5 rounded-lg text-[10px] font-bold border transition hover:bg-red-50 disabled:opacity-40"
-                                      style={{ borderColor: "#FECACA", color: "#C62828", background: "#FEF2F2" }}
-                                    >
-                                      -{pts}
-                                    </button>
-                                  ))}
-                                  <button
-                                    type="button"
-                                    disabled={updatingId === r.id || (r.marks_deducted ?? 0) <= 0}
-                                    onClick={() => handleAdjustMarks(r.id, -1)}
-                                    title="Restore 1 mark"
-                                    className="px-1.5 py-0.5 rounded-lg text-[10px] font-bold border transition hover:bg-green-50 disabled:opacity-30"
-                                    style={{ borderColor: "#BBF7D0", color: "#166534", background: "#F0FDF4" }}
-                                  >
-                                    +1
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              /* No student scanned yet — show school-wide list */
-              <div className="bg-white rounded-3xl flex-1 overflow-hidden flex flex-col">
-                {/* Header + Search */}
-                <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>All Discipline Records</p>
-                    <p className="text-xs text-gray-400">{schoolTotal} record{schoolTotal !== 1 ? "s" : ""}</p>
-                  </div>
-                  <div className="flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-1.5">
-                    <Search size={12} className="text-gray-400 shrink-0" />
-                    <input
-                      value={schoolSearch}
-                      onChange={(e) => setSchoolSearch(e.target.value)}
-                      placeholder="Search by student name, ID, or offense…"
-                      className="flex-1 text-xs bg-transparent outline-none"
-                    />
-                    {schoolSearch && (
-                      <button onClick={() => setSchoolSearch("")}>
-                        <X size={11} className="text-gray-400" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex-1 overflow-y-auto px-4 py-3">
-                  {schoolLoading ? (
-                    <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-gray-300" /></div>
-                  ) : schoolRecords.length === 0 ? (
-                    <div className="flex flex-col items-center py-10 text-gray-300">
-                      <AlertTriangle size={32} className="mb-2" />
-                      <p className="text-sm">{schoolSearch ? "No records match your search" : "No discipline records"}</p>
-                    </div>
-                  ) : (() => {
-                    const today = new Date().toDateString();
-                    const yesterday = new Date(Date.now() - 86400000).toDateString();
-                    const grouped: Record<string, typeof schoolRecords> = {};
-                    schoolRecords.forEach((r) => {
-                      const d = new Date(r.recorded_at);
-                      const key = d.toDateString() === today
-                        ? "Today"
-                        : d.toDateString() === yesterday
-                        ? "Yesterday"
-                        : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-                      (grouped[key] ??= []).push(r);
-                    });
-                    return (
-                      <div className="space-y-4">
-                        {Object.entries(grouped).map(([dateLabel, recs]) => (
-                          <div key={dateLabel}>
-                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">{dateLabel}</p>
-                            <div className="space-y-2">
-                              {recs.map((r) => {
-                                const sev = SEV_STYLE[r.severity] ?? SEV_STYLE.MINOR;
-                                const studentName = r.student
-                                  ? `${r.student.user.first_name} ${r.student.user.last_name}`.trim()
-                                  : null;
-                                const visitCount = r.student_visit_count ?? 0;
-                                return (
-                                  <div key={r.id} className="rounded-2xl p-3" style={{ background: "var(--surface-muted)" }}>
-                                    <div className="flex items-start justify-between gap-2">
-                                      <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-1.5 flex-wrap mb-1">
-                                          <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: sev.bg, color: sev.text }}>
-                                            {r.severity}
-                                          </span>
-                                          <span className="text-xs text-gray-400">{TYPE_LABEL[r.type] ?? r.type}</span>
-                                          {studentName && (
-                                            <span className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>{studentName}</span>
-                                          )}
-                                          {visitCount > 1 && (
-                                            <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-orange-50 text-orange-600">
-                                              <History size={9} /> #{visitCount} offense
-                                            </span>
-                                          )}
-                                        </div>
-                                        <p className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>{r.title}</p>
-                                        {r.description && <p className="text-xs text-gray-400 mt-0.5 truncate">{r.description}</p>}
-                                        {r.action_taken && <p className="text-xs mt-0.5 truncate" style={{ color: "var(--text-secondary)" }}>→ {r.action_taken}</p>}
-                                        <p className="text-xs text-gray-400 mt-1">
-                                          <Clock size={10} className="inline mr-1" />
-                                          {new Date(r.recorded_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
-                                          {r.student_code && ` · ${r.student_code}`}
-                                        </p>
-                                      </div>
-                                      {(r.marks_deducted ?? 0) > 0 && (
-                                        <span className="text-sm font-bold text-red-500 flex-shrink-0">-{r.marks_deducted}</span>
-                                      )}
-                                    </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {records.map((r) => {
+                          const sev = SEV_STYLE[r.severity] ?? SEV_STYLE.MINOR;
+                          return (
+                            <div key={r.id} className="rounded-2xl p-3" style={{ background: "var(--surface-muted)" }}>
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: sev.bg, color: sev.text }}>{r.severity}</span>
+                                    <span className="text-xs text-gray-400">{TYPE_LABEL[r.type] ?? r.type}</span>
                                   </div>
-                                );
-                              })}
+                                  <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{r.title}</p>
+                                  {r.description && <p className="text-xs text-gray-500 mt-0.5">{r.description}</p>}
+                                  {r.action_taken && <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>→ {r.action_taken}</p>}
+                                  <p className="text-xs text-gray-400 mt-1">
+                                    {new Date(r.recorded_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                                    {r.recorder && ` · ${r.recorder.first_name} ${r.recorder.last_name}`}
+                                  </p>
+                                </div>
+                                <div className="shrink-0 flex flex-col items-end gap-1.5">
+                                  <div className="text-right">
+                                    <span className="text-sm font-bold text-red-500">
+                                      -{r.marks_deducted !== undefined ? r.marks_deducted : (r.severity === "SERIOUS" ? 5 : r.severity === "MODERATE" ? 3 : 1)}
+                                    </span>
+                                    <p className="text-[10px] text-gray-400">marks</p>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-[9px] font-bold text-gray-400">Deduct:</span>
+                                    {[1, 2, 5].map((pts) => (
+                                      <button key={pts} type="button" disabled={updatingId === r.id} onClick={() => handleAdjustMarks(r.id, pts)}
+                                        className="px-1.5 py-0.5 rounded-lg text-[10px] font-bold border transition hover:bg-red-50 disabled:opacity-40"
+                                        style={{ borderColor: "#FECACA", color: "#C62828", background: "#FEF2F2" }}>
+                                        -{pts}
+                                      </button>
+                                    ))}
+                                    <button type="button" disabled={updatingId === r.id || (r.marks_deducted ?? 0) <= 0} onClick={() => handleAdjustMarks(r.id, -1)}
+                                      className="px-1.5 py-0.5 rounded-lg text-[10px] font-bold border transition hover:bg-green-50 disabled:opacity-30"
+                                      style={{ borderColor: "#BBF7D0", color: "#166534", background: "#F0FDF4" }}>
+                                      +1
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
-                    );
-                  })()}
-                </div>
-
-                {schoolPages > 1 && (
-                  <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between flex-shrink-0">
-                    <p className="text-xs text-gray-400">Page {schoolPage} of {schoolPages}</p>
-                    <div className="flex gap-1">
-                      <button disabled={schoolPage === 1} onClick={() => setSchoolPage((p) => p - 1)}
-                        className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 disabled:opacity-40">
-                        <ChevronLeft size={12} />
-                      </button>
-                      <button disabled={schoolPage === schoolPages} onClick={() => setSchoolPage((p) => p + 1)}
-                        className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 disabled:opacity-40">
-                        <ChevronRight size={12} />
-                      </button>
-                    </div>
+                    )}
                   </div>
-                )}
-              </div>
+                </div>
+              </>
             )}
           </div>
-        </div>
+        )}
+
+        {/* Records view */}
+        {view === "records" && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2">
+              <Search size={12} className="text-gray-400 shrink-0" />
+              <input value={schoolSearch} onChange={(e) => setSchoolSearch(e.target.value)}
+                placeholder="Search by student, offense…"
+                className="flex-1 text-xs bg-transparent outline-none" />
+              {schoolSearch && <button onClick={() => setSchoolSearch("")}><X size={11} className="text-gray-400" /></button>}
+            </div>
+
+            {schoolLoading ? (
+              <div className="flex justify-center py-16"><Loader2 size={22} className="animate-spin text-gray-300" /></div>
+            ) : schoolRecords.length === 0 ? (
+              <div className="flex flex-col items-center py-16 text-gray-300">
+                <AlertTriangle size={32} className="mb-2" />
+                <p className="text-sm">{schoolSearch ? "No records match" : "No discipline records"}</p>
+              </div>
+            ) : (() => {
+              const today = new Date().toDateString();
+              const yesterday = new Date(Date.now() - 86400000).toDateString();
+              const grouped: Record<string, typeof schoolRecords> = {};
+              schoolRecords.forEach((r) => {
+                const d = new Date(r.recorded_at);
+                const key = d.toDateString() === today ? "Today"
+                  : d.toDateString() === yesterday ? "Yesterday"
+                  : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+                (grouped[key] ??= []).push(r);
+              });
+              return (
+                <div className="space-y-4">
+                  {Object.entries(grouped).map(([dateLabel, recs]) => (
+                    <div key={dateLabel}>
+                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">{dateLabel}</p>
+                      <div className="space-y-2">
+                        {recs.map((r) => {
+                          const sev = SEV_STYLE[r.severity] ?? SEV_STYLE.MINOR;
+                          const studentName = r.student ? `${r.student.user.first_name} ${r.student.user.last_name}`.trim() : null;
+                          const visitCount = r.student_visit_count ?? 0;
+                          return (
+                            <div key={r.id} className="bg-white rounded-2xl p-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: sev.bg, color: sev.text }}>{r.severity}</span>
+                                    <span className="text-xs text-gray-400">{TYPE_LABEL[r.type] ?? r.type}</span>
+                                    {studentName && <span className="text-xs font-semibold text-gray-700">{studentName}</span>}
+                                    {visitCount > 1 && (
+                                      <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-orange-50 text-orange-600">
+                                        <History size={9} /> #{visitCount}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-sm font-medium truncate text-gray-700">{r.title}</p>
+                                  {r.description && <p className="text-xs text-gray-400 mt-0.5 truncate">{r.description}</p>}
+                                  {r.action_taken && <p className="text-xs mt-0.5 truncate text-gray-500">→ {r.action_taken}</p>}
+                                  <p className="text-xs text-gray-400 mt-1">
+                                    <Clock size={10} className="inline mr-1" />
+                                    {new Date(r.recorded_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                                    {r.student_code && ` · ${r.student_code}`}
+                                  </p>
+                                </div>
+                                {(r.marks_deducted ?? 0) > 0 && (
+                                  <span className="text-sm font-bold text-red-500 shrink-0">-{r.marks_deducted}</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                  {schoolPages > 1 && (
+                    <div className="flex items-center justify-between pt-2">
+                      <p className="text-xs text-gray-400">Page {schoolPage} of {schoolPages}</p>
+                      <div className="flex gap-1">
+                        <button disabled={schoolPage === 1} onClick={() => setSchoolPage((p) => p - 1)}
+                          className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center disabled:opacity-40">
+                          <ChevronLeft size={12} />
+                        </button>
+                        <button disabled={schoolPage === schoolPages} onClick={() => setSchoolPage((p) => p + 1)}
+                          className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center disabled:opacity-40">
+                          <ChevronRight size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
       </div>
     </DashboardShell>
   );

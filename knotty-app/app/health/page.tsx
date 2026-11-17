@@ -259,6 +259,8 @@ export default function HealthPage() {
   const { toast } = useToast();
   const { startListen, stopListen, listening, isSupported } = useNFC();
 
+  const [view, setView] = useState<"home" | "scan" | "records">("home");
+
   const [cardInput, setCardInput]   = useState("");
   const [scanning, setScanning]     = useState(false);
   const processingRef               = useRef(false);
@@ -286,7 +288,7 @@ export default function HealthPage() {
     processingRef.current = true;
     setScanning(true);
     try {
-      let studentData: { id: string; name: string; class: string; card_number: string | null; student_code: string; photo: string | null };
+      let studentData: ScannedStudent;
       if (isNFC) {
         const holder = await supabaseCanteenService.lookupCardHolderByNfcUid(user.school_id, cardNum.trim());
         if (!holder) throw new Error("Card not found or not active");
@@ -299,7 +301,7 @@ export default function HealthPage() {
           photo: holder.profile_photo_path ?? null,
         };
       } else {
-        let scanned: { id: string; name: string; class: string; card_number: string | null; student_code: string; photo: string | null };
+        let scanned: ScannedStudent;
         try {
           scanned = await supabaseLibraryService.lookupStudent(user.school_id, cardNum.trim());
         } catch (origErr) {
@@ -319,14 +321,7 @@ export default function HealthPage() {
         }
         studentData = scanned;
       }
-      setStudent({
-        id: studentData.id,
-        name: studentData.name,
-        class: studentData.class,
-        card_number: studentData.card_number,
-        student_code: studentData.student_code,
-        photo: studentData.photo,
-      });
+      setStudent(studentData);
       setCardInput("");
       setStudentTab("incidents");
       setStudentLoading(true);
@@ -351,12 +346,13 @@ export default function HealthPage() {
   scanHandlerRef.current = handleCardScan;
 
   useEffect(() => {
+    if (view !== "scan") { stopListen(); return; }
     if (!authLoading && isSupported) {
       startListen((r) => scanHandlerRef.current(r.value, r.type === "uid"));
     }
     return () => { stopListen(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, isSupported]);
+  }, [authLoading, isSupported, view]);
 
   const loadSchool = useCallback(async () => {
     if (!user?.school_id) return;
@@ -374,6 +370,14 @@ export default function HealthPage() {
   useEffect(() => { if (!authLoading) loadSchool(); }, [loadSchool, authLoading]);
 
   const schoolPages = Math.ceil(schoolTotal / LIMIT);
+
+  function goHome() {
+    setView("home");
+    setStudent(null);
+    setProfile(null);
+    setIncidents([]);
+    setVisits([]);
+  }
 
   return (
     <DashboardShell>
@@ -394,19 +398,54 @@ export default function HealthPage() {
         />
       )}
 
-      <div className="h-full flex flex-col overflow-hidden">
-        <div className="flex items-center gap-3 px-3 md:px-4 pt-1 pb-3 flex-shrink-0">
+      <div className="space-y-3">
+
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          {view !== "home" && (
+            <button onClick={goHome}
+              className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 transition shrink-0">
+              <ChevronLeft size={16} className="text-gray-600" />
+            </button>
+          )}
           <div>
-            <h1 className="text-lg font-bold" style={{ color: "#121212" }}>Health & Medical</h1>
-            <p className="text-xs" style={{ color: "#666" }}>Tap student card to view medical records</p>
+            <h1 className="text-lg font-bold text-gray-800">
+              {view === "home" ? "Health & Medical" : view === "scan" ? "Scan Student" : "All Records"}
+            </h1>
+            {view === "home" && <p className="text-xs text-gray-400 mt-0.5">Student health & clinic management</p>}
           </div>
         </div>
 
-        <div className="flex flex-1 gap-3 px-3 md:px-4 pb-3 md:pb-4 overflow-hidden min-h-0 flex-col lg:flex-row">
+        {/* Home: 2 blocks */}
+        {view === "home" && (
+          <div className="grid grid-cols-2 gap-3">
+            <button onClick={() => setView("scan")}
+              className="bg-white rounded-2xl p-4 shadow-sm hover:shadow-md transition text-left">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: "#FFF1F2" }}>
+                <Heart size={20} style={{ color: "#E11D48" }} />
+              </div>
+              <p className="text-sm font-semibold text-gray-700">Scan Student</p>
+              <p className="text-xs text-gray-400 mt-0.5">View & log health records</p>
+            </button>
 
-          {/* ── LEFT: Scanner ───────────────────────────────── */}
-          <div className="lg:w-72 flex-shrink-0 flex flex-col gap-3">
-            <div className="bg-white rounded-3xl p-5 flex flex-col items-center gap-3">
+            <button onClick={() => setView("records")}
+              className="bg-white rounded-2xl p-4 shadow-sm hover:shadow-md transition text-left">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: "#F9FAFB" }}>
+                <Activity size={20} style={{ color: "#374151" }} />
+              </div>
+              {schoolLoading
+                ? <div className="h-7 w-10 bg-gray-100 rounded-lg animate-pulse mb-0.5" />
+                : <p className="text-2xl font-bold text-gray-800">{schoolTotal}</p>}
+              <p className="text-sm font-semibold text-gray-700">All Records</p>
+              <p className="text-xs text-gray-400 mt-0.5">School-wide health log</p>
+            </button>
+          </div>
+        )}
+
+        {/* Scan view */}
+        {view === "scan" && (
+          <div className="space-y-3">
+            <div className="bg-white rounded-2xl p-5 flex flex-col items-center gap-3">
               <div className="w-20 h-20 rounded-full flex items-center justify-center"
                 style={{ background: listening ? "#FFF1F2" : "#F5F5F5" }}>
                 {scanning
@@ -415,7 +454,7 @@ export default function HealthPage() {
                   ? <Heart size={32} className="animate-pulse fill-current" style={{ color: "#E11D48" }} />
                   : <WifiOff size={32} style={{ color: "#ccc" }} />}
               </div>
-              <p className="text-sm font-bold text-center" style={{ color: "#121212" }}>
+              <p className="text-sm font-bold text-center text-gray-800">
                 {scanning ? "Reading card…" : listening ? "Waiting for card tap…" : "NFC not available"}
               </p>
               <p className="text-xs text-center text-gray-400">
@@ -435,136 +474,215 @@ export default function HealthPage() {
               <VirtualCardTap onTap={(cn) => handleCardScan(cn)} busy={scanning} />
             </div>
 
-            {/* Student card (desktop) */}
             {student && (
-              <div className="bg-white rounded-3xl p-4 hidden lg:block">
-                <div className="flex items-center gap-3 mb-3">
-                  {student.photo
-                    ? <img src={student.photo} alt={student.name} className="w-12 h-12 rounded-2xl object-cover flex-shrink-0" />
-                    : <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-bold flex-shrink-0"
-                        style={{ background: "#FFF1F2", color: "#E11D48" }}>{student.name.charAt(0)}</div>}
-                  <div className="min-w-0">
-                    <p className="font-bold text-sm truncate" style={{ color: "#121212" }}>{student.name}</p>
-                    <p className="text-xs text-gray-400">{student.class}</p>
+              <>
+                <div className="bg-white rounded-2xl p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    {student.photo
+                      ? <img src={student.photo} alt={student.name} className="w-12 h-12 rounded-2xl object-cover shrink-0" />
+                      : <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-bold shrink-0"
+                          style={{ background: "#FFF1F2", color: "#E11D48" }}>{student.name.charAt(0)}</div>}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-sm truncate text-gray-800">{student.name}</p>
+                      <p className="text-xs text-gray-400">{student.class} · {student.student_code}</p>
+                    </div>
+                  </div>
+
+                  {profile && (
+                    <div className="space-y-1.5 mb-3">
+                      {profile.blood_type && (
+                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold" style={{ background: "#FFF1F2", color: "#E11D48" }}>
+                          <Activity size={12} /> Blood type: {profile.blood_type}
+                        </div>
+                      )}
+                      {profile.allergies && profile.allergies.length > 0 && (
+                        <div className="px-3 py-1.5 rounded-xl text-xs" style={{ background: "#FEF9C3", color: "#854D0E" }}>
+                          <span className="font-semibold">Allergies:</span> {profile.allergies.join(", ")}
+                        </div>
+                      )}
+                      {profile.chronic_conditions && profile.chronic_conditions.length > 0 && (
+                        <div className="px-3 py-1.5 rounded-xl text-xs" style={{ background: "#EDE9FE", color: "#5B21B6" }}>
+                          <span className="font-semibold">Conditions:</span> {profile.chronic_conditions.join(", ")}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={() => setShowIncidentModal(true)}
+                      className="py-2.5 rounded-2xl text-xs font-bold text-white flex items-center justify-center gap-1"
+                      style={{ background: "#E11D48" }}>
+                      <Plus size={12} /> Log Incident
+                    </button>
+                    <button onClick={() => setShowVisitModal(true)}
+                      className="py-2.5 rounded-2xl text-xs font-bold text-white flex items-center justify-center gap-1"
+                      style={{ background: "#121212" }}>
+                      <Pill size={12} /> Log Visit
+                    </button>
                   </div>
                 </div>
 
-                {profile && (
-                  <div className="space-y-1.5 mb-3">
-                    {profile.blood_type && (
-                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold" style={{ background: "#FFF1F2", color: "#E11D48" }}>
-                        <Activity size={12} /> Blood type: {profile.blood_type}
-                      </div>
-                    )}
-                    {profile.allergies && profile.allergies.length > 0 && (
-                      <div className="px-3 py-1.5 rounded-xl text-xs" style={{ background: "#FEF9C3", color: "#854D0E" }}>
-                        <span className="font-semibold">Allergies:</span> {profile.allergies.join(", ")}
-                      </div>
-                    )}
-                    {profile.chronic_conditions && profile.chronic_conditions.length > 0 && (
-                      <div className="px-3 py-1.5 rounded-xl text-xs" style={{ background: "#EDE9FE", color: "#5B21B6" }}>
-                        <span className="font-semibold">Conditions:</span> {profile.chronic_conditions.join(", ")}
-                      </div>
+                <div className="bg-white rounded-2xl overflow-hidden">
+                  <div className="flex gap-1 p-3 border-b border-gray-100">
+                    {(["incidents", "visits"] as const).map((tab) => (
+                      <button key={tab} onClick={() => setStudentTab(tab)}
+                        className="px-4 py-1.5 rounded-xl text-xs font-semibold transition"
+                        style={studentTab === tab
+                          ? { background: "#FFF1F2", color: "#E11D48" }
+                          : { background: "transparent", color: "#999" }}>
+                        {tab === "incidents" ? `Incidents (${incidents.length})` : `Clinic Visits (${visits.length})`}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="p-4">
+                    {studentLoading ? (
+                      <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-gray-300" /></div>
+                    ) : studentTab === "incidents" ? (
+                      incidents.length === 0 ? (
+                        <div className="flex flex-col items-center py-10">
+                          <CheckCircle size={32} className="mb-2 text-green-300" />
+                          <p className="text-sm font-medium text-green-500">No health incidents on record</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {incidents.map((r) => {
+                            const sev = SEV_STYLE[r.severity] ?? SEV_STYLE.LOW;
+                            return (
+                              <div key={r.id} className="rounded-2xl p-3 bg-gray-50">
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: sev.bg, color: sev.text }}>{r.severity}</span>
+                                  <span className="text-xs text-gray-400">{TYPE_LABEL[r.type] ?? r.type}</span>
+                                </div>
+                                <p className="text-sm font-semibold text-gray-800">{r.title}</p>
+                                {r.description && <p className="text-xs text-gray-500 mt-0.5">{r.description}</p>}
+                                {r.treatment_given && <p className="text-xs mt-0.5 text-green-600">{r.treatment_given}</p>}
+                                {r.follow_up_required && (
+                                  <span className="inline-flex items-center gap-1 text-xs text-amber-600 mt-0.5"><AlertCircle size={10} /> Follow-up needed</span>
+                                )}
+                                <p className="text-xs text-gray-400 mt-1">
+                                  {new Date(r.recorded_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )
+                    ) : (
+                      visits.length === 0 ? (
+                        <div className="flex flex-col items-center py-10 text-gray-300">
+                          <Activity size={32} className="mb-2" />
+                          <p className="text-sm">No clinic visits recorded</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {visits.map((v) => (
+                            <div key={v.id} className="rounded-2xl p-3 bg-gray-50">
+                              <p className="text-sm font-semibold mb-1 text-gray-800">{v.presenting_complaint}</p>
+                              {v.treatment_notes && <p className="text-xs text-gray-500 mb-1">{v.treatment_notes}</p>}
+                              {v.medications && v.medications.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mb-1">
+                                  {v.medications.map((m, i) => (
+                                    <span key={i} className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: "#EDE9FE", color: "#5B21B6" }}>
+                                      <Pill size={9} className="inline mr-1" />{m.medication_name} {m.dosage}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              {v.follow_up_required && <span className="text-xs text-amber-600 flex items-center gap-1"><AlertCircle size={10} /> Follow-up required</span>}
+                              <p className="text-xs text-gray-400 mt-1">
+                                {new Date(v.visit_datetime).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                                {v.recorder && ` · ${v.recorder.first_name} ${v.recorder.last_name}`}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )
                     )}
                   </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => setShowIncidentModal(true)}
-                    className="py-2.5 rounded-2xl text-xs font-bold text-white flex items-center justify-center gap-1"
-                    style={{ background: "#E11D48" }}>
-                    <Plus size={12} /> Incident
-                  </button>
-                  <button onClick={() => setShowVisitModal(true)}
-                    className="py-2.5 rounded-2xl text-xs font-bold text-white flex items-center justify-center gap-1"
-                    style={{ background: "#121212" }}>
-                    <Pill size={12} /> Visit
-                  </button>
                 </div>
-              </div>
+              </>
             )}
           </div>
+        )}
 
-          {/* ── RIGHT: Detail or school-wide ─────────────────── */}
-          <div className="flex-1 flex flex-col gap-3 overflow-hidden min-h-0">
-
-            {/* Student card (mobile) */}
-            {student && (
-              <div className="bg-white rounded-3xl p-4 lg:hidden flex-shrink-0">
-                <div className="flex items-center gap-3 mb-3">
-                  {student.photo
-                    ? <img src={student.photo} alt={student.name} className="w-10 h-10 rounded-2xl object-cover flex-shrink-0" />
-                    : <div className="w-10 h-10 rounded-2xl flex items-center justify-center font-bold flex-shrink-0 text-sm"
-                        style={{ background: "#FFF1F2", color: "#E11D48" }}>{student.name.charAt(0)}</div>}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm truncate" style={{ color: "#121212" }}>{student.name}</p>
-                    <p className="text-xs text-gray-400">{student.class} · {student.student_code}</p>
-                  </div>
-                </div>
-                {profile?.blood_type && (
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold mb-2" style={{ background: "#FFF1F2", color: "#E11D48" }}>
-                    <Activity size={12} /> Blood type: {profile.blood_type}
-                    {profile.allergies?.length > 0 && <span className="ml-2 font-normal text-yellow-700">· Allergies: {profile.allergies.join(", ")}</span>}
-                  </div>
+        {/* Records view */}
+        {view === "records" && (
+          <div className="space-y-3">
+            <form onSubmit={(e) => { e.preventDefault(); setSchoolPage(1); setSearch(searchInput); }}
+              className="flex gap-2">
+              <div className="flex-1 flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2">
+                <Search size={12} className="text-gray-400 shrink-0" />
+                <input value={searchInput} onChange={(e) => setSearchInput(e.target.value)}
+                  placeholder="Search by student, incident…"
+                  className="flex-1 text-xs bg-transparent outline-none" />
+                {searchInput && (
+                  <button type="button" onClick={() => { setSearchInput(""); setSearch(""); setSchoolPage(1); }}>
+                    <X size={11} className="text-gray-400" />
+                  </button>
                 )}
-                <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => setShowIncidentModal(true)}
-                    className="py-2.5 rounded-2xl text-xs font-bold text-white flex items-center justify-center gap-1"
-                    style={{ background: "#E11D48" }}>
-                    <Plus size={12} /> Log Incident
-                  </button>
-                  <button onClick={() => setShowVisitModal(true)}
-                    className="py-2.5 rounded-2xl text-xs font-bold text-white flex items-center justify-center gap-1"
-                    style={{ background: "#121212" }}>
-                    <Pill size={12} /> Log Visit
-                  </button>
-                </div>
               </div>
-            )}
+              <button type="submit" className="px-3 py-2 rounded-xl text-white text-xs font-semibold shrink-0" style={{ background: "#E11D48" }}>
+                Search
+              </button>
+            </form>
 
-            {student ? (
-              <div className="bg-white rounded-3xl flex-1 overflow-hidden flex flex-col">
-                <div className="flex gap-1 p-3 border-b border-gray-100 flex-shrink-0">
-                  {(["incidents", "visits"] as const).map((tab) => (
-                    <button key={tab} onClick={() => setStudentTab(tab)}
-                      className="px-4 py-1.5 rounded-xl text-xs font-semibold transition"
-                      style={studentTab === tab
-                        ? { background: "#FFF1F2", color: "#E11D48" }
-                        : { background: "transparent", color: "#999" }}>
-                      {tab === "incidents" ? `Incidents (${incidents.length})` : `Clinic Visits (${visits.length})`}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="flex-1 overflow-y-auto px-4 py-3">
-                  {studentLoading ? (
-                    <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-gray-300" /></div>
-                  ) : studentTab === "incidents" ? (
-                    incidents.length === 0 ? (
-                      <div className="flex flex-col items-center py-10 text-gray-300">
-                        <CheckCircle size={32} className="mb-2 text-green-300" />
-                        <p className="text-sm font-medium text-green-500">No health incidents on record</p>
-                      </div>
-                    ) : (
+            {schoolLoading ? (
+              <div className="flex justify-center py-16"><Loader2 size={22} className="animate-spin text-gray-300" /></div>
+            ) : schoolRecords.length === 0 ? (
+              <div className="flex flex-col items-center py-16 text-gray-300">
+                <Heart size={32} className="mb-2" />
+                <p className="text-sm">{search ? "No records match your search" : "No health incidents logged"}</p>
+              </div>
+            ) : (() => {
+              const grouped: Record<string, HealthRecord[]> = {};
+              const today = new Date().toDateString();
+              const yesterday = new Date(Date.now() - 86400000).toDateString();
+              schoolRecords.forEach((r) => {
+                const d = new Date(r.recorded_at);
+                const key = d.toDateString() === today ? "Today"
+                  : d.toDateString() === yesterday ? "Yesterday"
+                  : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+                (grouped[key] ??= []).push(r);
+              });
+              return (
+                <div className="space-y-4">
+                  {Object.entries(grouped).map(([dateLabel, recs]) => (
+                    <div key={dateLabel}>
+                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">{dateLabel}</p>
                       <div className="space-y-2">
-                        {incidents.map((r) => {
+                        {recs.map((r) => {
                           const sev = SEV_STYLE[r.severity] ?? SEV_STYLE.LOW;
+                          const studentName = r.student
+                            ? `${r.student.user.first_name} ${r.student.user.last_name}`.trim()
+                            : null;
+                          const visitCount = r.student_visit_count ?? 0;
                           return (
-                            <div key={r.id} className="rounded-2xl p-3" style={{ background: "#F9F9F9" }}>
+                            <div key={r.id} className="bg-white rounded-2xl p-3">
                               <div className="flex items-start justify-between gap-2">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-1.5 mb-1">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                                     <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: sev.bg, color: sev.text }}>{r.severity}</span>
                                     <span className="text-xs text-gray-400">{TYPE_LABEL[r.type] ?? r.type}</span>
+                                    {studentName && <span className="text-xs font-semibold text-gray-700">{studentName}</span>}
+                                    {visitCount > 1 && (
+                                      <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-rose-50 text-rose-600">
+                                        <History size={9} /> Visit #{visitCount}
+                                      </span>
+                                    )}
                                   </div>
-                                  <p className="text-sm font-semibold" style={{ color: "#121212" }}>{r.title}</p>
-                                  {r.description && <p className="text-xs text-gray-500 mt-0.5">{r.description}</p>}
-                                  {r.treatment_given && <p className="text-xs mt-0.5 text-green-600">✓ {r.treatment_given}</p>}
+                                  <p className="text-sm font-medium truncate text-gray-700">{r.title}</p>
+                                  {r.description && <p className="text-xs text-gray-400 mt-0.5 truncate">{r.description}</p>}
+                                  {r.treatment_given && <p className="text-xs text-green-600 mt-0.5 truncate">{r.treatment_given}</p>}
                                   {r.follow_up_required && (
-                                    <span className="inline-flex items-center gap-1 text-xs text-amber-600 mt-0.5"><AlertCircle size={10} /> Follow-up needed</span>
+                                    <span className="inline-flex items-center gap-1 text-xs text-amber-600 mt-0.5">
+                                      <AlertCircle size={10} /> Follow-up required
+                                    </span>
                                   )}
                                   <p className="text-xs text-gray-400 mt-1">
-                                    {new Date(r.recorded_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                                    <Clock size={10} className="inline mr-1" />
+                                    {new Date(r.recorded_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                                    {r.student_code && ` · ${r.student_code}`}
                                   </p>
                                 </div>
                               </div>
@@ -572,159 +690,29 @@ export default function HealthPage() {
                           );
                         })}
                       </div>
-                    )
-                  ) : (
-                    visits.length === 0 ? (
-                      <div className="flex flex-col items-center py-10 text-gray-300">
-                        <Activity size={32} className="mb-2" />
-                        <p className="text-sm">No clinic visits recorded</p>
+                    </div>
+                  ))}
+                  {schoolPages > 1 && (
+                    <div className="flex items-center justify-between pt-2">
+                      <p className="text-xs text-gray-400">Page {schoolPage} of {schoolPages}</p>
+                      <div className="flex gap-1">
+                        <button disabled={schoolPage === 1} onClick={() => setSchoolPage((p) => p - 1)}
+                          className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center disabled:opacity-40">
+                          <ChevronLeft size={12} />
+                        </button>
+                        <button disabled={schoolPage === schoolPages} onClick={() => setSchoolPage((p) => p + 1)}
+                          className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center disabled:opacity-40">
+                          <ChevronRight size={12} />
+                        </button>
                       </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {visits.map((v) => (
-                          <div key={v.id} className="rounded-2xl p-3" style={{ background: "#F9F9F9" }}>
-                            <p className="text-sm font-semibold mb-1" style={{ color: "#121212" }}>{v.presenting_complaint}</p>
-                            {v.treatment_notes && <p className="text-xs text-gray-500 mb-1">{v.treatment_notes}</p>}
-                            {v.medications && v.medications.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mb-1">
-                                {v.medications.map((m, i) => (
-                                  <span key={i} className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: "#EDE9FE", color: "#5B21B6" }}>
-                                    <Pill size={9} className="inline mr-1" />{m.medication_name} {m.dosage}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                            {v.follow_up_required && <span className="text-xs text-amber-600 flex items-center gap-1"><AlertCircle size={10} /> Follow-up required</span>}
-                            <p className="text-xs text-gray-400 mt-1">
-                              {new Date(v.visit_datetime).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
-                              {v.recorder && ` · ${v.recorder.first_name} ${v.recorder.last_name}`}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    )
+                    </div>
                   )}
                 </div>
-              </div>
-            ) : (
-              <div className="bg-white rounded-3xl flex-1 overflow-hidden flex flex-col">
-                {/* Header + Search */}
-                <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-bold" style={{ color: "#121212" }}>All Health Records</p>
-                    <p className="text-xs text-gray-400">{schoolTotal} record{schoolTotal !== 1 ? "s" : ""}</p>
-                  </div>
-                  <form onSubmit={(e) => { e.preventDefault(); setSchoolPage(1); setSearch(searchInput); }} className="flex gap-2">
-                    <div className="flex-1 flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-1.5">
-                      <Search size={12} className="text-gray-400 shrink-0" />
-                      <input
-                        value={searchInput}
-                        onChange={(e) => setSearchInput(e.target.value)}
-                        placeholder="Search by student name, ID, or incident…"
-                        className="flex-1 text-xs outline-none bg-transparent"
-                      />
-                      {searchInput && (
-                        <button type="button" onClick={() => { setSearchInput(""); setSearch(""); setSchoolPage(1); }}>
-                          <X size={11} className="text-gray-400" />
-                        </button>
-                      )}
-                    </div>
-                    <button type="submit" className="px-3 py-1.5 rounded-xl text-white text-xs font-semibold" style={{ background: "#E11D48" }}>
-                      Search
-                    </button>
-                  </form>
-                </div>
-
-                <div className="flex-1 overflow-y-auto px-4 py-3">
-                  {schoolLoading ? (
-                    <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-gray-300" /></div>
-                  ) : schoolRecords.length === 0 ? (
-                    <div className="flex flex-col items-center py-10 text-gray-300">
-                      <Heart size={32} className="mb-2" />
-                      <p className="text-sm">{search ? "No records match your search" : "No health incidents logged"}</p>
-                    </div>
-                  ) : (() => {
-                    // Group by date
-                    const grouped: Record<string, HealthRecord[]> = {};
-                    const today = new Date().toDateString();
-                    const yesterday = new Date(Date.now() - 86400000).toDateString();
-                    schoolRecords.forEach((r) => {
-                      const d = new Date(r.recorded_at);
-                      const key = d.toDateString() === today
-                        ? "Today"
-                        : d.toDateString() === yesterday
-                        ? "Yesterday"
-                        : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-                      (grouped[key] ??= []).push(r);
-                    });
-                    return (
-                      <div className="space-y-4">
-                        {Object.entries(grouped).map(([dateLabel, recs]) => (
-                          <div key={dateLabel}>
-                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">{dateLabel}</p>
-                            <div className="space-y-2">
-                              {recs.map((r) => {
-                                const sev = SEV_STYLE[r.severity] ?? SEV_STYLE.LOW;
-                                const studentName = r.student
-                                  ? `${r.student.user.first_name} ${r.student.user.last_name}`.trim()
-                                  : null;
-                                const visitCount = r.student_visit_count ?? 0;
-                                return (
-                                  <div key={r.id} className="rounded-2xl p-3" style={{ background: "#F9F9F9" }}>
-                                    <div className="flex items-start justify-between gap-2">
-                                      <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                                          <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: sev.bg, color: sev.text }}>{r.severity}</span>
-                                          <span className="text-xs text-gray-400">{TYPE_LABEL[r.type] ?? r.type}</span>
-                                          {studentName && (
-                                            <span className="text-xs font-semibold" style={{ color: "#121212" }}>{studentName}</span>
-                                          )}
-                                          {visitCount > 1 && (
-                                            <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-rose-50 text-rose-600">
-                                              <History size={9} /> Visit #{visitCount}
-                                            </span>
-                                          )}
-                                        </div>
-                                        <p className="text-sm font-medium truncate" style={{ color: "#444" }}>{r.title}</p>
-                                        {r.description && <p className="text-xs text-gray-400 mt-0.5 truncate">{r.description}</p>}
-                                        {r.treatment_given && <p className="text-xs text-green-600 mt-0.5 truncate">✓ {r.treatment_given}</p>}
-                                        {r.follow_up_required && (
-                                          <span className="inline-flex items-center gap-1 text-xs text-amber-600 mt-0.5">
-                                            <AlertCircle size={10} /> Follow-up required
-                                          </span>
-                                        )}
-                                        <p className="text-xs text-gray-400 mt-1">
-                                          <Clock size={10} className="inline mr-1" />
-                                          {new Date(r.recorded_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
-                                          {r.student_code && ` · ${r.student_code}`}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })()}
-                </div>
-                {schoolPages > 1 && (
-                  <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between flex-shrink-0">
-                    <p className="text-xs text-gray-400">Page {schoolPage} of {schoolPages}</p>
-                    <div className="flex gap-1">
-                      <button disabled={schoolPage === 1} onClick={() => setSchoolPage((p) => p - 1)}
-                        className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center disabled:opacity-40"><ChevronLeft size={12} /></button>
-                      <button disabled={schoolPage === schoolPages} onClick={() => setSchoolPage((p) => p + 1)}
-                        className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center disabled:opacity-40"><ChevronRight size={12} /></button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+              );
+            })()}
           </div>
-        </div>
+        )}
+
       </div>
     </DashboardShell>
   );

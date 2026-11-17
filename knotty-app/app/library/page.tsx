@@ -4,7 +4,7 @@ import {
   Book, BookOpen, Plus, X, Search, AlertTriangle, CheckCircle,
   Loader2, CreditCard, RotateCcw, BookMarked, MapPin, Tag, Clock,
   Wifi, WifiOff, Users, RefreshCw, Sparkles, Check, ShieldCheck,
-  History, ArrowRight,
+  History, ArrowRight, ChevronLeft,
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import VirtualCardTap from "@/components/VirtualCardTap";
@@ -57,7 +57,7 @@ const CATEGORIES = [
   "Chemistry", "Physics", "Computer Science", "Art", "Other",
 ];
 
-type Tab = "home" | "catalog" | "add-book" | "lend-return";
+type Tab = "home" | "overview" | "catalog" | "add-book" | "lend-return";
 type StudentInfo = {
   id: string;
   name: string;
@@ -721,29 +721,38 @@ export default function LibraryPage() {
 
         {/* ── Header ──────────────────────────────────────────── */}
         <div className="flex items-center gap-3 px-3 md:px-4 pt-1 pb-3 flex-shrink-0">
+          {tab !== "home" && (
+            <button onClick={() => setTab("home")}
+              className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 transition shrink-0">
+              <ChevronLeft size={16} className="text-gray-600" />
+            </button>
+          )}
           <div className="flex-1">
-            <h1 className="text-lg font-bold" style={{ color: "#121212" }}>Library</h1>
-            <p className="text-xs" style={{ color: "#666666" }}>Register books · Lend · Return</p>
+            <h1 className="text-lg font-bold text-gray-800">
+              {tab === "home" ? "Library"
+               : tab === "overview" ? "Library Overview"
+               : tab === "catalog" ? "Book Catalog"
+               : tab === "add-book" ? "Add New Book"
+               : "Lend & Return"}
+            </h1>
+            {tab === "home" && (
+              <p className="text-xs text-gray-400 mt-0.5">
+                {loading ? "Loading…" : `${stats.totalBooks} books · ${stats.activeMembers} active borrows`}
+              </p>
+            )}
           </div>
-          {!loading && (
-            <div className="flex gap-2 flex-wrap justify-end">
-              <span className="text-xs font-semibold px-3 py-1 rounded-full" style={{ background: "#DCFCE7", color: "#16A34A" }}>
-                {stats.totalBooks} Books
-              </span>
-              <span className="text-xs font-semibold px-3 py-1 rounded-full" style={{ background: "#F5F5F5", color: "#666" }}>
-                {stats.activeMembers} Active
-              </span>
-              {stats.overdueBooks > 0 && (
-                <span className="text-xs font-semibold px-3 py-1 rounded-full bg-red-100 text-red-600">
-                  ⚠ {stats.overdueBooks} Overdue
-                </span>
-              )}
-            </div>
+          {(tab === "home" || tab === "lend-return") && (
+            <button onClick={openLendModal}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-white text-xs font-semibold transition shrink-0"
+              style={{ background: "#16A34A" }}>
+              <BookMarked size={14} />
+              <span>{tab === "home" ? "Lend Book" : "Quick Lend"}</span>
+            </button>
           )}
         </div>
 
-        {/* ── Overdue banner ───────────────────────────────────── */}
-        {!loading && overdueItems.length > 0 && (
+        {/* ── Overdue banner (overview only) ───────────────────── */}
+        {tab === "overview" && !loading && overdueItems.length > 0 && (
           <div className="mx-3 md:mx-4 mb-3 rounded-2xl p-3 flex gap-2 items-start flex-shrink-0"
             style={{ background: "#FFF1F1", border: "1px solid #FECACA" }}>
             <AlertTriangle size={15} className="text-red-500 mt-0.5 flex-shrink-0" />
@@ -761,25 +770,63 @@ export default function LibraryPage() {
           </div>
         )}
 
-        {/* ── Tabs ────────────────────────────────────────────── */}
-        <div className="flex gap-2 px-3 md:px-4 mb-3 flex-shrink-0">
-          {(["home", "catalog", "add-book", "lend-return"] as Tab[]).map(t => {
-            const labels: Record<Tab, string> = { home: "Overview", catalog: "Book Catalog", "add-book": "Add Book", "lend-return": "Lend & Return" };
-            return (
-              <button key={t} onClick={() => setTab(t)}
-                className="px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer"
-                style={tab === t ? { background: "#16A34A", color: "#fff" } : { background: "#fff", color: "#666666" }}>
-                {labels[t]}
-              </button>
-            );
-          })}
-        </div>
-
         {/* ── Tab body ────────────────────────────────────────── */}
         <div className="flex-1 overflow-y-auto px-3 md:px-4 pb-4">
 
-          {/* ═══════════════ OVERVIEW ═══════════════ */}
+          {/* ═══════════════ HOME BLOCKS ═══════════════ */}
           {tab === "home" && (
+            loading ? (
+              <div className="flex justify-center py-20">
+                <Loader2 size={22} className="animate-spin" style={{ color: "#16A34A" }} />
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {stats.overdueBooks > 0 && (
+                  <div className="bg-red-50 rounded-2xl p-3 flex items-center gap-3 border border-red-100">
+                    <AlertTriangle size={16} className="text-red-500 shrink-0" />
+                    <p className="text-xs font-semibold text-red-700 flex-1">{stats.overdueBooks} overdue book{stats.overdueBooks !== 1 ? "s" : ""} — return deadline passed</p>
+                    <button onClick={() => setTab("overview")} className="text-xs font-bold text-red-600 underline shrink-0">View</button>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-3">
+                  <button onClick={() => setTab("overview")} className="bg-white rounded-2xl p-4 shadow-sm hover:shadow-md transition text-left">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: "#F0FDF4" }}>
+                      <BookOpen size={20} style={{ color: "#16A34A" }} />
+                    </div>
+                    <p className="text-2xl font-bold text-gray-800">{stats.totalBooks}</p>
+                    <p className="text-sm font-semibold text-gray-700 mt-0.5">Library Overview</p>
+                    <p className="text-xs text-gray-400">{stats.activeMembers} books lent out</p>
+                  </button>
+                  <button onClick={() => setTab("catalog")} className="bg-white rounded-2xl p-4 shadow-sm hover:shadow-md transition text-left">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: "#EFF6FF" }}>
+                      <Book size={20} style={{ color: "#2563EB" }} />
+                    </div>
+                    <p className="text-2xl font-bold text-gray-800">{stats.totalBooks}</p>
+                    <p className="text-sm font-semibold text-gray-700 mt-0.5">Book Catalog</p>
+                    <p className="text-xs text-gray-400">Browse all books</p>
+                  </button>
+                  <button onClick={() => setTab("add-book")} className="bg-white rounded-2xl p-4 shadow-sm hover:shadow-md transition text-left">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: "#F5F3FF" }}>
+                      <Plus size={20} style={{ color: "#7C3AED" }} />
+                    </div>
+                    <p className="text-sm font-semibold text-gray-700 mt-1">Add New Book</p>
+                    <p className="text-xs text-gray-400">Register to catalog</p>
+                  </button>
+                  <button onClick={() => setTab("lend-return")} className="bg-white rounded-2xl p-4 shadow-sm hover:shadow-md transition text-left">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: "#FFF7ED" }}>
+                      <CreditCard size={20} style={{ color: "#EA580C" }} />
+                    </div>
+                    <p className="text-2xl font-bold text-gray-800">{stats.activeMembers}</p>
+                    <p className="text-sm font-semibold text-gray-700 mt-0.5">Lend & Return</p>
+                    <p className="text-xs text-gray-400">NFC card terminal</p>
+                  </button>
+                </div>
+              </div>
+            )
+          )}
+
+          {/* ═══════════════ OVERVIEW ═══════════════ */}
+          {tab === "overview" && (
             <div className="space-y-3">
               {loading ? (
                 <div className="flex justify-center py-16">
@@ -1495,17 +1542,17 @@ export default function LibraryPage() {
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mt-5 max-w-md mx-auto text-left">
                         <div className="p-3 rounded-2xl bg-gray-50 border border-gray-100">
-                          <span className="text-sm">💳</span>
+                          <CreditCard size={16} className="text-gray-400 mb-1" />
                           <p className="text-xs font-bold text-gray-900 mt-1">1. Check Books</p>
                           <p className="text-[10px] text-gray-500">Tap card to see books in possession and deadlines.</p>
                         </div>
                         <div className="p-3 rounded-2xl bg-gray-50 border border-gray-100">
-                          <span className="text-sm">🔄</span>
+                          <RotateCcw size={16} className="text-gray-400 mb-1" />
                           <p className="text-xs font-bold text-gray-900 mt-1">2. Return Books</p>
                           <p className="text-[10px] text-gray-500">Tap card, click Return to clear fine and update wallet.</p>
                         </div>
                         <div className="p-3 rounded-2xl bg-gray-50 border border-gray-100">
-                          <span className="text-sm">📚</span>
+                          <BookOpen size={16} className="text-gray-400 mb-1" />
                           <p className="text-xs font-bold text-gray-900 mt-1">3. Lend Books</p>
                           <p className="text-[10px] text-gray-500">Pick book, set return days, and confirm loan.</p>
                         </div>

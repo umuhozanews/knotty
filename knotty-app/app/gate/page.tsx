@@ -143,9 +143,11 @@ function fmtTime(s: string | null | undefined) {
   return new Date(s).toLocaleTimeString("en-RW", { hour: "2-digit", minute: "2-digit" });
 }
 
-function StatCard({ icon: Icon, label, value, color }: { icon: any; label: string; value: number; color: string }) {
+function StatCard({ icon: Icon, label, value, color, onClick }: { icon: any; label: string; value: number; color: string; onClick?: () => void }) {
+  const Tag = onClick ? "button" : "div";
   return (
-    <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-3">
+    <Tag onClick={onClick}
+      className={`bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-3 w-full text-left${onClick ? " hover:shadow-md transition cursor-pointer active:scale-95" : ""}`}>
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${color}`}>
         <Icon className="w-5 h-5 text-white" />
       </div>
@@ -153,7 +155,7 @@ function StatCard({ icon: Icon, label, value, color }: { icon: any; label: strin
         <p className="text-2xl font-bold text-gray-900 leading-none">{value}</p>
         <p className="text-xs text-gray-500 mt-0.5">{label}</p>
       </div>
-    </div>
+    </Tag>
   );
 }
 
@@ -1449,10 +1451,10 @@ export default function GatePage() {
 
             {overview ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <StatCard icon={Users}     label="Students Inside" value={overview.students_inside}  color="bg-emerald-500" />
-                <StatCard icon={Briefcase} label="Staff Inside"     value={overview.staff_inside}     color="bg-blue-500" />
-                <StatCard icon={UserCheck} label="Visitors Inside"  value={overview.visitors_inside}  color="bg-violet-500" />
-                <StatCard icon={Clock}     label="Pending Visitors" value={overview.pending_visitors}                       color="bg-amber-500" />
+                <StatCard icon={Users}     label="Students Inside" value={overview.students_inside}  color="bg-emerald-500" onClick={() => setMode("student")} />
+                <StatCard icon={Briefcase} label="Staff Inside"     value={overview.staff_inside}     color="bg-blue-500"    onClick={() => setMode("staff")} />
+                <StatCard icon={UserCheck} label="Visitors Inside"  value={overview.visitors_inside}  color="bg-violet-500"  onClick={() => setMode("visitor")} />
+                <StatCard icon={Clock}     label="Pending Visitors" value={overview.pending_visitors} color="bg-amber-500"   onClick={() => setMode("visitor")} />
                 <StatCard icon={LogIn}     label="Entries Today"    value={overview.today_entries + visitorEntriesToday}   color="bg-gray-800" />
                 <StatCard icon={LogOut}    label="Exits Today"      value={overview.today_exits + visitorExitsToday}       color="bg-gray-600" />
               </div>

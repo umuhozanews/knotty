@@ -178,15 +178,17 @@ export default function AdminDashboard() {
       {view === "home" && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: "Students",    value: stats.students,    color: "#2563EB", bg: "#EFF6FF" },
-            { label: "Staff",       value: stats.staff,       color: "#16A34A", bg: "#F0FDF4" },
-            { label: "Present",     value: stats.present_today, color: "#0891B2", bg: "#ECFEFF" },
-            { label: "Low Balance", value: stats.balance_low, color: "#DC2626", bg: "#FEF2F2" },
+            { label: "Students",    value: stats.students,      color: "#2563EB", bg: "#EFF6FF", href: "/students" },
+            { label: "Staff",       value: stats.staff,         color: "#16A34A", bg: "#F0FDF4", href: "/workers" },
+            { label: "Present",     value: stats.present_today, color: "#0891B2", bg: "#ECFEFF", href: "/attendance" },
+            { label: "Low Balance", value: stats.balance_low,   color: "#DC2626", bg: "#FEF2F2", href: "/fees" },
           ].map((s) => (
-            <div key={s.label} className="rounded-2xl px-4 py-3 flex flex-col gap-0.5" style={{ background: s.bg }}>
+            <button key={s.label} onClick={() => router.push(s.href)}
+              className="rounded-2xl px-4 py-3 flex flex-col gap-0.5 text-left transition hover:opacity-80 active:scale-95"
+              style={{ background: s.bg }}>
               <p className="text-2xl font-extrabold" style={{ color: s.color }}>{s.value}</p>
               <p className="text-xs font-medium text-gray-500">{s.label}</p>
-            </div>
+            </button>
           ))}
         </div>
       )}

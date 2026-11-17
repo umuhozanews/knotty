@@ -372,7 +372,7 @@ export default function StudentProfilePage() {
 
   const [profile, setProfile] = useState<LocalProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useState<Tab | null>(null);
   const [walletTxns, setWalletTxns] = useState<LocalWalletTxn[]>([]);
   const [feeList, setFeeList] = useState<FeeInvoiceRow[]>([]);
   const [canteenList, setCanteenList] = useState<CanteenTransactionRow[]>([]);
@@ -812,17 +812,45 @@ export default function StudentProfilePage() {
           </div>
         )}
 
-        {/* ── Tabs ────────────────────────────────────────────────────────── */}
-        <div className="flex gap-1 bg-white dark:bg-gray-900 rounded-2xl p-1.5 shadow-sm overflow-x-auto">
-          {filteredTabs.map(({ key, label, icon: Icon }) => (
-            <button key={key} onClick={() => setTab(key)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition whitespace-nowrap ${tab === key ? "bg-blue-50 text-blue-600 dark:bg-orange-900/30" : "text-gray-500 hover:text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}>
-              <Icon size={13} />{label}
-            </button>
-          ))}
-        </div>
+        {/* ── Section Blocks (home view) ───────────────────────────────── */}
+        {tab === null && (
+          <div className="grid grid-cols-2 gap-3">
+            {filteredTabs.map(({ key, label, icon: Icon }) => {
+              const colors: Record<Tab, { bg: string; iconColor: string }> = {
+                overview:   { bg: "#DCFCE7", iconColor: "#16A34A" },
+                attendance: { bg: "#EFF6FF", iconColor: "#2563EB" },
+                wallet:     { bg: "#F0FDF4", iconColor: "#15803D" },
+                health:     { bg: "#FFF1F2", iconColor: "#E11D48" },
+                discipline: { bg: "#FFF7ED", iconColor: "#EA580C" },
+                fees:       { bg: "#F5F3FF", iconColor: "#7C3AED" },
+                canteen:    { bg: "#FFFBEB", iconColor: "#D97706" },
+                consent:    { bg: "#F0F9FF", iconColor: "#0369A1" },
+              };
+              const { bg, iconColor } = colors[key];
+              return (
+                <button key={key} onClick={() => setTab(key)}
+                  className="bg-white dark:bg-gray-900 rounded-2xl p-4 shadow-sm text-left hover:shadow-md transition border border-gray-100 dark:border-gray-800">
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3" style={{ background: bg }}>
+                    <Icon size={18} style={{ color: iconColor }} />
+                  </div>
+                  <p className="text-xs font-semibold text-gray-800 dark:text-gray-100">{label}</p>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
-        {/* ── Tab Content ─────────────────────────────────────────────────── */}
+        {/* ── Section back button ──────────────────────────────────────── */}
+        {tab !== null && (
+          <button onClick={() => setTab(null)}
+            className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 transition">
+            <ArrowLeft size={14} />
+            Back
+          </button>
+        )}
+
+        {/* ── Section Content ─────────────────────────────────────────── */}
+        {tab !== null && (
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm p-5">
 
           {/* OVERVIEW */}
@@ -1308,6 +1336,7 @@ export default function StudentProfilePage() {
             </div>
           )}
         </div>
+        )}
       </div>
     </DashboardShell>
   );

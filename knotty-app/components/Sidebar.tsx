@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, ClipboardCheck, CreditCard, ShoppingCart,
   Banknote, AlertTriangle, Settings, LogOut, ChevronRight,
   Heart, User, CalendarDays, Wallet, X, Library,
-  UserCheck, Building2, Smartphone, Activity, Shield, Package,
+  UserCheck, Building2, Smartphone, Activity, Shield, Package, ScrollText,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { isManagementRole } from "@/lib/roles";
@@ -51,6 +51,9 @@ const ALL_NAV = [
 
   // ── Materials — materials staff ──
   { icon: Package,         label: "Materials",     href: "/materials",      roles: ["ADMIN","MATERIALS"] },
+
+  // ── Logs — admin audit trail ──
+  { icon: ScrollText,      label: "Logs",          href: "/logs",           roles: ["ADMIN"] },
 
   // ── Student self-service ──
   { icon: LayoutDashboard, label: "My Dashboard",  href: "/",               roles: ["STUDENT","PARENT"] },

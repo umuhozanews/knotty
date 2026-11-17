@@ -223,47 +223,52 @@ function TapResultCard({
 
       {/* ID card body */}
       <div className="bg-white relative overflow-hidden">
-        {/* Red wave decorations — top right */}
-        <div className="absolute top-0 right-0 w-28 h-16 rounded-bl-[70px]" style={{ background: "#DC2626", opacity: 0.12 }} />
-        <div className="absolute top-0 right-0 w-16 h-8 rounded-bl-[50px]" style={{ background: "#DC2626", opacity: 0.18 }} />
 
-        {/* School name */}
-        <div className="px-4 pt-3 pb-1 relative z-10">
-          <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest truncate">
+        {/* Full-width red header band */}
+        <div className="relative overflow-hidden px-4 py-3" style={{ background: "#DC2626" }}>
+          {/* Curved decorations at top-right inside the header */}
+          <div className="absolute top-0 right-0 w-24 h-24 rounded-bl-full" style={{ background: "rgba(255,255,255,0.08)" }} />
+          <div className="absolute top-0 right-0 w-14 h-14 rounded-bl-full" style={{ background: "rgba(255,255,255,0.12)" }} />
+          <p className="text-white font-black text-base uppercase tracking-wide leading-tight relative z-10" style={{ maxWidth: "70%" }}>
             {schoolName ?? "SCHOOL"}
           </p>
+          {category && (
+            <p className="text-white/70 text-[10px] font-semibold uppercase tracking-widest mt-0.5 relative z-10">{category}</p>
+          )}
         </div>
 
-        {/* Photo + info */}
-        <div className="flex gap-3 px-4 pb-3 relative z-10">
-          {/* Photo */}
-          <div className="flex-shrink-0">
+        {/* Card content: photo left, info right */}
+        <div className="flex gap-0 p-4">
+          {/* Tall photo */}
+          <div className="flex-shrink-0 mr-4">
             {photo ? (
               <img
                 src={photo}
                 alt={name}
-                className="w-20 rounded-xl object-cover border border-gray-200"
-                style={{ height: "100px" }}
+                className="rounded-xl object-cover border border-gray-200"
+                style={{ width: "84px", height: "112px" }}
               />
             ) : (
               <div
-                className="w-20 rounded-xl flex items-center justify-center text-white text-2xl font-black border border-gray-200"
-                style={{ height: "100px", background: `hsl(${hue},55%,55%)` }}
+                className="rounded-xl flex items-center justify-center text-white text-2xl font-black"
+                style={{ width: "84px", height: "112px", background: `hsl(${hue},55%,55%)` }}
               >
                 {initials}
               </div>
             )}
           </div>
 
-          {/* Info */}
-          <div className="flex-1 min-w-0 flex flex-col justify-center">
-            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Full Name</p>
-            <p className="text-base font-black text-gray-900 uppercase leading-tight break-words">
-              {name}
-            </p>
+          {/* Right column: name + fields */}
+          <div className="flex-1 min-w-0 flex flex-col justify-between">
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: "#DC2626" }}>Full Name</p>
+              <p className="text-sm font-black text-gray-900 uppercase leading-tight mt-0.5 break-words">
+                {name}
+              </p>
+            </div>
 
             {fields.length > 0 && (
-              <div className="grid grid-cols-2 gap-x-3 gap-y-2 mt-2">
+              <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 mt-2">
                 {fields.map((f) => (
                   <div key={f.label}>
                     <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider leading-none">{f.label}</p>
@@ -277,7 +282,7 @@ function TapResultCard({
 
         {/* Assigned materials */}
         {materials && materials.length > 0 && (
-          <div className="px-4 pb-3 relative z-10">
+          <div className="px-4 pb-3">
             <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Assigned Items</p>
             <div className="flex flex-wrap gap-1.5">
               {materials.map((m) => (
@@ -291,13 +296,13 @@ function TapResultCard({
 
         {/* Denied reason */}
         {isDenied && result.denied_reason && (
-          <div className="px-4 pb-3 relative z-10">
+          <div className="px-4 pb-3">
             <p className="text-xs font-semibold text-red-600">{result.denied_reason}</p>
           </div>
         )}
 
         {/* Footer: times + branding */}
-        <div className="flex items-center justify-between px-4 py-2 border-t border-gray-100 bg-gray-50 relative z-10">
+        <div className="flex items-center justify-between px-4 py-2 border-t border-gray-100 bg-gray-50">
           <div className="flex items-center gap-3 text-[11px] text-gray-500">
             {result.check_in_time && (
               <span className="flex items-center gap-1">
@@ -334,8 +339,7 @@ function RegisterVisitorModal({
   onSuccess: (visit: { passReference: string; visitId: string }) => void;
 }) {
   const [form, setForm] = useState({
-    fullName: "", phone: "", idType: "", idReference: "",
-    organization: "", hostName: "", hostDepartment: "", purpose: "", notes: "",
+    fullName: "", phone: "", idType: "", idReference: "", organization: "", hostName: "", items: "",
   });
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<VisitorProfileRow[]>([]);
@@ -343,6 +347,11 @@ function RegisterVisitorModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Host name autocomplete
+  const [hostSuggestions, setHostSuggestions] = useState<{ name: string; subtitle: string }[]>([]);
+  const [showHostSuggestions, setShowHostSuggestions] = useState(false);
+  const hostSearchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function set(k: string, v: string) {
     setForm((f) => ({ ...f, [k]: v }));
@@ -364,35 +373,55 @@ function RegisterVisitorModal({
     setSelectedProfile(p);
     setForm((f) => ({
       ...f,
-      fullName:      p.full_name,
-      phone:         p.phone ?? "",
-      idType:        p.id_type ?? "",
-      idReference:   p.id_reference ?? "",
-      organization:  p.organization ?? "",
+      fullName:     p.full_name,
+      phone:        p.phone ?? "",
+      idType:       p.id_type ?? "",
+      idReference:  p.id_reference ?? "",
+      organization: p.organization ?? "",
     }));
     setSearchResults([]);
     setSearchQuery("");
   }
 
+  function handleHostInput(v: string) {
+    set("hostName", v);
+    if (hostSearchTimeout.current) clearTimeout(hostSearchTimeout.current);
+    if (v.trim().length < 1) { setHostSuggestions([]); setShowHostSuggestions(false); return; }
+    hostSearchTimeout.current = setTimeout(async () => {
+      const client = getSafeBrowserClient();
+      if (!client) return;
+      const q = `${v.trim()}%`;
+      const [staffRes, studRes] = await Promise.all([
+        client.from("staff_records").select("id, legal_name, job_title")
+          .eq("school_id", schoolId).ilike("legal_name", q).eq("employment_status", "active").limit(6),
+        client.from("students").select("id, legal_name, admission_number")
+          .eq("school_id", schoolId).ilike("legal_name", q).limit(6),
+      ]);
+      const suggestions = [
+        ...(staffRes.data ?? []).map((s: any) => ({ name: s.legal_name, subtitle: s.job_title ?? "Staff" })),
+        ...(studRes.data ?? []).map((s: any) => ({ name: s.legal_name, subtitle: `Student · ${s.admission_number}` })),
+      ];
+      setHostSuggestions(suggestions);
+      setShowHostSuggestions(suggestions.length > 0);
+    }, 100);
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.fullName.trim()) { setError("Full name is required"); return; }
-    if (!form.purpose.trim()) { setError("Purpose is required"); return; }
     setLoading(true);
     setError("");
     try {
       const result = await supabaseVisitorService.registerVisitorVisit({
         schoolId,
-        fullName:          form.fullName.trim(),
-        phone:             form.phone.trim() || null,
-        idType:            form.idType.trim() || null,
-        idReference:       form.idReference.trim() || null,
-        organization:      form.organization.trim() || null,
-        hostName:          form.hostName.trim() || null,
-        hostDepartment:    form.hostDepartment.trim() || null,
-        purpose:           form.purpose.trim(),
-        notes:             form.notes.trim() || null,
-        visitorProfileId:  selectedProfile?.visitor_profile_id ?? null,
+        fullName:         form.fullName.trim(),
+        phone:            form.phone.trim() || null,
+        idType:           form.idType.trim() || null,
+        idReference:      form.idReference.trim() || null,
+        organization:     form.organization.trim() || null,
+        hostName:         form.hostName.trim() || null,
+        notes:            form.items.trim() || null,
+        visitorProfileId: selectedProfile?.visitor_profile_id ?? null,
       });
       onSuccess({ passReference: result.passReference, visitId: result.visitId });
     } catch (err: any) {
@@ -482,21 +511,38 @@ function RegisterVisitorModal({
               <label className="text-xs font-medium text-gray-500 mb-1 block">ID Reference</label>
               <input value={form.idReference} onChange={(e) => set("idReference", e.target.value)} className={inputCls} placeholder="ID number" />
             </div>
-            <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">Host Name</label>
-              <input value={form.hostName} onChange={(e) => set("hostName", e.target.value)} className={inputCls} placeholder="Person to visit" />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">Host Department</label>
-              <input value={form.hostDepartment} onChange={(e) => set("hostDepartment", e.target.value)} className={inputCls} placeholder="e.g. Admin, S1A" />
+            <div className="col-span-2 relative">
+              <label className="text-xs font-medium text-gray-500 mb-1 block">Person to Visit</label>
+              <input
+                value={form.hostName}
+                onChange={(e) => handleHostInput(e.target.value)}
+                onFocus={() => hostSuggestions.length > 0 && setShowHostSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowHostSuggestions(false), 150)}
+                className={inputCls}
+                placeholder="Search staff or student…"
+                autoComplete="off"
+              />
+              {showHostSuggestions && (
+                <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                  {hostSuggestions.map((s, i) => (
+                    <button
+                      key={i} type="button"
+                      onMouseDown={() => { set("hostName", s.name); setShowHostSuggestions(false); setHostSuggestions([]); }}
+                      className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-gray-50 border-b border-gray-50 last:border-0"
+                    >
+                      <Avatar name={s.name} photo={null} size={7} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{s.name}</p>
+                        <p className="text-xs text-gray-400">{s.subtitle}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="col-span-2">
-              <label className="text-xs font-medium text-gray-500 mb-1 block">Purpose *</label>
-              <input value={form.purpose} onChange={(e) => set("purpose", e.target.value)} required className={inputCls} placeholder="Reason for visit" />
-            </div>
-            <div className="col-span-2">
-              <label className="text-xs font-medium text-gray-500 mb-1 block">Notes</label>
-              <textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} className={`${inputCls} resize-none`} rows={2} placeholder="Optional notes" />
+              <label className="text-xs font-medium text-gray-500 mb-1 block">Items Brought <span className="text-gray-300">(optional)</span></label>
+              <input value={form.items} onChange={(e) => set("items", e.target.value)} className={inputCls} placeholder="e.g. Laptop, phone, bag" />
             </div>
           </div>
 
@@ -573,6 +619,7 @@ export default function GatePage() {
   const [visitsLoading, setVisitsLoading] = useState(false);
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [visitDate, setVisitDate] = useState(() => new Date().toISOString().split("T")[0]);
 
   const schoolId = activeSchool?.id;
 
@@ -600,14 +647,14 @@ export default function GatePage() {
     if (!schoolId) return;
     setVisitsLoading(true);
     try {
-      const data = await supabaseVisitorService.listVisitorVisits({ schoolId });
+      const data = await supabaseVisitorService.listVisitorVisits({ schoolId, date: visitDate });
       setVisits(data);
     } catch (err: any) {
       console.warn("Gate visits load notice:", err?.message);
     } finally {
       setVisitsLoading(false);
     }
-  }, [schoolId]);
+  }, [schoolId, visitDate]);
 
   const loadStaffList = useCallback(async () => {
     if (!schoolId) return;
@@ -677,13 +724,27 @@ export default function GatePage() {
       if (isVisitorRef && matchingVisit) {
         let actionLabel: "TAP_IN" | "TAP_OUT" = "TAP_IN";
         let dir: "in" | "out" = "in";
-        if (matchingVisit.status === "inside") {
+        const doCheckout = directionChoice === "out"
+          || (directionChoice === "auto" && matchingVisit.status === "inside");
+        if (doCheckout) {
+          if (matchingVisit.status !== "inside") {
+            playChime("ERROR");
+            showToast(`${matchingVisit.full_name} is not currently inside`, "error");
+            setQuickProcessing(false);
+            return;
+          }
           await supabaseVisitorService.checkoutVisitor({ schoolId, visitId: matchingVisit.visit_id });
           actionLabel = "TAP_OUT";
           dir = "out";
           playChime("OUT");
           showToast(`Visitor Checked Out: ${matchingVisit.full_name}`, "success");
         } else {
+          if (matchingVisit.status === "inside" || matchingVisit.status === "completed") {
+            playChime("ERROR");
+            showToast(`${matchingVisit.full_name} is already ${matchingVisit.status}`, "error");
+            setQuickProcessing(false);
+            return;
+          }
           await supabaseVisitorService.admitVisitor({ schoolId, visitId: matchingVisit.visit_id });
           actionLabel = "TAP_IN";
           dir = "in";
@@ -1246,6 +1307,11 @@ export default function GatePage() {
     { key: "visitor", icon: UserPlus,  label: "Visitors", color: "bg-violet-50 text-violet-700", active: "bg-violet-600 text-white" },
   ];
 
+  // Visitor exits/entries derived locally so checkout immediately reflects in stats
+  const todayStr = new Date().toISOString().split("T")[0];
+  const visitorExitsToday = visits.filter(v => v.departed_at?.startsWith(todayStr)).length;
+  const visitorEntriesToday = visits.filter(v => v.arrived_at?.startsWith(todayStr)).length;
+
   if (authLoading) {
     return (
       <DashboardShell hideHeader>
@@ -1384,9 +1450,9 @@ export default function GatePage() {
                 <StatCard icon={Users}     label="Students Inside" value={overview.students_inside}  color="bg-emerald-500" />
                 <StatCard icon={Briefcase} label="Staff Inside"     value={overview.staff_inside}     color="bg-blue-500" />
                 <StatCard icon={UserCheck} label="Visitors Inside"  value={overview.visitors_inside}  color="bg-violet-500" />
-                <StatCard icon={Clock}     label="Pending Visitors" value={overview.pending_visitors} color="bg-amber-500" />
-                <StatCard icon={LogIn}     label="Entries Today"    value={overview.today_entries}    color="bg-gray-800" />
-                <StatCard icon={LogOut}    label="Exits Today"      value={overview.today_exits}      color="bg-gray-600" />
+                <StatCard icon={Clock}     label="Pending Visitors" value={overview.pending_visitors}                       color="bg-amber-500" />
+                <StatCard icon={LogIn}     label="Entries Today"    value={overview.today_entries + visitorEntriesToday}   color="bg-gray-800" />
+                <StatCard icon={LogOut}    label="Exits Today"      value={overview.today_exits + visitorExitsToday}       color="bg-gray-600" />
               </div>
             ) : (
               <div className="flex flex-col items-center py-10 gap-3 text-gray-400">
@@ -1680,9 +1746,15 @@ export default function GatePage() {
         {/* ── VISITOR MANAGEMENT ────────────────────────────────── */}
         {mode === "visitor" && (
           <>
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-700">Today's Visitors</h2>
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <h2 className="text-sm font-semibold text-gray-700">Visitors</h2>
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  type="date"
+                  value={visitDate}
+                  onChange={(e) => setVisitDate(e.target.value)}
+                  className="text-xs border border-gray-200 rounded-xl px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-black/10"
+                />
                 <button
                   onClick={loadVisits}
                   disabled={visitsLoading}
@@ -1737,7 +1809,8 @@ export default function GatePage() {
                         )}
                       </div>
                       <p className="text-xs text-gray-500 mt-0.5">
-                        {v.purpose}{v.host_name ? ` · Visiting: ${v.host_name}` : ""}
+                        {v.host_name ? `Visiting: ${v.host_name}` : "General Visit"}
+                        {v.notes ? ` · Items: ${v.notes}` : ""}
                       </p>
                       <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
                         {v.phone && (

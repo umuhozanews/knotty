@@ -3,8 +3,8 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, Plus, Loader2, CreditCard, User, Trash2, Edit2,
-  ChevronRight, Users, UserCheck, AlertCircle, X, Eye, EyeOff, ShieldCheck,
-  Wifi, WifiOff, Check
+  ChevronRight, Users, AlertCircle, X, Eye, EyeOff, ShieldCheck,
+  Wifi, WifiOff, Check, ArrowLeft,
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import type { Level, Class, Student } from "@/lib/api";
@@ -946,6 +946,7 @@ export default function StudentsPage() {
   const [studentsByClass, setStudentsByClass] = useState<Record<string, Student[]>>({});
   const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
   const [selectedClass, setSelectedClass] = useState<string | null>(ALL_KEY);
+  const [navView, setNavView] = useState<"home" | "level" | "class">("home");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -1057,190 +1058,203 @@ export default function StudentsPage() {
 
   return (
     <DashboardShell>
-      <div className="flex flex-col md:flex-row h-[calc(100dvh-4rem)]">
-        {/* ── Mobile class picker ───────────────────────────────────── */}
-        <div className="md:hidden flex overflow-x-auto gap-2 p-3 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
-          <button
-            onClick={() => { setSelectedClass(ALL_KEY); setSelectedLevel(null); }}
-            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition ${isAllView ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600"}`}
-          >
-            All
-          </button>
-          {classes.map((cls) => (
-            <button
-              key={cls.id}
-              onClick={() => { setSelectedClass(cls.id); setSelectedLevel(cls.level.id); }}
-              className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition ${selectedClass === cls.id ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600"}`}
-            >
-              {cls.level.name} {cls.name}
-            </button>
-          ))}
-        </div>
+      <div className="flex flex-col h-[calc(100dvh-4rem)] overflow-hidden">
 
-        {/* ── Left Sidebar (desktop only) ──────────────────────────── */}
-        <div className="hidden md:block w-56 flex-shrink-0 border-r border-gray-100 dark:border-gray-800 overflow-y-auto">
-          <div className="p-4">
-            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Classes</h2>
-            <button
-              onClick={() => { setSelectedClass(ALL_KEY); setSelectedLevel(null); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-semibold mb-1 transition ${isAllView ? "bg-blue-600/10 text-blue-700 dark:text-blue-400" : "text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 dark:text-gray-400"}`}
-            >
-              <span>All Students</span>
-              <span className={`text-xs font-normal ${isAllView ? "text-blue-600/70" : "text-gray-400"}`}>
-                {studentsByClass[ALL_KEY]?.length ?? "—"}
-              </span>
-            </button>
-            {levels.map((level) => {
-              const levelClasses = classes.filter((c) => c.level.id === level.id);
-              const isLevelOpen = selectedLevel === level.id;
-              return (
-                <div key={level.id} className="mb-1">
-                  <button
-                    onClick={() => {
-                      setSelectedLevel(level.id);
-                      if (levelClasses.length > 0 && selectedLevel !== level.id) {
-                        setSelectedClass(levelClasses[0].id);
-                      }
-                    }}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-semibold transition ${isLevelOpen ? "bg-blue-600/10 text-blue-700" : "text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 dark:text-gray-400"}`}
-                  >
-                    <span>{level.name}</span>
-                    <span className={`text-xs font-normal ${isLevelOpen ? "text-blue-600/70" : "text-gray-400"}`}>
-                      {studentsByClass[ALL_KEY]?.filter(s => s.level?.id === level.id).length ?? 0}
-                    </span>
-                  </button>
-                  {isLevelOpen && levelClasses.map((cls) => (
+        {/* ── HOME: level blocks ─────────────────────────────────────── */}
+        {navView === "home" && (
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="mb-6">
+              <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">Students</h1>
+              <p className="text-sm text-gray-400 mt-0.5">
+                {loading ? "Loading…" : `${studentsByClass[ALL_KEY]?.length ?? 0} total students across ${levels.length} levels`}
+              </p>
+            </div>
+
+            {noActiveYear && (
+              <div className="mb-5 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-start gap-2">
+                <span className="text-amber-500 mt-0.5">⚠</span>
+                <span>
+                  <strong>No active academic year.</strong> Students cannot be enrolled until you activate an academic year.
+                  Go to <strong>Settings → Academics</strong>, create or activate a year, then create class sections.
+                </span>
+              </div>
+            )}
+
+            {authLoading || (loading && levels.length === 0) ? (
+              <div className="flex justify-center py-20">
+                <Loader2 size={28} className="animate-spin text-[#16A34A]" />
+              </div>
+            ) : levels.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center">
+                <Users size={40} className="text-gray-200 mb-3" />
+                <p className="text-gray-500 font-medium">No levels configured</p>
+                <p className="text-sm text-gray-400 mt-1">Go to Settings → Academics to create levels and classes.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                {levels.map((level) => {
+                  const levelClasses = classes.filter((c) => c.level.id === level.id);
+                  const studentCount = studentsByClass[ALL_KEY]?.filter((s) => s.level?.id === level.id).length ?? 0;
+                  return (
+                    <button
+                      key={level.id}
+                      onClick={() => { setSelectedLevel(level.id); setNavView("level"); }}
+                      className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-5 text-left hover:border-green-300 hover:shadow-md transition-all group"
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-[#DCFCE7] flex items-center justify-center mb-3 group-hover:bg-[#16A34A] transition-colors">
+                        <Users size={18} className="text-[#16A34A] group-hover:text-white transition-colors" />
+                      </div>
+                      <p className="font-bold text-gray-800 dark:text-gray-100 text-sm">{level.name}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {levelClasses.length} {levelClasses.length === 1 ? "class" : "classes"}
+                      </p>
+                      {studentCount > 0 && (
+                        <p className="text-xs text-[#16A34A] font-semibold mt-1">{studentCount} students</p>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── LEVEL: class blocks ────────────────────────────────────── */}
+        {navView === "level" && selectedLevel && (
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <button
+                onClick={() => { setNavView("home"); setSelectedLevel(null); }}
+                className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+              >
+                <ArrowLeft size={18} className="text-gray-500" />
+              </button>
+              <div>
+                <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                  {levels.find((l) => l.id === selectedLevel)?.name}
+                </h1>
+                <p className="text-sm text-gray-400 mt-0.5">Select a class to view students</p>
+              </div>
+            </div>
+
+            {currentLevelClasses.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center">
+                <Users size={40} className="text-gray-200 mb-3" />
+                <p className="text-gray-500 font-medium">No classes in this level</p>
+                <p className="text-sm text-gray-400 mt-1">Go to Settings → Academics to create class sections.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                {currentLevelClasses.map((cls) => {
+                  const count =
+                    studentsByClass[cls.id]?.length ??
+                    studentsByClass[ALL_KEY]?.filter((s) => s.class?.id === cls.id).length ?? 0;
+                  return (
                     <button
                       key={cls.id}
-                      onClick={() => setSelectedClass(cls.id)}
-                      className={`w-full flex items-center justify-between pl-6 pr-3 py-1.5 rounded-xl text-xs transition ${selectedClass === cls.id ? "bg-blue-600 text-white font-medium" : "text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800"}`}
+                      onClick={() => { setSelectedClass(cls.id); setNavView("class"); }}
+                      className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-5 text-left hover:border-green-300 hover:shadow-md transition-all group"
                     >
-                      <span>Class {cls.name}</span>
-                      <span className={`${selectedClass === cls.id ? "text-white/80" : "text-gray-400"}`}>
-                        {studentsByClass[cls.id]?.length ?? studentsByClass[ALL_KEY]?.filter(s => s.class?.id === cls.id).length ?? 0}
-                      </span>
+                      <div className="w-10 h-10 rounded-xl bg-[#DCFCE7] flex items-center justify-center mb-3 group-hover:bg-[#16A34A] transition-colors">
+                        <Users size={18} className="text-[#16A34A] group-hover:text-white transition-colors" />
+                      </div>
+                      <p className="font-bold text-gray-800 dark:text-gray-100 text-sm">{cls.name}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {count} {count === 1 ? "student" : "students"}
+                      </p>
                     </button>
-                  ))}
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            )}
           </div>
-        </div>
+        )}
 
-        {/* ── Main Content ──────────────────────────────────────────── */}
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-          {/* Toolbar */}
-          <div className="flex items-center gap-2 p-3 md:p-4 border-b border-gray-100 dark:border-gray-800">
-            <div className="flex-1 min-w-0">
-              {selectedClass && (
-                <div>
-                  <h1 className="text-sm md:text-base font-bold text-gray-800 dark:text-gray-100 truncate">
-                    {isAllView ? "All Students" : `${levels.find((l) => l.id === selectedLevel)?.name} — Class ${classes.find((c) => c.id === selectedClass)?.name}`}
-                  </h1>
-                  <p className="text-xs text-gray-400">{currentClassStudents.length} students</p>
+        {/* ── CLASS: student list ────────────────────────────────────── */}
+        {navView === "class" && selectedClass && selectedClass !== ALL_KEY && (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center gap-3 p-4 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
+              <button
+                onClick={() => setNavView("level")}
+                className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+              >
+                <ArrowLeft size={18} className="text-gray-500" />
+              </button>
+              <div className="flex-1 min-w-0">
+                <h1 className="text-base font-bold text-gray-800 dark:text-gray-100 truncate">
+                  {levels.find((l) => l.id === selectedLevel)?.name} — Class {classes.find((c) => c.id === selectedClass)?.name}
+                </h1>
+                <p className="text-xs text-gray-400">{currentClassStudents.length} students</p>
+              </div>
+              <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-gray-800 rounded-xl px-2.5 py-1.5 w-28 sm:min-w-40">
+                <Search size={13} className="text-gray-400 shrink-0" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search…"
+                  className="bg-transparent text-xs outline-none flex-1 text-gray-700 dark:text-gray-200 min-w-0"
+                />
+              </div>
+              {isClassTeacher && (
+                <button
+                  onClick={() => { setEditStudent(null); setShowModal(true); }}
+                  className="flex items-center gap-1.5 bg-[#16A34A] text-white px-3 py-1.5 rounded-xl text-xs font-medium hover:bg-green-700 transition flex-shrink-0"
+                >
+                  <Plus size={14} />
+                  <span className="hidden sm:inline">Enroll</span>
+                </button>
+              )}
+            </div>
+
+            {/* List */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {loading ? (
+                <div className="flex justify-center py-16">
+                  <Loader2 size={28} className="animate-spin text-[#16A34A]" />
+                </div>
+              ) : currentClassStudents.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <Users size={40} className="text-gray-200 mb-3" />
+                  <p className="text-gray-600 dark:text-gray-300 font-medium">No students in this class</p>
+                  <p className="text-sm text-gray-400 mt-1">
+                    {isClassTeacher ? "Click Enroll to add the first student." : "Contact the admin to enroll students."}
+                  </p>
+                  {isClassTeacher && (
+                    <button
+                      onClick={() => setShowModal(true)}
+                      className="mt-4 flex items-center gap-2 bg-[#16A34A] text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-green-700 transition"
+                    >
+                      <Plus size={14} /> Enroll First Student
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-0.5">
+                  {currentClassStudents.map((s, i) => (
+                    <StudentRow
+                      key={s.id} s={s} idx={i}
+                      onEdit={() => { setEditStudent(s); setShowModal(true); }}
+                      onDelete={() => setDeleteTarget(s)}
+                      onIssue={() => setCardTarget(s)}
+                      onStatus={() => setStatusTarget(s)}
+                      issuing={issuing === s.id}
+                      isClassTeacher={isClassTeacher}
+                    />
+                  ))}
                 </div>
               )}
             </div>
-            {/* Quick Segmented Toggle */}
-            <div className="flex items-center bg-gray-100 dark:bg-gray-800 p-0.5 rounded-xl shrink-0">
-              <button
-                disabled
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-xs"
-              >
-                <Users size={12} className="text-orange-500" />
-                <span className="hidden sm:inline">Students</span>
-              </button>
-              <button
-                onClick={() => router.push("/workers")}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition"
-              >
-                <UserCheck size={12} />
-                <span className="hidden sm:inline">Workers</span>
-              </button>
+
+            {/* Footer */}
+            <div className="border-t border-gray-100 dark:border-gray-800 px-4 py-2.5 flex items-center gap-4 text-xs text-gray-400 flex-shrink-0">
+              <span>{currentClassStudents.length} students</span>
+              <span>·</span>
+              <span>{currentClassStudents.filter((s) => s.card?.is_active).length} with active cards</span>
             </div>
-
-            <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-gray-800 rounded-xl px-2.5 py-1.5 w-28 sm:min-w-40">
-              <Search size={13} className="text-gray-400 shrink-0" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search…"
-                className="bg-transparent text-xs md:text-sm outline-none flex-1 text-gray-700 dark:text-gray-200 min-w-0"
-              />
-            </div>
-            {isClassTeacher && (
-              <button
-                onClick={() => { setEditStudent(null); setShowModal(true); }}
-                className="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-1.5 rounded-xl text-xs md:text-sm font-medium hover:bg-blue-700 transition flex-shrink-0"
-              >
-                <Plus size={14} /> <span className="hidden sm:inline">Add Student</span><span className="sm:hidden">Add</span>
-              </button>
-            )}
           </div>
+        )}
 
-          {/* No-active-year warning */}
-          {noActiveYear && (
-            <div className="mx-4 mt-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-start gap-2">
-              <span className="text-amber-500 mt-0.5">⚠</span>
-              <span>
-                <strong>No active academic year.</strong> Students cannot be enrolled until you activate an academic year.
-                Go to <strong>Settings → Academics</strong>, create or activate a year, then create class sections under it.
-              </span>
-            </div>
-          )}
-
-          {/* Student List */}
-          <div className="flex-1 overflow-y-auto p-4">
-            {loading ? (
-              <div className="flex justify-center py-16">
-                <Loader2 size={28} className="animate-spin text-blue-600" />
-              </div>
-            ) : !selectedClass ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <Users size={40} className="text-gray-200 mb-3" />
-                <p className="text-gray-400 text-sm">Select a class from the sidebar</p>
-              </div>
-            ) : currentClassStudents.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <Users size={40} className="text-gray-200 mb-3" />
-                <p className="text-gray-600 dark:text-gray-300 font-medium">No students in this class</p>
-                <p className="text-sm text-gray-400 mt-1">
-                  {isClassTeacher ? 'Click "Add Student" to enroll the first student.' : 'Contact the class teacher or admin to enroll students.'}
-                </p>
-                {isClassTeacher && (
-                  <button
-                    onClick={() => setShowModal(true)}
-                    className="mt-4 flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition"
-                  >
-                    <Plus size={14} /> Enroll First Student
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-0.5">
-                {currentClassStudents.map((s, i) => (
-                  <StudentRow
-                    key={s.id} s={s} idx={i}
-                    onEdit={() => { setEditStudent(s); setShowModal(true); }}
-                    onDelete={() => setDeleteTarget(s)}
-                    onIssue={() => setCardTarget(s)}
-                    onStatus={() => setStatusTarget(s)}
-                    issuing={issuing === s.id}
-                    isClassTeacher={isClassTeacher}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Footer Stats */}
-          <div className="border-t border-gray-100 dark:border-gray-800 px-4 py-2.5 flex items-center gap-4 text-xs text-gray-400">
-            <span>{levels.length} levels · {classes.length} classes</span>
-            <span>·</span>
-            <span>{totalSelected} total students</span>
-            {selectedClass && <span>· {currentClassStudents.filter((s) => s.card?.is_active).length} with active cards</span>}
-          </div>
-        </div>
       </div>
 
       {/* Modals */}
@@ -1254,7 +1268,7 @@ export default function StudentsPage() {
           onClose={() => { setShowModal(false); setEditStudent(null); }}
           onSuccess={() => loadStudents(selectedClass)}
           defaultLevelId={!editStudent ? (selectedLevel ?? levels[0]?.id) : undefined}
-          defaultClassId={!editStudent ? (selectedClass ?? (selectedLevel ? classes.find(c => c.level.id === selectedLevel)?.id : classes[0]?.id)) : undefined}
+          defaultClassId={!editStudent ? (selectedClass !== ALL_KEY ? (selectedClass ?? undefined) : (selectedLevel ? classes.find((c) => c.level.id === selectedLevel)?.id : classes[0]?.id)) : undefined}
         />
       )}
       {deleteTarget && (

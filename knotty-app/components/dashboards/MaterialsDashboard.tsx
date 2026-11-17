@@ -1,9 +1,18 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { supabaseMaterialsService, STOCK_CATEGORIES } from "@/lib/supabase/services/materialsService";
-import { Loader2, Package, AlertTriangle, ChevronRight } from "lucide-react";
+import { supabaseMaterialsService, STOCK_CATEGORIES, type MaterialCategory } from "@/lib/supabase/services/materialsService";
+import {
+  Loader2, Package, AlertTriangle, ChevronRight,
+  ChefHat, Utensils, Leaf, BookOpen, FlaskConical,
+  Wrench, Trophy, Monitor, Bed, LucideIcon,
+} from "lucide-react";
 import Link from "next/link";
+
+const CAT_ICON: Record<MaterialCategory, LucideIcon> = {
+  kitchen: ChefHat, catering: Utensils, garden: Leaf, academics: BookOpen,
+  laboratory: FlaskConical, maintenance: Wrench, sports: Trophy, it_office: Monitor, dormitory: Bed,
+};
 
 export default function MaterialsDashboard() {
   const { user, loading: authLoading } = useAuth();
@@ -44,13 +53,21 @@ export default function MaterialsDashboard() {
         <div className="space-y-2">
           {STOCK_CATEGORIES.map((cat) => {
             const s = summary[cat.key] ?? { total: 0, low: 0, out: 0 };
+            const Icon = CAT_ICON[cat.key];
             return (
               <Link key={cat.key} href="/materials"
                 className="flex items-center gap-3 p-3 bg-white rounded-2xl shadow-sm hover:shadow-md transition">
-                <span className="text-2xl">{cat.emoji}</span>
+                <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{ background: cat.bg }}>
+                  <Icon size={16} style={{ color: cat.color }} />
+                </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-800">{cat.label}</p>
-                  <p className="text-xs text-gray-400">{s.total} items{s.low > 0 ? ` · ${s.low} low` : ""}{s.out > 0 ? ` · ${s.out} out` : ""}</p>
+                  <p className="text-xs text-gray-400">
+                    {s.total} items
+                    {s.low > 0 ? ` · ${s.low} low` : ""}
+                    {s.out > 0 ? ` · ${s.out} out` : ""}
+                  </p>
                 </div>
                 <ChevronRight size={15} className="text-gray-300 flex-shrink-0" />
               </Link>

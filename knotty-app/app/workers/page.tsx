@@ -109,10 +109,12 @@ function WorkerModal({
   existing,
   onClose,
   onSuccess,
+  onIssueCard,
 }: {
   existing?: LocalWorkerItem | null;
   onClose: () => void;
   onSuccess: () => void;
+  onIssueCard?: (worker: LocalWorkerItem) => void;
 }) {
   const { show } = useToast();
   const { user } = useAuth();
@@ -141,6 +143,7 @@ function WorkerModal({
     password: string;
     code: string;
     role: string;
+    staff_record_id: string;
   } | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -236,6 +239,7 @@ function WorkerModal({
           password: form.password || "Staff@2024",
           code: result.employee_number || empCode,
           role: form.role,
+          staff_record_id: result.staff_id || "",
         });
         onSuccess(); // refresh the list immediately while user reads credentials
       }
@@ -291,21 +295,53 @@ function WorkerModal({
             </div>
           </div>
 
-          <div className="flex gap-2">
-            <button
-              onClick={copyCreds}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition"
-            >
-              {copied ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
-              {copied ? "Copied" : "Copy Details"}
-            </button>
-            <button
-              onClick={onClose}
-              className="flex-1 py-2 px-3 rounded-xl text-white text-xs font-semibold transition"
-              style={{ background: "#16A34A" }}
-            >
-              Done
-            </button>
+          <div className="flex flex-col gap-2">
+            {onIssueCard && credentials.staff_record_id && (
+              <button
+                onClick={() => {
+                  const nameParts = credentials.name.trim().split(" ");
+                  const worker: LocalWorkerItem = {
+                    id: credentials.staff_record_id,
+                    person_id: "",
+                    first_name: nameParts[0] ?? "",
+                    last_name: nameParts.slice(1).join(" "),
+                    full_name: credentials.name,
+                    email: credentials.email,
+                    phone: "",
+                    role: credentials.role,
+                    department: "",
+                    job_title: ROLE_LABELS[credentials.role] ?? credentials.role,
+                    employee_code: credentials.code,
+                    is_active: true,
+                    status: "active",
+                    has_card: false,
+                  };
+                  onIssueCard(worker);
+                  onClose();
+                }}
+                className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-white text-xs font-semibold transition"
+                style={{ background: "#0891B2" }}
+              >
+                <CreditCard size={14} />
+                Issue NFC Card Now
+              </button>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={copyCreds}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition"
+              >
+                {copied ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
+                {copied ? "Copied" : "Copy Details"}
+              </button>
+              <button
+                onClick={onClose}
+                className="flex-1 py-2 px-3 rounded-xl text-white text-xs font-semibold transition"
+                style={{ background: "#16A34A" }}
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -868,6 +904,7 @@ export default function WorkersPage() {
           existing={editingWorker}
           onClose={() => { setShowAddModal(false); setEditingWorker(null); }}
           onSuccess={() => fetchWorkers()}
+          onIssueCard={(worker) => { setShowAddModal(false); setEditingWorker(null); setCardWorker(worker); }}
         />
       )}
       {badgeWorker && (

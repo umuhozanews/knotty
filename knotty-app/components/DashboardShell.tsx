@@ -27,6 +27,7 @@ const ROUTE_ACCESS: Array<{ path: string; roles: string[] }> = [
   { path: "/materials",      roles: ["ADMIN","MATERIALS"] },
   { path: "/logs",           roles: ["ADMIN"] },
   { path: "/reports",        roles: ["ADMIN"] },
+  { path: "/portal-admin",   roles: ["ADMIN"] },
   { path: "/admin",          roles: ["ADMIN"] },
   { path: "/my-dashboard",   roles: ["STUDENT","PARENT"] },
   { path: "/my-profile",     roles: ["STUDENT"] },

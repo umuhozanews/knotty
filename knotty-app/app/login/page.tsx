@@ -28,8 +28,12 @@ export default function LoginPage() {
     setSubmitting(true);
 
     try {
-      const role = await login(email.trim(), password.trim());
-      router.replace(getDashboardPath(role));
+      const result = await login(email.trim(), password.trim());
+      if (result.startsWith("__change_password__:")) {
+        router.replace("/change-password");
+      } else {
+        router.replace(getDashboardPath(result));
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Invalid credentials. Please verify your email and password.");
       setSubmitting(false);

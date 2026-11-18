@@ -311,11 +311,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (!role || !targetSchoolId) {
+      // Check whether the account exists but is deactivated before signing out
+      let deactivated = false;
+      if (personData?.id) {
+        const { data: anyMembership } = await client
+          .from("school_memberships")
+          .select("status")
+          .eq("person_id", personData.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (anyMembership && anyMembership.status !== "active") deactivated = true;
+      }
       await client.auth.signOut();
-      throw new Error("Your account does not have an active school role. Contact your school administrator.");
+      if (deactivated) {
+        throw new Error("Your account has been deactivated. Please contact your school administrator.");
+      }
+      throw new Error("Your account is not configured for any school. Please contact your administrator.");
     }
 
     const userMeta = (data.user.user_metadata || {}) as Record<string, unknown>;
+    const mustChangePassword = userMeta.must_change_password === true;
+
     const loggedUser: User = {
       id: data.user.id,
       role,
@@ -341,7 +358,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } as never)).catch(() => {});
     }
 
-    return role;
+    return mustChangePassword ? `__change_password__:${role}` : role;
   }, [fetchSchools]);
 
   const loginWithGoogle = useCallback(async () => {

@@ -76,6 +76,7 @@ export async function POST(req: NextRequest) {
       full_name: cleanName,
       first_name: firstName,
       last_name: lastName,
+      must_change_password: true,
     },
   });
 
@@ -111,9 +112,12 @@ export async function POST(req: NextRequest) {
 
   // Store the admin-set password hint in staff_records (best-effort)
   if (staffId) {
-    await Promise.resolve(
-      supabaseAdmin.from("staff_records").update({ hint_password: cleanPassword }).eq("id", staffId)
-    ).catch(() => {});
+    try {
+      await supabaseAdmin
+        .from("staff_records")
+        .update({ hint_password: cleanPassword })
+        .eq("id", String(staffId));
+    } catch { /* non-critical */ }
   }
 
   return NextResponse.json({ staff_id: staffId, email: cleanEmail, employee_number: employeeNumber });

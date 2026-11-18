@@ -283,9 +283,11 @@ export const supabaseAttendanceService = {
       if (!sErr && Array.isArray(staffList)) {
         const qLower = query.toLowerCase();
         const matched = staffList.find((s: any) =>
-          (s.staff_number && s.staff_number.toLowerCase() === qLower) ||
-          s.staff_record_id?.toLowerCase() === qLower ||
-          (s.legal_name && s.legal_name.toLowerCase().includes(qLower))
+          s.employment_status === "active" && (
+            (s.staff_number && s.staff_number.toLowerCase() === qLower) ||
+            s.staff_record_id?.toLowerCase() === qLower ||
+            (s.legal_name && s.legal_name.toLowerCase().includes(qLower))
+          )
         );
         if (matched) {
           return {

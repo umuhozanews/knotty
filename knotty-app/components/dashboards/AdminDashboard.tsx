@@ -7,7 +7,7 @@ import {
   ArrowLeft,
   TrafficCone, Briefcase, GraduationCap, Banknote,
   ShoppingCart, Package, BookOpen, Stethoscope, Scale,
-  Users, UserCheck, Building2, TrendingUp,
+  Users, UserCheck, Building2, TrendingUp, MessageSquare,
 } from "lucide-react";
 import { getSafeBrowserClient } from "@/lib/supabase/client";
 
@@ -77,6 +77,13 @@ const HOME_BLOCKS = [
     icon: TrendingUp,
     bg: "#B45309",
   },
+  {
+    id: "portal",
+    label: "Portal Inbox",
+    sub: "Requests & appointments",
+    icon: MessageSquare,
+    bg: "#0369A1",
+  },
 ];
 
 const MANAGEMENT_BLOCKS = [
@@ -125,6 +132,7 @@ export default function AdminDashboard() {
     else if (id === "workers")  router.push("/workers");
     else if (id === "schools")  router.push("/schools");
     else if (id === "reports")  router.push("/reports");
+    else if (id === "portal")   router.push("/portal-admin");
     else if (id === "management") setView("management");
     else if (id === "academic")   setView("academic");
   }

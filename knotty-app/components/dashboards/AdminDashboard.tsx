@@ -80,7 +80,7 @@ const HOME_BLOCKS = [
   {
     id: "portal",
     label: "Portal Inbox",
-    sub: "Requests & appointments",
+    sub: "",
     icon: MessageSquare,
     bg: "#0369A1",
   },

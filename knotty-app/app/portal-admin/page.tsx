@@ -40,7 +40,7 @@ function fmtDate(d: string) {
 }
 
 export default function PortalAdminPage() {
-  const { user, activeSchool } = useAuth();
+  const { user, activeSchool, loading: authLoading } = useAuth();
   const { toast: showToast } = useToast();
   const router = useRouter();
 
@@ -133,6 +133,7 @@ export default function PortalAdminPage() {
     }
   }
 
+  if (authLoading) return null;
   if (!user) {
     router.replace("/login");
     return null;

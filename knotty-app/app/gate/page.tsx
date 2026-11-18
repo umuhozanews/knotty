@@ -4,8 +4,7 @@ import {
   Home, Users, UserCheck, UserPlus, CreditCard, Shield,
   LogIn, LogOut, Search, RefreshCw, CheckCircle, XCircle,
   Clock, AlertTriangle, X, ChevronRight, Building2, Phone,
-  IdCard, Briefcase, User, Hash, Wifi, StopCircle, Smartphone,
-  Check, ArrowRightLeft,
+  Briefcase, User, Hash, Wifi, StopCircle,
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import { useAuth } from "@/context/AuthContext";
@@ -159,172 +158,58 @@ function StatCard({ icon: Icon, label, value, color, onClick }: { icon: any; lab
   );
 }
 
-function fmtDate(s: string | null | undefined) {
-  if (!s) return "—";
-  return new Date(s).toLocaleDateString("en-RW", { day: "2-digit", month: "2-digit", year: "numeric" });
-}
-
-function addYears(iso: string, n: number) {
-  const d = new Date(iso);
-  d.setFullYear(d.getFullYear() + n);
-  return d.toISOString();
-}
 
 function TapResultCard({
   result,
   name,
   photo,
-  schoolName,
-  category,
-  field1Label, field1Value,
-  field2Label, field2Value,
-  field3Label, field3Value,
-  field4Label, field4Value,
-  materials,
+  classOrRole,
 }: {
   result: TapResult;
   name: string;
   photo: string | null;
-  schoolName?: string;
-  category?: "Student" | "Staff" | "Visitor";
-  field1Label?: string; field1Value?: string;
-  field2Label?: string; field2Value?: string;
-  field3Label?: string; field3Value?: string;
-  field4Label?: string; field4Value?: string;
-  materials?: string[];
+  classOrRole?: string;
 }) {
   const isIn     = result.action === "TAP_IN";
   const isOut    = result.action === "TAP_OUT";
   const isDenied = result.action === "DENIED";
 
-  const bannerBg    = isDenied ? "#DC2626" : isIn ? "#16A34A" : isOut ? "#2563EB" : "#6B7280";
-  const bannerText  = isDenied ? "✗  NOT ALLOWED TO ENTER"
-                    : isIn     ? "✓  ENTRY CONFIRMED"
-                    : isOut    ? "✓  EXIT CONFIRMED"
-                    :            "ℹ  ALREADY PROCESSED";
+  const bannerBg   = isDenied ? "#DC2626" : isIn ? "#16A34A" : isOut ? "#2563EB" : "#6B7280";
+  const bannerText = isDenied ? "✗  ACCESS DENIED"
+                   : isIn     ? "✓  ENTRY"
+                   : isOut    ? "✓  EXIT"
+                   :            "ℹ  PROCESSED";
+
+  const timeToShow = isIn ? result.check_in_time : (result.check_out_time ?? result.check_in_time);
 
   const initials = name.split(" ").map((p) => p[0]).filter(Boolean).join("").slice(0, 2).toUpperCase();
   const hue = (name.charCodeAt(0) * 37) % 360;
 
-  const fields = [
-    field1Label ? { label: field1Label, value: field1Value ?? "—" } : null,
-    field2Label ? { label: field2Label, value: field2Value ?? "—" } : null,
-    field3Label ? { label: field3Label, value: field3Value ?? "—" } : null,
-    field4Label ? { label: field4Label, value: field4Value ?? "—" } : null,
-  ].filter(Boolean) as { label: string; value: string }[];
-
   return (
-    <div className="rounded-2xl overflow-hidden shadow-lg" style={{ border: "2px solid #E5E7EB" }}>
-      {/* Status banner */}
+    <div className="rounded-2xl overflow-hidden shadow-lg border-2 border-gray-100">
       <div className="px-4 py-2.5 flex items-center justify-between" style={{ background: bannerBg }}>
         <span className="text-white font-extrabold text-sm tracking-widest">{bannerText}</span>
-        {category && (
-          <span className="text-white/80 text-xs font-semibold uppercase tracking-wider">{category}</span>
+        {fmtTime(timeToShow) !== "—" && (
+          <span className="text-white font-bold text-sm">{fmtTime(timeToShow)}</span>
         )}
       </div>
-
-      {/* ID card body */}
-      <div className="bg-white relative overflow-hidden">
-
-        {/* Full-width red header band */}
-        <div className="relative overflow-hidden px-4 py-3" style={{ background: "#DC2626" }}>
-          {/* Curved decorations at top-right inside the header */}
-          <div className="absolute top-0 right-0 w-24 h-24 rounded-bl-full" style={{ background: "rgba(255,255,255,0.08)" }} />
-          <div className="absolute top-0 right-0 w-14 h-14 rounded-bl-full" style={{ background: "rgba(255,255,255,0.12)" }} />
-          <p className="text-white font-black text-base uppercase tracking-wide leading-tight relative z-10" style={{ maxWidth: "70%" }}>
-            {schoolName ?? "SCHOOL"}
-          </p>
-          {category && (
-            <p className="text-white/70 text-[10px] font-semibold uppercase tracking-widest mt-0.5 relative z-10">{category}</p>
+      <div className="bg-white flex items-center gap-4 p-4">
+        {photo ? (
+          <img src={photo} alt={name} className="w-20 h-20 rounded-2xl object-cover flex-shrink-0 border border-gray-100" />
+        ) : (
+          <div
+            className="w-20 h-20 rounded-2xl flex items-center justify-center text-white text-2xl font-black flex-shrink-0"
+            style={{ background: `hsl(${hue},55%,55%)` }}
+          >
+            {initials}
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="font-black text-gray-900 text-base uppercase break-words leading-tight">{name}</p>
+          {classOrRole && <p className="text-sm text-gray-500 mt-1">{classOrRole}</p>}
+          {isDenied && result.denied_reason && (
+            <p className="text-xs text-red-600 mt-1 font-medium">{result.denied_reason}</p>
           )}
-        </div>
-
-        {/* Card content: photo left, info right */}
-        <div className="flex gap-0 p-4">
-          {/* Tall photo */}
-          <div className="flex-shrink-0 mr-4">
-            {photo ? (
-              <img
-                src={photo}
-                alt={name}
-                className="rounded-xl object-cover border border-gray-200"
-                style={{ width: "84px", height: "112px" }}
-              />
-            ) : (
-              <div
-                className="rounded-xl flex items-center justify-center text-white text-2xl font-black"
-                style={{ width: "84px", height: "112px", background: `hsl(${hue},55%,55%)` }}
-              >
-                {initials}
-              </div>
-            )}
-          </div>
-
-          {/* Right column: name + fields */}
-          <div className="flex-1 min-w-0 flex flex-col justify-between">
-            <div>
-              <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: "#DC2626" }}>Full Name</p>
-              <p className="text-sm font-black text-gray-900 uppercase leading-tight mt-0.5 break-words">
-                {name}
-              </p>
-            </div>
-
-            {fields.length > 0 && (
-              <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 mt-2">
-                {fields.map((f) => (
-                  <div key={f.label}>
-                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider leading-none">{f.label}</p>
-                    <p className="text-xs font-bold text-gray-800 mt-0.5 leading-tight">{f.value}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Assigned materials */}
-        {materials && materials.length > 0 && (
-          <div className="px-4 pb-3">
-            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Assigned Items</p>
-            <div className="flex flex-wrap gap-1.5">
-              {materials.map((m) => (
-                <span key={m} className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-gray-100 text-gray-700 border border-gray-200">
-                  {m}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Denied reason */}
-        {isDenied && result.denied_reason && (
-          <div className="px-4 pb-3">
-            <p className="text-xs font-semibold text-red-600">{result.denied_reason}</p>
-          </div>
-        )}
-
-        {/* Footer: times + branding */}
-        <div className="flex items-center justify-between px-4 py-2 border-t border-gray-100 bg-gray-50">
-          <div className="flex items-center gap-3 text-[11px] text-gray-500">
-            {result.check_in_time && (
-              <span className="flex items-center gap-1">
-                <LogIn size={10} className="text-green-600" />
-                {fmtTime(result.check_in_time)}
-              </span>
-            )}
-            {result.check_out_time && (
-              <span className="flex items-center gap-1">
-                <LogOut size={10} className="text-blue-600" />
-                {fmtTime(result.check_out_time)}
-              </span>
-            )}
-            {(result.tap_in_points + result.tap_out_points) > 0 && (
-              <span className="font-semibold text-green-600">
-                +{result.tap_in_points + result.tap_out_points} pts
-              </span>
-            )}
-          </div>
-          <span className="text-xs font-black tracking-tight" style={{ color: "#16A34A" }}>KNOTTY</span>
         </div>
       </div>
     </div>
@@ -588,12 +473,7 @@ export default function GatePage() {
     result: TapResult;
     name: string;
     photo: string | null;
-    category: "Student" | "Staff" | "Visitor";
-    f1l?: string; f1v?: string;
-    f2l?: string; f2v?: string;
-    f3l?: string; f3v?: string;
-    f4l?: string; f4v?: string;
-    materials?: string[];
+    classOrRole?: string;
   } | null>(null);
   const [quickError, setQuickError] = useState("");
   const [recentActivity, setRecentActivity] = useState<GateActivityItem[]>([]);
@@ -771,11 +651,7 @@ export default function GatePage() {
           result: tapRes,
           name: matchingVisit.full_name,
           photo: null,
-          category: "Visitor",
-          f1l: "Host",    f1v: matchingVisit.host_name || "School",
-          f2l: "Purpose", f2v: matchingVisit.purpose,
-          f3l: "Status",  f3v: dir === "in" ? "Admitted" : "Departed",
-          f4l: "Pass Ref", f4v: matchingVisit.pass_reference || "—",
+          classOrRole: matchingVisit.host_name ? `Visiting: ${matchingVisit.host_name}` : "Visitor",
         });
 
         setRecentActivity((prev) => [
@@ -903,12 +779,7 @@ export default function GatePage() {
             },
             name: studentData.legal_name,
             photo: studentData.profile_photo_path,
-            category: "Student",
-            f1l: "Class",       f1v: classDisplay,
-            f2l: "Reg Number",  f2v: studentData.admission_number,
-            f3l: "Issue Date",  f3v: fmtDate(issuedAt),
-            f4l: "Expiry Date", f4v: issuedAt ? fmtDate(addYears(issuedAt, 3)) : "—",
-            materials,
+            classOrRole: classDisplay,
           });
           return;
         }
@@ -924,16 +795,12 @@ export default function GatePage() {
         else if (tapRes.action === "TAP_OUT") playChime("OUT");
         else playChime("ERROR");
 
+        setQuickInput("");
         setQuickResult({
           result: tapRes,
           name: studentData.legal_name,
           photo: studentData.profile_photo_path,
-          category: "Student",
-          f1l: "Class",       f1v: classDisplay,
-          f2l: "Reg Number",  f2v: studentData.admission_number,
-          f3l: "Issue Date",  f3v: fmtDate(issuedAt),
-          f4l: "Expiry Date", f4v: issuedAt ? fmtDate(addYears(issuedAt, 3)) : "—",
-          materials,
+          classOrRole: classDisplay,
         });
 
         setRecentActivity((prev) => [
@@ -961,16 +828,21 @@ export default function GatePage() {
       // 3. Try Staff Lookup
       let staffData: StaffCard | null = null;
       try {
-        staffData = await supabaseAttendanceService.lookupStaffCardHolder({
-          schoolId,
-          cardNumber: query,
-        });
+        if (isNfcUid) {
+          staffData = await supabaseAttendanceService.lookupStaffCardByNfcUid(schoolId, query);
+        }
+        if (!staffData) {
+          staffData = await supabaseAttendanceService.lookupStaffCardHolder({
+            schoolId,
+            cardNumber: query,
+          });
+        }
       } catch {
         // ignore
       }
 
-      // If not found yet, check active staff list directly
-      if (!staffData && activeStaffList.length > 0) {
+      // If not found yet, check active staff list directly (card_number / name fallback)
+      if (!staffData && !isNfcUid && activeStaffList.length > 0) {
         const qLow = query.toLowerCase();
         staffData = activeStaffList.find(
           (s) =>
@@ -982,27 +854,13 @@ export default function GatePage() {
 
       // If Staff found, execute staff tap
       if (staffData) {
-        // Fetch card issued_at for ID card display
-        let staffIssuedAt: string | null = null;
-        try {
-          const cl = getSafeBrowserClient();
-          if (cl && staffData.card_assignment_id) {
-            const { data: ca } = await cl.from("card_assignments").select("issued_at").eq("id", staffData.card_assignment_id).single();
-            staffIssuedAt = ca?.issued_at ?? null;
-          }
-        } catch { /* non-critical */ }
-
         if (staffData.is_frozen) {
           playChime("ERROR");
           setQuickResult({
             result: { action: "DENIED", direction: "in", check_in_time: null, check_out_time: null, tap_in_points: 0, tap_out_points: 0, denied_reason: "Staff card is frozen — contact admin" },
             name: staffData.legal_name,
             photo: staffData.profile_photo_path,
-            category: "Staff",
-            f1l: "Job Title",   f1v: staffData.job_title,
-            f2l: "Staff #",     f2v: staffData.employee_number,
-            f3l: "Department",  f3v: staffData.department || "—",
-            f4l: "Issue Date",  f4v: fmtDate(staffIssuedAt),
+            classOrRole: staffData.job_title,
           });
           return;
         }
@@ -1027,15 +885,12 @@ export default function GatePage() {
           tap_out_points: tapRes.tap_out_points,
         };
 
+        setQuickInput("");
         setQuickResult({
           result: convertedRes,
           name: staffData.legal_name,
           photo: staffData.profile_photo_path,
-          category: "Staff",
-          f1l: "Job Title",   f1v: staffData.job_title,
-          f2l: "Staff #",     f2v: staffData.employee_number,
-          f3l: "Department",  f3v: staffData.department || "—",
-          f4l: "Issue Date",  f4v: fmtDate(staffIssuedAt),
+          classOrRole: staffData.job_title,
         });
 
         setRecentActivity((prev) => [
@@ -1425,13 +1280,7 @@ export default function GatePage() {
                   result={quickResult.result}
                   name={quickResult.name}
                   photo={quickResult.photo}
-                  schoolName={activeSchool?.name}
-                  category={quickResult.category}
-                  field1Label={quickResult.f1l} field1Value={quickResult.f1v}
-                  field2Label={quickResult.f2l} field2Value={quickResult.f2v}
-                  field3Label={quickResult.f3l} field3Value={quickResult.f3v}
-                  field4Label={quickResult.f4l} field4Value={quickResult.f4v}
-                  materials={quickResult.materials}
+                  classOrRole={quickResult.classOrRole}
                 />
               )}
             </div>
@@ -1581,7 +1430,6 @@ export default function GatePage() {
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-gray-900 truncate">{studentCard.legal_name}</p>
                     <p className="text-xs text-gray-500">{studentCard.class_name} · {studentCard.admission_number}</p>
-                    <p className="text-xs text-gray-400 mt-0.5 font-mono">Card: {studentCard.card_number}</p>
                   </div>
                   {studentCard.is_frozen && (
                     <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">Frozen</span>
@@ -1611,12 +1459,7 @@ export default function GatePage() {
                   result={studentTapResult}
                   name={studentCard.legal_name}
                   photo={studentCard.profile_photo_path}
-                  schoolName={activeSchool?.name}
-                  category="Student"
-                  field1Label="Class"       field1Value={[studentCard.education_level_name, studentCard.class_name].filter(Boolean).join(" ") || "—"}
-                  field2Label="Reg Number"  field2Value={studentCard.admission_number}
-                  field3Label="Issue Date"  field3Value={fmtDate(studentIssuedAt)}
-                  field4Label="Expiry Date" field4Value={studentIssuedAt ? fmtDate(addYears(studentIssuedAt, 3)) : "—"}
+                  classOrRole={[studentCard.education_level_name, studentCard.class_name].filter(Boolean).join(" ") || "—"}
                 />
                 <button
                   onClick={() => {
@@ -1695,7 +1538,6 @@ export default function GatePage() {
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-gray-900 truncate">{staffCard.legal_name}</p>
                     <p className="text-xs text-gray-500">{staffCard.job_title}{staffCard.department ? ` · ${staffCard.department}` : ""}</p>
-                    <p className="text-xs text-gray-400 mt-0.5 font-mono">#{staffCard.employee_number} · Card: {staffCard.card_number}</p>
                   </div>
                   {staffCard.is_frozen && (
                     <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">Frozen</span>
@@ -1725,12 +1567,7 @@ export default function GatePage() {
                   result={staffTapResult}
                   name={staffCard.legal_name}
                   photo={staffCard.profile_photo_path}
-                  schoolName={activeSchool?.name}
-                  category="Staff"
-                  field1Label="Job Title"   field1Value={staffCard.job_title}
-                  field2Label="Staff #"     field2Value={staffCard.employee_number}
-                  field3Label="Department"  field3Value={staffCard.department || "—"}
-                  field4Label="Issue Date"  field4Value={fmtDate(staffIssuedAt)}
+                  classOrRole={staffCard.job_title}
                 />
                 <button
                   onClick={() => {

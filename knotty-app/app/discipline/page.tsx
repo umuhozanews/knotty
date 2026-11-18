@@ -1,7 +1,7 @@
 "use client";
 import { useState, useRef, useCallback, useEffect } from "react";
 import {
-  Wifi, WifiOff, Loader2, AlertTriangle, Shield, ShieldAlert,
+  Loader2, AlertTriangle, Shield, ShieldAlert,
   Plus, X, CheckCircle, Search, CreditCard, ChevronLeft, ChevronRight,
   Clock, History,
 } from "lucide-react";
@@ -123,120 +123,45 @@ function OffenseModal({
         </div>
 
         <form onSubmit={submit} className="p-5 space-y-4">
-          {/* Type */}
-          <div>
-            <p className="text-xs font-semibold mb-2" style={{ color: "var(--text-secondary)" }}>TYPE</p>
-            <div className="grid grid-cols-3 gap-1.5">
-              {["WARNING", "MISCONDUCT", "RULE_VIOLATION", "SUSPENSION", "OTHER"].map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setForm((f) => ({ ...f, type: t }))}
-                  className="py-1.5 px-2 rounded-xl text-xs font-medium border transition"
-                  style={form.type === t
-                    ? { background: "#121212", color: "#fff", borderColor: "#121212" }
-                    : { background: "var(--card)", color: "var(--text-secondary)", borderColor: "var(--border)" }}
-                >
-                  {TYPE_LABEL[t]}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Severity */}
-          <div>
-            <p className="text-xs font-semibold mb-2" style={{ color: "var(--text-secondary)" }}>SEVERITY</p>
-            <div className="grid grid-cols-3 gap-1.5">
-              {(["MINOR", "MODERATE", "SERIOUS"] as const).map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setSeverity(s)}
-                  className="py-1.5 rounded-xl text-xs font-semibold border transition"
-                  style={form.severity === s
-                    ? { background: SEV_STYLE[s].bg, color: SEV_STYLE[s].text, borderColor: SEV_STYLE[s].text }
-                    : { background: "var(--card)", color: "var(--text-secondary)", borderColor: "var(--border)" }}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
+          <div className="grid grid-cols-3 gap-1.5">
+            {(["MINOR", "MODERATE", "SERIOUS"] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setSeverity(s)}
+                className="py-2 rounded-xl text-xs font-semibold border transition"
+                style={form.severity === s
+                  ? { background: SEV_STYLE[s].bg, color: SEV_STYLE[s].text, borderColor: SEV_STYLE[s].text }
+                  : { background: "var(--card)", color: "var(--text-secondary)", borderColor: "var(--border)" }}
+              >
+                {s}
+              </button>
+            ))}
           </div>
 
-          {/* Marks deducted */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>MARKS TO DEDUCT</p>
-              <span className="text-xs font-bold text-red-500">-{form.marks_deducted} / {TOTAL_MARKS}</span>
-            </div>
-            <div className="flex items-center gap-3 mb-2">
-              <input
-                type="range"
-                min={1}
-                max={TOTAL_MARKS}
-                value={form.marks_deducted}
-                onChange={(e) => setForm((f) => ({ ...f, marks_deducted: Number(e.target.value) }))}
-                className="flex-1 accent-red-500"
-              />
-              <input
-                type="number"
-                min={1}
-                max={TOTAL_MARKS}
-                value={form.marks_deducted}
-                onChange={(e) => setForm((f) => ({ ...f, marks_deducted: Math.min(TOTAL_MARKS, Math.max(1, Number(e.target.value))) }))}
-                className="w-14 text-center border border-gray-200 rounded-xl py-1.5 text-sm font-bold"
-                style={{ color: "#C62828" }}
-              />
-            </div>
-            {/* Quick preset buttons */}
-            <div className="flex gap-1.5">
-              {[1, 2, 3, 5, 10].map((pts) => (
-                <button
-                  key={pts}
-                  type="button"
-                  onClick={() => setForm((f) => ({ ...f, marks_deducted: pts }))}
-                  className={`flex-1 py-1 rounded-xl text-xs font-bold border transition ${form.marks_deducted === pts ? "bg-red-600 text-white border-red-600" : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"}`}
-                >
-                  -{pts}
-                </button>
-              ))}
-            </div>
+          {/* Marks presets */}
+          <div className="flex items-center gap-1.5">
+            {[1, 2, 3, 5, 10].map((pts) => (
+              <button
+                key={pts}
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, marks_deducted: pts }))}
+                className={`flex-1 py-1.5 rounded-xl text-xs font-bold border transition ${form.marks_deducted === pts ? "bg-red-600 text-white border-red-600" : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"}`}
+              >
+                -{pts}
+              </button>
+            ))}
           </div>
 
           {/* Title */}
-          <div>
-            <p className="text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>OFFENSE TITLE *</p>
-            <input
-              required
-              value={form.title}
-              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-              placeholder="e.g. Fighting in the corridor"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-400"
-            />
-          </div>
-
-          {/* Description */}
-          <div>
-            <p className="text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>DESCRIPTION (optional)</p>
-            <textarea
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              rows={2}
-              placeholder="Brief details of the incident…"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none outline-none focus:border-gray-400"
-            />
-          </div>
-
-          {/* Action taken */}
-          <div>
-            <p className="text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>ACTION TAKEN (optional)</p>
-            <input
-              value={form.action_taken}
-              onChange={(e) => setForm((f) => ({ ...f, action_taken: e.target.value }))}
-              placeholder="e.g. Written warning issued, parent called"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-400"
-            />
-          </div>
+          <input
+            required
+            value={form.title}
+            onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+            placeholder="Offense description *"
+            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-400"
+          />
 
           <div className="flex gap-2 pt-1">
             <button
@@ -470,30 +395,17 @@ export default function DisciplinePage() {
         {/* Scan view */}
         {view === "scan" && (
           <div className="space-y-3">
-            <div className="bg-white rounded-2xl p-5 flex flex-col items-center gap-3">
-              <div className="w-20 h-20 rounded-full flex items-center justify-center"
-                style={{ background: listening ? "var(--severity-serious-bg)" : "#F5F5F5" }}>
-                {scanning
-                  ? <Loader2 size={32} className="animate-spin" style={{ color: "#C62828" }} />
-                  : listening
-                  ? <Shield size={32} className="animate-pulse" style={{ color: "#C62828" }} />
-                  : <WifiOff size={32} style={{ color: "#ccc" }} />}
-              </div>
-              <p className="text-sm font-bold text-center text-gray-800">
-                {scanning ? "Reading card…" : listening ? "Waiting for card tap…" : "NFC not available"}
-              </p>
-              <p className="text-xs text-center text-gray-400">
-                {listening ? "Student holds NFC card or phone near device" : "Use manual entry below"}
-              </p>
-              <div className="w-full flex gap-2 pt-1">
+            <div className="bg-white rounded-2xl p-4 space-y-2">
+              <div className="flex gap-2">
                 <input value={cardInput} onChange={(e) => setCardInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleCardScan(cardInput)}
-                  placeholder="Card number…"
-                  className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-xs font-mono outline-none" />
+                  placeholder="Student ID or NFC…"
+                  autoFocus
+                  className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-400 font-mono" />
                 <button onClick={() => handleCardScan(cardInput)} disabled={scanning || !cardInput.trim()}
-                  className="px-3 py-2 rounded-xl text-xs font-bold disabled:opacity-50"
+                  className="px-4 py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 flex items-center"
                   style={{ background: "var(--accent)", color: "var(--bg)" }}>
-                  {scanning ? <Loader2 size={12} className="animate-spin" /> : <CreditCard size={13} />}
+                  {scanning ? <Loader2 size={14} className="animate-spin" /> : <CreditCard size={14} />}
                 </button>
               </div>
               <VirtualCardTap onTap={(cn) => handleCardScan(cn)} busy={scanning} />

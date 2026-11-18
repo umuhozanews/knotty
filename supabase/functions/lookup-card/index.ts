@@ -51,18 +51,31 @@ Deno.serve(async (request) => {
     { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
   );
   const digest = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(rawUid)));
+  const hexDigest = `\\x${hex(digest)}`;
 
-  // Look up by digest via service_role (bypasses RLS, accesses private schema)
   const admin = createClient(url, service, { auth: { persistSession: false, autoRefreshToken: false } });
-  const { data, error } = await admin.rpc("lookup_card_holder_by_digest", {
+
+  // 1. Try student lookup
+  const { data: studentData } = await admin.rpc("lookup_card_holder_by_digest", {
     p_school_id: schoolId,
-    p_keyed_digest: `\\x${hex(digest)}`,
+    p_keyed_digest: hexDigest,
     p_identifier_kind: identifierKind,
   });
+  const studentHolder = Array.isArray(studentData) ? studentData[0] : null;
+  if (studentHolder) {
+    return encode({ ...studentHolder, holder_kind: "student" }, 200);
+  }
 
-  if (error) return encode({ error: "lookup_failed", detail: error.message }, 500);
-  const holder = Array.isArray(data) ? data[0] : data;
-  if (!holder) return encode({ error: "card_not_found" }, 404);
+  // 2. Try staff lookup
+  const { data: staffData } = await admin.rpc("lookup_staff_card_by_digest", {
+    p_school_id: schoolId,
+    p_keyed_digest: hexDigest,
+    p_identifier_kind: identifierKind,
+  });
+  const staffHolder = Array.isArray(staffData) ? staffData[0] : null;
+  if (staffHolder) {
+    return encode({ ...staffHolder, holder_kind: "staff" }, 200);
+  }
 
-  return encode(holder, 200);
+  return encode({ error: "card_not_found" }, 404);
 });

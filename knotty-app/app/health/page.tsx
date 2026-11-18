@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useRef, useCallback } from "react";
 import {
-  WifiOff, Loader2, Heart, Plus, X, CreditCard,
+  Loader2, Heart, Plus, X, CreditCard,
   AlertCircle, CheckCircle, Clock, Activity, Pill,
   ChevronLeft, ChevronRight, Search, History,
 } from "lucide-react";
@@ -445,30 +445,17 @@ export default function HealthPage() {
         {/* Scan view */}
         {view === "scan" && (
           <div className="space-y-3">
-            <div className="bg-white rounded-2xl p-5 flex flex-col items-center gap-3">
-              <div className="w-20 h-20 rounded-full flex items-center justify-center"
-                style={{ background: listening ? "#FFF1F2" : "#F5F5F5" }}>
-                {scanning
-                  ? <Loader2 size={32} className="animate-spin" style={{ color: "#E11D48" }} />
-                  : listening
-                  ? <Heart size={32} className="animate-pulse fill-current" style={{ color: "#E11D48" }} />
-                  : <WifiOff size={32} style={{ color: "#ccc" }} />}
-              </div>
-              <p className="text-sm font-bold text-center text-gray-800">
-                {scanning ? "Reading card…" : listening ? "Waiting for card tap…" : "NFC not available"}
-              </p>
-              <p className="text-xs text-center text-gray-400">
-                {listening ? "Student holds card near device" : "Use manual entry below"}
-              </p>
-              <div className="w-full flex gap-2 pt-1">
+            <div className="bg-white rounded-2xl p-4 space-y-2">
+              <div className="flex gap-2">
                 <input value={cardInput} onChange={(e) => setCardInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleCardScan(cardInput)}
-                  placeholder="Card number…"
-                  className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-xs font-mono outline-none" />
+                  placeholder="Student ID or NFC…"
+                  autoFocus
+                  className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-400 font-mono" />
                 <button onClick={() => handleCardScan(cardInput)} disabled={scanning || !cardInput.trim()}
-                  className="px-3 py-2 rounded-xl text-white text-xs font-bold disabled:opacity-50"
+                  className="px-4 py-2.5 rounded-xl text-white text-sm font-bold disabled:opacity-50 flex items-center"
                   style={{ background: "#121212" }}>
-                  {scanning ? <Loader2 size={12} className="animate-spin" /> : <CreditCard size={13} />}
+                  {scanning ? <Loader2 size={14} className="animate-spin" /> : <CreditCard size={14} />}
                 </button>
               </div>
               <VirtualCardTap onTap={(cn) => handleCardScan(cn)} busy={scanning} />

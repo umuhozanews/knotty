@@ -207,6 +207,36 @@ export const supabaseAttendanceService = {
   },
 
   /**
+   * Look up a staff member by NFC UID via the lookup-card edge function.
+   * Returns null if the UID belongs to a student card or is not found.
+   */
+  async lookupStaffCardByNfcUid(schoolId: string, nfcUid: string): Promise<{
+    card_assignment_id: string;
+    card_number: string;
+    staff_record_id: string;
+    employee_number: string;
+    job_title: string;
+    department: string | null;
+    employment_status: string;
+    legal_name: string;
+    profile_photo_path: string | null;
+    card_status: string;
+    is_frozen: boolean;
+  } | null> {
+    const client = getSafeBrowserClient();
+    if (!client) return null;
+    try {
+      const { data, error } = await client.functions.invoke("lookup-card", {
+        body: { school_id: schoolId, nfc_uid: nfcUid, identifier_kind: "nfc_uid" },
+      });
+      if (error || !data || (data as any).error || (data as any).holder_kind !== "staff") return null;
+      return data as any;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
    * Look up a staff member by their card number, employee number (e.g. STF-GATE-01),
    * staff record ID, or legal name.
    */

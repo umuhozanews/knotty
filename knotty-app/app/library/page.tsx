@@ -1688,7 +1688,6 @@ export default function LibraryPage() {
               </div>
               <div className="flex-1">
                 <p className="text-sm font-bold" style={{ color: "#121212" }}>Lend a Book</p>
-                <p className="text-[11px]" style={{ color: "#666" }}>Tap student NFC card or enter code, then confirm book</p>
               </div>
               <button onClick={() => setShowLendModal(false)} className="p-1.5 rounded-xl hover:bg-gray-100 transition cursor-pointer">
                 <X size={16} style={{ color: "#666" }} />
@@ -1697,11 +1696,8 @@ export default function LibraryPage() {
 
             <div className="overflow-y-auto px-5 py-4 space-y-4">
 
-              {/* Step 1 — Student with NFC and Virtual Card Tap */}
+              {/* Student lookup */}
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider block mb-2" style={{ color: "#666" }}>
-                  Step 1 — Identify Student (Tap NFC Card or enter student code)
-                </label>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
                     <CreditCard size={13} className="absolute left-3.5 top-[11px]" style={{ color: "#999" }} />

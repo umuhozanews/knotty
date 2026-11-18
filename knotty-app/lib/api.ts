@@ -1,5 +1,3 @@
-import { DEMO_STUDENTS } from "./demo";
-
 const getBaseUrl = (): string => {
   const envUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, '');
   if (typeof window !== "undefined") {
@@ -139,7 +137,7 @@ function handleDemoRequest<T>(path: string, options: RequestInit = {}): T {
   const getStudents = (): any[] => {
     const val = getDemoStorage("ishuri_demo_students");
     if (!val) {
-      const initial = DEMO_STUDENTS;
+      const initial: any[] = [];
       setDemoStorage("ishuri_demo_students", JSON.stringify(initial));
       return initial;
     }

@@ -351,31 +351,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const redirectTo = typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : undefined;
 
-    const { data, error } = await client.auth.signInWithOAuth({
+    const { error } = await client.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo,
-        skipBrowserRedirect: true,
         queryParams: { access_type: "offline", prompt: "consent" },
       },
     });
 
     if (error) throw error;
-
-    if (data?.url) {
-      try {
-        const check = await fetch(data.url, { method: "GET", redirect: "manual" });
-        if (check.status === 400) {
-          const body = await check.json().catch(() => null);
-          if (body?.msg?.includes("not enabled") || body?.error_code === "validation_failed") {
-            throw new Error("Google Sign-In is not enabled yet in this Supabase project. Please configure Google OAuth Client ID & Secret in Supabase, or sign in with email and password.");
-          }
-        }
-      } catch (checkErr) {
-        if (checkErr instanceof Error && checkErr.message.includes("Google Sign-In is not enabled")) throw checkErr;
-      }
-      if (typeof window !== "undefined") window.location.href = data.url;
-    }
   }, []);
 
   const switchSchool = useCallback(async (schoolId: string) => {

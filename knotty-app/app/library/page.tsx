@@ -1081,95 +1081,116 @@ export default function LibraryPage() {
 
           {/* ═══════════════ ADD BOOK ═══════════════ */}
           {tab === "add-book" && (
-            <div className="max-w-md mx-auto">
-              <div className="bg-white rounded-3xl p-5">
-                <div className="flex items-center gap-3 mb-5">
-                  <div className="w-10 h-10 rounded-2xl flex items-center justify-center" style={{ background: "#DCFCE7" }}>
-                    <Plus size={20} style={{ color: "#16A34A" }} />
+            <div className="max-w-md mx-auto space-y-3">
+
+              {bookSaved && (
+                <div className="p-3.5 rounded-2xl flex items-center gap-3 bg-green-50 border border-green-200">
+                  <div className="w-8 h-8 rounded-xl bg-green-500 flex items-center justify-center flex-shrink-0">
+                    <Check size={16} className="text-white" />
                   </div>
                   <div>
-                    <h2 className="text-sm font-bold" style={{ color: "#121212" }}>Register New Book</h2>
-                    <p className="text-[11px]" style={{ color: "#666" }}>Add a book to the library catalog</p>
+                    <p className="text-sm font-bold text-green-800">Book added to catalog!</p>
+                    <p className="text-xs text-green-600">Fill the form again to add another</p>
+                  </div>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveBook} className="space-y-3">
+                {/* Required fields */}
+                <div className="bg-white rounded-3xl p-4 space-y-3">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Required</p>
+                  <div className="relative">
+                    <Tag size={13} className="absolute left-3.5 top-[13px] text-gray-400" />
+                    <input
+                      value={bookForm.book_number}
+                      onChange={e => setBookForm(f => ({ ...f, book_number: e.target.value }))}
+                      placeholder="Book ID / ISBN — e.g. BK-001"
+                      required
+                      className="w-full border rounded-2xl pl-9 pr-3 py-3 text-sm outline-none transition font-medium"
+                      style={{ borderColor: bookForm.book_number ? "#16A34A" : "#e5e7eb", color: "#121212" }}
+                    />
+                  </div>
+                  <div className="relative">
+                    <BookOpen size={13} className="absolute left-3.5 top-[13px] text-gray-400" />
+                    <input
+                      value={bookForm.title}
+                      onChange={e => setBookForm(f => ({ ...f, title: e.target.value }))}
+                      placeholder="Book title — e.g. Mathematics S3"
+                      required
+                      className="w-full border border-gray-200 rounded-2xl pl-9 pr-3 py-3 text-sm outline-none font-medium"
+                      style={{ color: "#121212" }}
+                    />
                   </div>
                 </div>
 
-                {bookSaved && (
-                  <div className="mb-4 p-3 rounded-2xl flex items-center gap-2 bg-green-50 border border-green-100">
-                    <CheckCircle size={16} className="text-green-500 flex-shrink-0" />
-                    <span className="text-xs font-semibold text-green-700">Book registered and added to catalog!</span>
+                {/* Optional fields */}
+                <div className="bg-white rounded-3xl p-4 space-y-3">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Optional</p>
+                  <input
+                    value={bookForm.author}
+                    onChange={e => setBookForm(f => ({ ...f, author: e.target.value }))}
+                    placeholder="Author — e.g. REB Rwanda"
+                    className="w-full border border-gray-200 rounded-2xl px-4 py-3 text-sm outline-none"
+                    style={{ color: "#121212" }}
+                  />
+                  <div className="relative">
+                    <MapPin size={13} className="absolute left-3.5 top-[13px] text-gray-400" />
+                    <input
+                      value={bookForm.location}
+                      onChange={e => setBookForm(f => ({ ...f, location: e.target.value }))}
+                      placeholder="Shelf location — e.g. A1, B3"
+                      className="w-full border border-gray-200 rounded-2xl pl-9 pr-3 py-3 text-sm outline-none"
+                      style={{ color: "#121212" }}
+                    />
                   </div>
-                )}
-
-                <form onSubmit={handleSaveBook} className="space-y-4">
                   <div>
-                    <label className="text-[10px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: "#666" }}>Book Number / Identifier *</label>
-                    <div className="relative">
-                      <Tag size={13} className="absolute left-3.5 top-[11px]" style={{ color: "#999" }} />
-                      <input value={bookForm.book_number} onChange={e => setBookForm(f => ({ ...f, book_number: e.target.value }))}
-                        placeholder="e.g. BK-001 or 9780194338" required
-                        className="w-full border rounded-2xl pl-9 pr-3 py-2.5 text-sm outline-none transition"
-                        style={{ borderColor: bookForm.book_number ? "#16A34A" : "#e5e7eb", color: "#121212" }} />
-                    </div>
-                    <p className="text-[10px] mt-1" style={{ color: "#999" }}>Barcode, ISBN, or your own numbering (BK-001, BK-002…)</p>
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: "#666" }}>Book Title *</label>
-                    <div className="relative">
-                      <BookOpen size={13} className="absolute left-3.5 top-[11px]" style={{ color: "#999" }} />
-                      <input value={bookForm.title} onChange={e => setBookForm(f => ({ ...f, title: e.target.value }))}
-                        placeholder="e.g. Mathematics for Senior 3" required
-                        className="w-full border border-gray-200 rounded-2xl pl-9 pr-3 py-2.5 text-sm outline-none"
-                        style={{ color: "#121212" }} />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: "#666" }}>Author</label>
-                    <input value={bookForm.author} onChange={e => setBookForm(f => ({ ...f, author: e.target.value }))}
-                      placeholder="e.g. REB Rwanda"
-                      className="w-full border border-gray-200 rounded-2xl px-4 py-2.5 text-sm outline-none"
-                      style={{ color: "#121212" }} />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[10px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: "#666" }}>Category</label>
-                      <select value={bookForm.category} onChange={e => setBookForm(f => ({ ...f, category: e.target.value }))}
-                        className="w-full border border-gray-200 rounded-2xl px-3 py-2.5 text-sm outline-none bg-white"
-                        style={{ color: bookForm.category ? "#121212" : "#999" }}>
-                        <option value="">Select…</option>
-                        {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: "#666" }}>Shelf Location</label>
-                      <div className="relative">
-                        <MapPin size={13} className="absolute left-3.5 top-[11px]" style={{ color: "#999" }} />
-                        <input value={bookForm.location} onChange={e => setBookForm(f => ({ ...f, location: e.target.value }))}
-                          placeholder="A1, B3, C5…"
-                          className="w-full border border-gray-200 rounded-2xl pl-9 pr-3 py-2.5 text-sm outline-none"
-                          style={{ color: "#121212" }} />
-                      </div>
+                    <p className="text-[10px] font-semibold text-gray-400 mb-2">Category</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {CATEGORIES.map(c => (
+                        <button key={c} type="button"
+                          onClick={() => setBookForm(f => ({ ...f, category: f.category === c ? "" : c }))}
+                          className="px-3 py-1 rounded-xl text-xs font-semibold transition"
+                          style={bookForm.category === c
+                            ? { background: "#16A34A", color: "#fff" }
+                            : { background: "#F3F4F6", color: "#555" }}>
+                          {c}
+                        </button>
+                      ))}
                     </div>
                   </div>
+                </div>
 
+                {/* Copies stepper */}
+                <div className="bg-white rounded-3xl p-4 flex items-center justify-between">
                   <div>
-                    <label className="text-[10px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: "#666" }}>Number of Copies</label>
-                    <input type="number" min={1} max={99} value={bookForm.total_copies}
-                      onChange={e => setBookForm(f => ({ ...f, total_copies: Number(e.target.value) }))}
-                      className="w-full border border-gray-200 rounded-2xl px-4 py-2.5 text-sm outline-none"
-                      style={{ color: "#121212" }} />
+                    <p className="text-sm font-bold text-gray-800">Copies</p>
+                    <p className="text-xs text-gray-400">How many does the library have?</p>
                   </div>
+                  <div className="flex items-center gap-3">
+                    <button type="button"
+                      onClick={() => setBookForm(f => ({ ...f, total_copies: Math.max(1, f.total_copies - 1) }))}
+                      className="w-9 h-9 rounded-xl border border-gray-200 flex items-center justify-center text-gray-700 hover:bg-gray-100 font-bold text-lg transition">
+                      −
+                    </button>
+                    <span className="text-xl font-bold text-gray-900 w-8 text-center">{bookForm.total_copies}</span>
+                    <button type="button"
+                      onClick={() => setBookForm(f => ({ ...f, total_copies: Math.min(99, f.total_copies + 1) }))}
+                      className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-lg transition"
+                      style={{ background: "#16A34A" }}>
+                      +
+                    </button>
+                  </div>
+                </div>
 
-                  <button type="submit" disabled={savingBook || !bookForm.title.trim() || !bookForm.book_number.trim()}
-                    className="w-full py-3.5 rounded-2xl font-bold text-sm text-white flex items-center justify-center gap-2 disabled:opacity-40 transition"
-                    style={{ background: "#16A34A" }}>
-                    {savingBook ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-                    Register Book
-                  </button>
-                </form>
-              </div>
+                <button
+                  type="submit"
+                  disabled={savingBook || !bookForm.title.trim() || !bookForm.book_number.trim()}
+                  className="w-full py-4 rounded-2xl font-bold text-sm text-white flex items-center justify-center gap-2 disabled:opacity-40 transition active:scale-[.98]"
+                  style={{ background: "#16A34A" }}>
+                  {savingBook ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                  Add to Library
+                </button>
+              </form>
             </div>
           )}
 

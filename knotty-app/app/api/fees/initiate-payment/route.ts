@@ -36,10 +36,19 @@ export async function POST(req: NextRequest) {
 
   const data = await res.json();
 
+  console.log("[FLW] initiate response:", JSON.stringify(data));
+
   if (data.status !== "success") {
     return NextResponse.json(
-      { error: data.message || "Failed to initiate payment" },
+      { error: data.message || "Failed to initiate payment", flw_debug: data },
       { status: 400 }
+    );
+  }
+
+  if (!data.data) {
+    return NextResponse.json(
+      { error: "Unexpected response from payment gateway", flw_debug: data },
+      { status: 500 }
     );
   }
 

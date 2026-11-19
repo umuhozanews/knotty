@@ -218,4 +218,55 @@ export const supabaseFeesService = {
     const pending = (inv || []).reduce((s, i) => s + Math.max(0, i.total_amount - i.amount_paid), 0);
     return { total_collected, pending, by_channel: Object.entries(byChannel).map(([channel, total]) => ({ channel, total })) };
   },
+
+  /** Get all fee invoices for a student across all categories (latest per fee_type) */
+  async getStudentFeeSummary(schoolId: string, studentId: string): Promise<{
+    fee_type: string; total_amount: number; amount_paid: number; balance: number;
+    status: string; term_label: string | null;
+  }[]> {
+    const client = getSafeBrowserClient();
+    if (!client) throw new Error("Supabase is not configured");
+    const { data, error } = await client
+      .from("fee_invoices")
+      .select("fee_type, total_amount, amount_paid, status, term_label")
+      .eq("school_id", schoolId)
+      .eq("student_id", studentId)
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    // Latest invoice per fee_type
+    const seen = new Set<string>();
+    const result: { fee_type: string; total_amount: number; amount_paid: number; balance: number; status: string; term_label: string | null }[] = [];
+    for (const inv of (data || [])) {
+      if (!seen.has(inv.fee_type)) {
+        seen.add(inv.fee_type);
+        result.push({ ...inv, balance: Math.max(0, inv.total_amount - inv.amount_paid) });
+      }
+    }
+    return result;
+  },
+
+  /** After recording a POCKET_MONEY payment, top up the student's card wallet */
+  async topUpWalletForPocketMoney(schoolId: string, studentId: string, amount: number): Promise<number | null> {
+    const client = getSafeBrowserClient();
+    if (!client) return null;
+    // Find student's active card assignment
+    const { data: cards } = await client
+      .from("card_assignments")
+      .select("id")
+      .eq("school_id", schoolId)
+      .eq("student_id", studentId)
+      .in("status", ["active", "issued"])
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (!cards || cards.length === 0) return null;
+    const cardAssignmentId = cards[0].id;
+    const { data, error } = await client.rpc("top_up_wallet", {
+      p_school_id: schoolId,
+      p_card_assignment_id: cardAssignmentId,
+      p_amount: amount,
+      p_description: "Pocket money fee payment",
+    });
+    if (error) throw new Error(error.message);
+    return data as number;
+  },
 };

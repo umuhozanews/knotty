@@ -2,18 +2,21 @@
 import { useEffect, useState } from "react";
 import {
   Plus, Trash2, Loader2, Users, Layers, BookOpen, ToggleLeft, ToggleRight,
-  Building2, Calendar, Check, AlertCircle, Clock, ShieldCheck
+  Building2, Calendar, Check, AlertCircle, Clock, ShieldCheck, GraduationCap,
+  Bus, Wallet, MoreHorizontal, Receipt,
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import {
   supabaseSchoolService,
   supabaseAcademicService,
   supabaseStaffService,
+  supabaseFeesService,
   AcademicYearRow,
   AcademicTermRow,
   SchoolSettingsRow,
   EducationLevelRow,
   ClassSectionRow,
+  FeeStructureRow,
 } from "@/lib/supabase/services";
 import { getSafeBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
 
@@ -25,7 +28,7 @@ import { useAuth } from "@/context/AuthContext";
 import { isManagementRole } from "@/lib/roles";
 import { useToast } from "@/context/ToastContext";
 
-type SettingsTab = "profile" | "years" | "terms" | "levels" | "classes" | "staff" | "teachers";
+type SettingsTab = "profile" | "years" | "terms" | "levels" | "classes" | "staff" | "teachers" | "fees";
 
 // ─── Modal: Create Level ───────────────────────────────────────────────────────
 function CreateLevelModal({
@@ -623,6 +626,12 @@ export default function SettingsPage() {
   });
   const [savingSettings, setSavingSettings] = useState(false);
 
+  // Fee structures
+  const [feeStructures, setFeeStructures] = useState<FeeStructureRow[]>([]);
+  const [feeForm, setFeeForm] = useState({ name: "", amount: "", fee_type: "TUITION" as string });
+  const [savingFee, setSavingFee] = useState(false);
+  const [deletingFee, setDeletingFee] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<null | "level" | "class" | "staff" | "year" | "term">(null);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -717,6 +726,12 @@ export default function SettingsPage() {
           weekStartsOn: settings.week_starts_on || 1,
         });
       }
+
+      // Load fee structures
+      try {
+        const feeRows = await supabaseFeesService.listStructures(targetSchoolId);
+        setFeeStructures(feeRows);
+      } catch { /* non-fatal */ }
     } catch (err) {
       console.error(err);
     } finally {
@@ -727,6 +742,45 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!authLoading && user) loadAll();
   }, [user?.id, activeSchool?.id, authLoading]);
+
+  async function handleAddFeeStructure(e: React.FormEvent) {
+    e.preventDefault();
+    const targetSchoolId = activeSchool?.id || user?.school_id;
+    if (!targetSchoolId) return;
+    const amt = parseFloat(feeForm.amount);
+    if (!feeForm.name.trim() || isNaN(amt) || amt <= 0) return;
+    setSavingFee(true);
+    try {
+      const created = await supabaseFeesService.createStructure(targetSchoolId, {
+        name: feeForm.name.trim(),
+        amount: amt,
+        fee_type: feeForm.fee_type,
+      });
+      setFeeStructures((prev) => [created, ...prev]);
+      setFeeForm({ name: "", amount: "", fee_type: "TUITION" });
+      show("Fee structure added", "success");
+    } catch (err) {
+      show(err instanceof Error ? err.message : "Error", "error");
+    } finally {
+      setSavingFee(false);
+    }
+  }
+
+  async function handleDeleteFeeStructure(id: string) {
+    const targetSchoolId = activeSchool?.id || user?.school_id;
+    if (!targetSchoolId) return;
+    setDeletingFee(id);
+    try {
+      const client = getSafeBrowserClient();
+      if (!client) throw new Error("Not connected");
+      await client.from("fee_structures").update({ is_active: false }).eq("id", id).eq("school_id", targetSchoolId);
+      setFeeStructures((prev) => prev.filter((f) => f.id !== id));
+    } catch (err) {
+      show(err instanceof Error ? err.message : "Error", "error");
+    } finally {
+      setDeletingFee(null);
+    }
+  }
 
   async function handleSaveSchoolSettings(e: React.FormEvent) {
     e.preventDefault();
@@ -872,7 +926,8 @@ export default function SettingsPage() {
     { key: "classes", label: "Classes", icon: BookOpen },
     ...(isManagementRole(user?.role) ? [
       { key: "staff" as SettingsTab, label: "Staff & Roles", icon: Users },
-      { key: "teachers" as SettingsTab, label: "Teacher Assignments", icon: Users }
+      { key: "teachers" as SettingsTab, label: "Teacher Assignments", icon: Users },
+      { key: "fees" as SettingsTab, label: "Fee Structures", icon: Receipt },
     ] : []),
   ];
 
@@ -1320,6 +1375,99 @@ export default function SettingsPage() {
                   ))}
                 </tbody>
               </table>
+            )}
+
+            {/* 8. FEE STRUCTURES */}
+            {tab === "fees" && (
+              <div className="p-5 space-y-5">
+                <div>
+                  <h2 className="text-base font-bold text-gray-800">Fee Structures</h2>
+                  <p className="text-sm text-gray-400 mt-0.5">Define what fees your school charges. Pocket Money fees automatically top up student card wallets for canteen use.</p>
+                </div>
+
+                {/* Add fee form */}
+                <form onSubmit={handleAddFeeStructure} className="bg-gray-50 rounded-2xl p-4 space-y-3">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Add New Fee</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <input
+                      required
+                      placeholder="Fee name (e.g. Tuition Term 1)"
+                      value={feeForm.name}
+                      onChange={(e) => setFeeForm({ ...feeForm, name: e.target.value })}
+                      className="border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-green-400"
+                    />
+                    <input
+                      required
+                      type="number"
+                      min={1}
+                      placeholder="Amount (RWF)"
+                      value={feeForm.amount}
+                      onChange={(e) => setFeeForm({ ...feeForm, amount: e.target.value })}
+                      className="border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-green-400"
+                    />
+                    <select
+                      value={feeForm.fee_type}
+                      onChange={(e) => setFeeForm({ ...feeForm, fee_type: e.target.value })}
+                      className="border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-green-400"
+                    >
+                      <option value="TUITION">Tuition</option>
+                      <option value="TRANSPORT">Transport</option>
+                      <option value="POCKET_MONEY">Pocket Money (canteen wallet)</option>
+                      <option value="OTHER">Other</option>
+                    </select>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={savingFee}
+                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-xl text-sm font-semibold disabled:opacity-50"
+                  >
+                    {savingFee ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                    Add Fee Structure
+                  </button>
+                </form>
+
+                {/* Fee list */}
+                {feeStructures.length === 0 ? (
+                  <div className="text-center py-10 text-gray-400">
+                    <Receipt size={28} className="mx-auto mb-2" />
+                    <p className="text-sm">No fee structures yet. Add one above.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {feeStructures.map((f) => {
+                      const meta: Record<string, { label: string; color: string; bg: string; Icon: React.ElementType }> = {
+                        TUITION:      { label: "Tuition",      color: "#2563EB", bg: "#EFF6FF", Icon: GraduationCap },
+                        TRANSPORT:    { label: "Transport",    color: "#16A34A", bg: "#F0FDF4", Icon: Bus },
+                        POCKET_MONEY: { label: "Pocket Money", color: "#7C3AED", bg: "#F5F3FF", Icon: Wallet },
+                        OTHER:        { label: "Other",        color: "#EA580C", bg: "#FFF7ED", Icon: MoreHorizontal },
+                      };
+                      const m = meta[f.fee_type] ?? meta.OTHER;
+                      const Icon = m.Icon;
+                      return (
+                        <div key={f.id} className="flex items-center gap-3 p-3 rounded-2xl" style={{ background: m.bg }}>
+                          <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: m.color }}>
+                            <Icon size={16} className="text-white" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-gray-800 truncate">{f.name}</p>
+                            <p className="text-xs text-gray-500">{m.label}</p>
+                          </div>
+                          <p className="text-sm font-bold" style={{ color: m.color }}>
+                            {f.amount.toLocaleString()} RWF
+                          </p>
+                          <button
+                            onClick={() => handleDeleteFeeStructure(f.id)}
+                            disabled={deletingFee === f.id}
+                            className="w-7 h-7 rounded-xl bg-white/80 flex items-center justify-center text-gray-400 hover:text-red-500 transition disabled:opacity-40"
+                          >
+                            {deletingFee === f.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}

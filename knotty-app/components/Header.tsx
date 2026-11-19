@@ -1,17 +1,41 @@
 "use client";
-import { Sun, Moon, User, Menu } from "lucide-react";
+import { Sun, Moon, User, Menu, Shield, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
 import { isManagementRole } from "@/lib/roles";
+import NFCQuickCheck from "./NFCQuickCheck";
+import { getDashboardPath } from "@/context/AuthContext";
 
 export default function Header({ onMenuClick, hideSidebarToggle }: { onMenuClick?: () => void; hideSidebarToggle?: boolean }) {
   const { user, logout } = useAuth();
   const { theme, toggle } = useTheme();
   const router = useRouter();
+  const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Show back button on pages that are not root-level dashboard pages
+  const rootPages = ["/", "/dashboard", "/my-dashboard", "/portal-admin", "/platform"];
+  const showBack = !rootPages.includes(pathname);
+
+  function handleBack() {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push(getDashboardPath(user?.role ?? ""));
+    }
+  }
+
+  // Check if a platform admin has entered a school (impersonation mode)
+  const [isPlatformAdminInSchool, setIsPlatformAdminInSchool] = useState(false);
+  useEffect(() => {
+    try {
+      const entered = localStorage.getItem("ishuri_platform_entered_school");
+      setIsPlatformAdminInSchool(!!entered && user?.role === "ADMIN");
+    } catch {}
+  }, [user?.role]);
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -21,15 +45,28 @@ export default function Header({ onMenuClick, hideSidebarToggle }: { onMenuClick
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
 
-  function handleLogout() { logout(); router.replace("/login"); }
+  function handleLogout() {
+    try { localStorage.removeItem("ishuri_platform_entered_school"); } catch {}
+    logout();
+    router.replace("/login");
+  }
 
   return (
     <header className="flex items-center justify-between gap-2 mb-2 md:mb-3">
-      {/* Left: hamburger (mobile only) + IshuriHUB logo */}
+      {/* Left: hamburger (mobile only) + back button + IshuriHUB logo */}
       <div className="flex items-center gap-2">
         {onMenuClick && !hideSidebarToggle && (
           <button onClick={onMenuClick} className="md:hidden p-2 bg-white rounded-xl text-gray-600 hover:bg-gray-50 transition">
             <Menu size={18} />
+          </button>
+        )}
+        {showBack && (
+          <button
+            onClick={handleBack}
+            title="Go back"
+            className="w-8 h-8 md:w-9 md:h-9 bg-white rounded-full flex items-center justify-center hover:bg-gray-50 transition"
+          >
+            <ArrowLeft size={16} className="text-gray-600" />
           </button>
         )}
         <div className="flex items-center gap-3">
@@ -46,9 +83,22 @@ export default function Header({ onMenuClick, hideSidebarToggle }: { onMenuClick
 
       {/* Right: welcome text + theme toggle + account */}
       <div className="flex items-center gap-2">
+        {isPlatformAdminInSchool && (
+          <button
+            onClick={() => {
+              try { localStorage.removeItem("ishuri_platform_entered_school"); } catch {}
+              window.location.href = "/platform";
+            }}
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-black text-white rounded-xl hover:bg-gray-800 transition"
+          >
+            <Shield size={12} /> Back to Platform
+          </button>
+        )}
         <span className="hidden sm:block text-sm text-gray-500">
           Welcome, <span className="font-semibold text-gray-800 capitalize">{user?.role?.toLowerCase().replace("_", " ")} {user?.first_name} {user?.last_name}</span>
         </span>
+
+        <NFCQuickCheck />
 
         <button
           onClick={toggle}

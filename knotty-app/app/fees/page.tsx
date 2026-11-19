@@ -3,13 +3,16 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   GraduationCap, Bus, Wallet, MoreHorizontal,
   ChevronRight, ChevronLeft, Loader2, Users,
-  CheckCircle, AlertCircle, Clock, X, Receipt, Smartphone,
+  CheckCircle, AlertCircle, Clock, X, Receipt, Smartphone, Nfc,
+  Zap, PenLine,
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import { supabaseFeesService, type FeeType, type StudentFeeStatus } from "@/lib/supabase/services";
+import { supabaseCanteenService } from "@/lib/supabase/services/canteenService";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 import { getSafeBrowserClient } from "@/lib/supabase/client";
+import { useNFC } from "@/hooks/useNFC";
 
 type ClassWithLevel = {
   id: string;
@@ -45,6 +48,7 @@ function PaymentModal({
 }) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [payMode, setPayMode] = useState<"automated" | "manual">("automated");
   const [loading, setLoading] = useState(false);
   const [channel, setChannel] = useState<"MTN" | "AIRTEL" | "CASH" | "BANK">("MTN");
   const [amount, setAmount] = useState(String(student.balance > 0 ? student.balance : 0));
@@ -90,6 +94,17 @@ function PaymentModal({
           .eq("invoice_id", invoiceId)
           .order("created_at", { ascending: false })
           .limit(1);
+      }
+    }
+    // Pocket money payments automatically top up the student's card wallet
+    if (feeType === "POCKET_MONEY") {
+      try {
+        const newBal = await supabaseFeesService.topUpWalletForPocketMoney(schoolId, student.student_id, amt);
+        if (newBal !== null) {
+          toast(`Wallet topped up → ${newBal.toLocaleString()} RWF`, "success");
+        }
+      } catch {
+        // non-critical — fee was recorded, wallet top-up failed silently
       }
     }
   }
@@ -184,14 +199,14 @@ function PaymentModal({
     }
   }
 
-  const channels: { id: "MTN" | "AIRTEL" | "CASH" | "BANK"; label: string; color: string }[] = [
-    { id: "MTN",    label: "MTN MoMo",  color: "#FBBF24" },
-    { id: "AIRTEL", label: "Airtel",    color: "#EF4444" },
-    { id: "CASH",   label: "Cash",      color: "#16A34A" },
-    { id: "BANK",   label: "Bank",      color: "#2563EB" },
-  ];
-
   const isMoMo = channel === "MTN" || channel === "AIRTEL";
+
+  // Switch channel default when switching mode
+  function switchMode(mode: "automated" | "manual") {
+    setPayMode(mode);
+    if (mode === "automated" && (channel === "CASH" || channel === "BANK")) setChannel("MTN");
+    if (mode === "manual" && (channel === "MTN" || channel === "AIRTEL")) setChannel("CASH");
+  }
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -250,25 +265,64 @@ function PaymentModal({
               </div>
             )}
 
-            {/* Payment channel */}
+            {/* Automated vs Manual payment mode toggle */}
             <div>
-              <p className="text-xs font-semibold text-gray-500 mb-1.5">PAYMENT METHOD</p>
-              <div className="grid grid-cols-4 gap-1.5">
-                {channels.map((c) => (
-                  <button key={c.id} type="button"
-                    onClick={() => setChannel(c.id)}
-                    className="py-2 rounded-xl text-xs font-semibold border transition"
-                    style={channel === c.id
-                      ? { background: c.color, color: "#fff", borderColor: c.color }
-                      : { background: "#fff", color: "#666", borderColor: "#e5e5e5" }}>
-                    {c.label}
-                  </button>
-                ))}
+              <p className="text-xs font-semibold text-gray-500 mb-2">PAYMENT TYPE</p>
+              <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 rounded-2xl">
+                <button type="button" onClick={() => switchMode("automated")}
+                  className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold transition"
+                  style={payMode === "automated"
+                    ? { background: "#fff", color: "#D97706", boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }
+                    : { background: "transparent", color: "#9CA3AF" }}>
+                  <Zap size={13} /> Automated
+                </button>
+                <button type="button" onClick={() => switchMode("manual")}
+                  className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold transition"
+                  style={payMode === "manual"
+                    ? { background: "#fff", color: "#16A34A", boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }
+                    : { background: "transparent", color: "#9CA3AF" }}>
+                  <PenLine size={13} /> Manual
+                </button>
               </div>
-              {isMoMo && (
+              {payMode === "automated" && (
                 <p className="text-[11px] text-amber-600 mt-1.5 flex items-center gap-1">
-                  <Smartphone size={11} /> Payment request will be sent to the payer&apos;s phone
+                  <Zap size={11} /> Payment sent via mobile money — system confirms automatically
                 </p>
+              )}
+              {payMode === "manual" && (
+                <p className="text-[11px] text-green-600 mt-1.5 flex items-center gap-1">
+                  <PenLine size={11} /> Cash or bank — recorded manually by accountant
+                </p>
+              )}
+            </div>
+
+            {/* Payment channel — contextual to mode */}
+            <div>
+              <p className="text-xs font-semibold text-gray-500 mb-1.5">METHOD</p>
+              {payMode === "automated" ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {([{ id: "MTN", label: "MTN MoMo", color: "#FBBF24" }, { id: "AIRTEL", label: "Airtel Money", color: "#EF4444" }] as const).map((c) => (
+                    <button key={c.id} type="button" onClick={() => setChannel(c.id)}
+                      className="py-2.5 rounded-xl text-xs font-semibold border transition flex items-center justify-center gap-1.5"
+                      style={channel === c.id
+                        ? { background: c.color, color: "#fff", borderColor: c.color }
+                        : { background: "#fff", color: "#666", borderColor: "#e5e5e5" }}>
+                      <Smartphone size={12} /> {c.label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {([{ id: "CASH", label: "Cash", color: "#16A34A" }, { id: "BANK", label: "Bank Transfer", color: "#2563EB" }] as const).map((c) => (
+                    <button key={c.id} type="button" onClick={() => setChannel(c.id)}
+                      className="py-2.5 rounded-xl text-xs font-semibold border transition flex items-center justify-center gap-1.5"
+                      style={channel === c.id
+                        ? { background: c.color, color: "#fff", borderColor: c.color }
+                        : { background: "#fff", color: "#666", borderColor: "#e5e5e5" }}>
+                      <Receipt size={12} /> {c.label}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
 
@@ -282,10 +336,10 @@ function PaymentModal({
               />
             </div>
 
-            {/* Phone — for mobile money */}
-            {isMoMo && (
+            {/* Phone — automated only */}
+            {payMode === "automated" && (
               <div>
-                <p className="text-xs font-semibold text-gray-500 mb-1.5">PHONE NUMBER</p>
+                <p className="text-xs font-semibold text-gray-500 mb-1.5">PAYER PHONE NUMBER</p>
                 <input
                   type="tel" required placeholder="e.g. 0780000000"
                   value={phone} onChange={(e) => setPhone(e.target.value)}
@@ -294,15 +348,22 @@ function PaymentModal({
               </div>
             )}
 
-            {/* Reference — only for Cash/Bank */}
-            {!isMoMo && (
+            {/* Reference — manual only */}
+            {payMode === "manual" && (
               <div>
-                <p className="text-xs font-semibold text-gray-500 mb-1.5">REFERENCE NUMBER <span className="font-normal">(optional)</span></p>
+                <p className="text-xs font-semibold text-gray-500 mb-1.5">REFERENCE <span className="font-normal">(optional)</span></p>
                 <input
-                  placeholder="Transaction ref…"
+                  placeholder="e.g. receipt no. or bank ref"
                   value={reference} onChange={(e) => setReference(e.target.value)}
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-400"
                 />
+              </div>
+            )}
+
+            {feeType === "POCKET_MONEY" && (
+              <div className="flex items-start gap-2 p-3 bg-purple-50 rounded-2xl text-xs text-purple-700">
+                <Wallet size={13} className="flex-shrink-0 mt-0.5" />
+                <span>This payment will automatically top up the student&apos;s card wallet balance for canteen use.</span>
               </div>
             )}
 
@@ -313,10 +374,10 @@ function PaymentModal({
               </button>
               <button type="submit" disabled={loading}
                 className="flex-1 py-3 rounded-2xl text-sm font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2"
-                style={{ background: isMoMo ? "#D97706" : "#16A34A" }}>
+                style={{ background: payMode === "automated" ? "#D97706" : "#16A34A" }}>
                 {loading
                   ? <Loader2 size={14} className="animate-spin" />
-                  : isMoMo
+                  : payMode === "automated"
                     ? <><Smartphone size={14} /> Send Request</>
                     : <><Receipt size={14} /> Record Payment</>
                 }
@@ -373,10 +434,24 @@ function StudentFeeRow({ s, onPay }: { s: StudentFeeStatus; onPay: (s: StudentFe
   );
 }
 
+type NfcStudentCard = {
+  student_id: string; legal_name: string; class_name: string;
+  admission_number: string; profile_photo_path: string | null; wallet_balance: number;
+  fees: { fee_type: string; total_amount: number; amount_paid: number; balance: number; status: string; term_label: string | null }[];
+};
+
+const FEE_META: Record<string, { label: string; color: string; bg: string }> = {
+  TUITION:      { label: "Tuition",      color: "#2563EB", bg: "#EFF6FF" },
+  TRANSPORT:    { label: "Transport",    color: "#16A34A", bg: "#F0FDF4" },
+  POCKET_MONEY: { label: "Pocket Money", color: "#7C3AED", bg: "#F5F3FF" },
+  OTHER:        { label: "Other",        color: "#EA580C", bg: "#FFF7ED" },
+};
+
 /* ── Main Page ─────────────────────────────────────────────────── */
 export default function FeesPage() {
   const { user, loading: authLoading, activeSchool } = useAuth();
   const { toast } = useToast();
+  const { scan, scanning } = useNFC();
 
   const [selectedCategory, setSelectedCategory] = useState<FeeType | null>(null);
   const [selectedTerm, setSelectedTerm] = useState("Term 1");
@@ -389,7 +464,42 @@ export default function FeesPage() {
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [payTarget, setPayTarget] = useState<StudentFeeStatus | null>(null);
 
+  // NFC quick check for fees page
+  const [nfcCard, setNfcCard] = useState<NfcStudentCard | null>(null);
+  const [nfcLoading, setNfcLoading] = useState(false);
+
   const schoolId = activeSchool?.id ?? user?.school_id ?? "";
+
+  async function handleNfcScan() {
+    if (!schoolId) return;
+    setNfcCard(null);
+    setNfcLoading(true);
+    const result = await scan();
+    if (!result) { setNfcLoading(false); return; }
+    try {
+      let cardInfo = null;
+      if (result.type === "uid") {
+        cardInfo = await supabaseCanteenService.lookupCardHolderByNfcUid(schoolId, result.value);
+      } else {
+        cardInfo = await supabaseCanteenService.lookupCardHolder(schoolId, result.value);
+      }
+      if (!cardInfo) { toast("Card not found", "error"); setNfcLoading(false); return; }
+      const feeSummary = await supabaseFeesService.getStudentFeeSummary(schoolId, cardInfo.student_id);
+      setNfcCard({
+        student_id: cardInfo.student_id,
+        legal_name: cardInfo.legal_name,
+        class_name: cardInfo.class_name,
+        admission_number: cardInfo.admission_number,
+        profile_photo_path: cardInfo.profile_photo_path ?? null,
+        wallet_balance: cardInfo.wallet_balance,
+        fees: feeSummary,
+      });
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Lookup failed", "error");
+    } finally {
+      setNfcLoading(false);
+    }
+  }
 
   // Load classes with education level names and student counts
   useEffect(() => {
@@ -475,6 +585,74 @@ export default function FeesPage() {
               <h1 className="text-xl font-extrabold text-gray-900">Fees Management</h1>
               <p className="text-sm text-gray-400">Select a fee category to manage payments</p>
             </div>
+
+            {/* NFC Card Check zone */}
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-4">
+              {nfcCard ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Card Check Result</p>
+                    <button onClick={() => setNfcCard(null)} className="w-6 h-6 rounded-lg bg-gray-100 flex items-center justify-center">
+                      <X size={12} />
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-2xl">
+                    {nfcCard.profile_photo_path ? (
+                      <img src={nfcCard.profile_photo_path} className="w-12 h-12 rounded-xl object-cover flex-shrink-0" alt="" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold flex-shrink-0"
+                        style={{ background: "linear-gradient(135deg,#16A34A,#2563EB)" }}>
+                        {nfcCard.legal_name.split(" ").map(w => w[0]).slice(0, 2).join("")}
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="font-extrabold text-gray-900 truncate">{nfcCard.legal_name}</p>
+                      <p className="text-xs text-gray-500">{nfcCard.class_name} · {nfcCard.admission_number}</p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-sm font-bold text-purple-700">{nfcCard.wallet_balance.toLocaleString()}</p>
+                      <p className="text-[10px] text-gray-400">wallet RWF</p>
+                    </div>
+                  </div>
+                  {nfcCard.fees.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      {nfcCard.fees.map((f) => {
+                        const meta = FEE_META[f.fee_type] ?? FEE_META.OTHER;
+                        const pct = f.total_amount > 0 ? Math.min(100, (f.amount_paid / f.total_amount) * 100) : 0;
+                        return (
+                          <div key={f.fee_type} className="p-2.5 rounded-2xl" style={{ background: meta.bg }}>
+                            <p className="text-[10px] font-semibold mb-1" style={{ color: meta.color }}>{meta.label}</p>
+                            <p className="text-xs font-bold text-gray-800">{f.amount_paid.toLocaleString()} / {f.total_amount.toLocaleString()}</p>
+                            <div className="h-1 bg-white/60 rounded-full mt-1 overflow-hidden">
+                              <div className="h-full rounded-full" style={{ width: `${pct}%`, background: meta.color }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-400 text-center py-1">No fee invoices found for this student.</p>
+                  )}
+                </div>
+              ) : (
+                <button
+                  onClick={handleNfcScan}
+                  disabled={nfcLoading || scanning}
+                  className="w-full flex items-center gap-3 p-3"
+                >
+                  <div className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ background: "#F0FDF4" }}>
+                    {(nfcLoading || scanning) ? <Loader2 size={18} className="animate-spin text-green-600" /> : <Nfc size={18} className="text-green-600" />}
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-semibold text-gray-800">
+                      {(nfcLoading || scanning) ? "Scanning…" : "Tap student card"}
+                    </p>
+                    <p className="text-xs text-gray-400">Check fee status by NFC card</p>
+                  </div>
+                </button>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {FEE_CATEGORIES.map((cat) => {
                 const Icon = cat.icon;

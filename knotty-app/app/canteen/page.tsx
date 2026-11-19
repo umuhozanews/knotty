@@ -377,6 +377,7 @@ export default function CanteenPage() {
 
   /* ── Products from API ─────────────────────────────────────── */
   const [apiProducts, setApiProducts] = useState<MenuItem[]>([]);
+  const [productsLoaded, setProductsLoaded] = useState(false);
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -387,7 +388,8 @@ export default function CanteenPage() {
         const photo = resolveImgUrl(p.photo_url) || getRealFoodPhoto(p.name, p.category);
         return { id: p.id, name: p.name, price: p.price, img: photo, cat: p.category, stock_qty: p.stock_qty, fromApi: true };
       }));
-    }).catch(() => {});
+      setProductsLoaded(true);
+    }).catch(() => { setProductsLoaded(true); });
   }, [user?.school_id]);
 
   async function handleDeleteProduct(id: string) {
@@ -410,9 +412,8 @@ export default function CanteenPage() {
   const [search, setSearch] = useState("");
   const [failedImgs, setFailedImgs] = useState<Record<string, boolean>>({});
 
-  const allMenu: MenuItem[] = apiProducts.length > 0
-    ? [...apiProducts, ...DEFAULT_MENU_ITEMS.filter((d) => !apiProducts.some((p) => p.name.toLowerCase() === d.name.toLowerCase()))]
-    : DEFAULT_MENU_ITEMS;
+  // Each school manages their own menu — no shared default items
+  const allMenu: MenuItem[] = apiProducts;
 
   const visible = allMenu.filter((m) => {
     const matchCat = activeCategory === "All" || m.cat === activeCategory;
@@ -770,6 +771,23 @@ export default function CanteenPage() {
               {visible.length === 0 && search && (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                   <p className="font-semibold text-gray-400 text-sm">No items match &quot;{search}&quot;</p>
+                </div>
+              )}
+              {productsLoaded && allMenu.length === 0 && !search && (
+                <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
+                  <div className="w-16 h-16 rounded-3xl bg-orange-50 flex items-center justify-center">
+                    <Utensils size={28} className="text-orange-400" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-gray-700">No menu items yet</p>
+                    <p className="text-sm text-gray-400 mt-1">This canteen hasn&apos;t set up products.<br />Add items using the button above.</p>
+                  </div>
+                  <button
+                    onClick={() => setShowAddProduct(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-xl text-sm font-semibold"
+                  >
+                    <PackagePlus size={15} /> Add First Product
+                  </button>
                 </div>
               )}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-4 gap-2.5">

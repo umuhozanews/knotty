@@ -36,23 +36,31 @@ export async function POST(req: NextRequest) {
 
   const data = await res.json();
 
-  console.log("[FLW] initiate response:", JSON.stringify(data));
-
   if (data.status !== "success") {
     return NextResponse.json(
-      { error: data.message || "Failed to initiate payment", flw_debug: data },
+      { error: data.message || "Failed to initiate payment" },
       { status: 400 }
     );
   }
 
+  // Rwanda MoMo uses redirect mode — return the checkout URL
+  if (data.meta?.authorization?.mode === "redirect") {
+    return NextResponse.json({
+      mode: "redirect",
+      redirect_url: data.meta.authorization.redirect,
+    });
+  }
+
+  // Push mode (direct charge) — return transaction id for polling
   if (!data.data) {
     return NextResponse.json(
-      { error: "Unexpected response from payment gateway", flw_debug: data },
+      { error: "Unexpected response from payment gateway" },
       { status: 500 }
     );
   }
 
   return NextResponse.json({
+    mode: "push",
     transaction_id: data.data.id,
     flw_ref: data.data.flw_ref,
     status: data.data.status,

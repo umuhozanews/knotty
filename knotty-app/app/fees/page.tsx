@@ -94,31 +94,32 @@ function PaymentModal({
     }
   }
 
-  async function pollPayment(txId: string, flwRef: string, attempt = 0) {
+  async function pollPayment(txId: string | null, txRef: string, flwRef: string, attempt = 0) {
     if (!mountedRef.current) return;
-    if (attempt > 20) {
+    if (attempt > 40) {
       setPollingState("failed");
-      toast("Payment not confirmed within 60s. Try again or use Cash.", "error");
+      toast("Payment not confirmed within 2 min. Record manually if paid.", "error");
       return;
     }
     try {
-      const res = await fetch(`/api/fees/verify-payment?id=${txId}`);
+      const query = txId ? `id=${txId}` : `tx_ref=${txRef}`;
+      const res = await fetch(`/api/fees/verify-payment?${query}`);
       const data = await res.json();
       if (!mountedRef.current) return;
       if (data.status === "successful") {
         setPollingState("confirmed");
-        await recordInDB(user!.school_id!, flwRef);
+        await recordInDB(user!.school_id!, flwRef || data.flw_ref);
         toast("Payment confirmed!", "success");
         onSuccess();
         onClose();
       } else if (data.status === "failed" || data.status === "cancelled") {
         setPollingState("failed");
-        toast("Payment failed or was cancelled by user", "error");
+        toast("Payment failed or was cancelled", "error");
       } else {
-        pollTimerRef.current = setTimeout(() => pollPayment(txId, flwRef, attempt + 1), 3000);
+        pollTimerRef.current = setTimeout(() => pollPayment(txId, txRef, flwRef, attempt + 1), 3000);
       }
     } catch {
-      pollTimerRef.current = setTimeout(() => pollPayment(txId, flwRef, attempt + 1), 3000);
+      pollTimerRef.current = setTimeout(() => pollPayment(txId, txRef, flwRef, attempt + 1), 3000);
     }
   }
 
@@ -133,6 +134,7 @@ function PaymentModal({
     if (channel === "MTN" || channel === "AIRTEL") {
       if (!phone) { toast("Enter a phone number for mobile payment", "error"); return; }
       setLoading(true);
+      const txRef = `FEE-${student.student_id}-${Date.now()}`;
       try {
         const res = await fetch("/api/fees/initiate-payment", {
           method: "POST",
@@ -142,14 +144,19 @@ function PaymentModal({
             amount: amt,
             name: student.legal_name,
             network: channel,
-            tx_ref: `FEE-${student.student_id}-${Date.now()}`,
+            tx_ref: txRef,
           }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to send payment request");
         setLoading(false);
         setPollingState("waiting");
-        pollPayment(data.transaction_id, data.flw_ref);
+        if (data.mode === "redirect") {
+          window.open(data.redirect_url, "_blank");
+          pollPayment(null, txRef, "", 0);
+        } else {
+          pollPayment(data.transaction_id, txRef, data.flw_ref, 0);
+        }
       } catch (err) {
         setLoading(false);
         toast(err instanceof Error ? err.message : "Failed to initiate payment", "error");
@@ -200,7 +207,7 @@ function PaymentModal({
             </div>
             <div>
               <p className="font-bold text-gray-900">Waiting for confirmation</p>
-              <p className="text-sm text-gray-500 mt-1">A payment prompt has been sent to <span className="font-semibold">{phone}</span>. Ask the payer to enter their PIN.</p>
+              <p className="text-sm text-gray-500 mt-1">A payment page has opened. Ask the payer to complete the payment on their phone, then wait here.</p>
             </div>
             <Loader2 size={20} className="animate-spin text-gray-400" />
             <p className="text-xs text-gray-400">This will confirm automatically…</p>

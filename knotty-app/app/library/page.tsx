@@ -3,13 +3,12 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Book, BookOpen, Plus, X, Search, AlertTriangle, CheckCircle,
   Loader2, CreditCard, RotateCcw, BookMarked, MapPin, Tag, Clock,
-  Wifi, WifiOff, Users, RefreshCw, Sparkles, Check, ShieldCheck,
+  Wifi, Users, RefreshCw, Sparkles, Check,
   History, ArrowRight, ChevronLeft,
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
-import VirtualCardTap from "@/components/VirtualCardTap";
 import type { LibraryBorrowRecord, LibraryBook } from "@/lib/api";
-import { supabaseLibraryService, supabaseCanteenService } from "@/lib/supabase/services";
+import { supabaseLibraryService, supabaseCanteenService, supabaseStudentService } from "@/lib/supabase/services";
 import { useNFC } from "@/hooks/useNFC";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
@@ -51,11 +50,13 @@ function playErrorTone() {
   } catch {}
 }
 
-const CATEGORIES = [
-  "Mathematics", "Science", "Literature", "History", "Geography",
-  "Religion", "French", "English", "Kinyarwanda", "Biology",
-  "Chemistry", "Physics", "Computer Science", "Art", "Other",
-];
+const LEVEL_CATEGORIES: Record<string, string[]> = {
+  "S1": ["Mathematics S1", "Geography S1", "English S1", "Biology S1", "Chemistry S1", "Physics S1", "Computer Science S1", "French S1", "Kinyarwanda S1", "History S1", "Religion S1", "Literature S1"],
+  "S2": ["Mathematics S2", "Geography S2", "English S2", "Biology S2", "Chemistry S2", "Physics S2", "Computer Science S2", "French S2", "Kinyarwanda S2", "History S2", "Religion S2", "Literature S2"],
+  "S3": ["Mathematics S3", "Geography S3", "English S3", "Biology S3", "Chemistry S3", "Physics S3", "Computer Science S3", "French S3", "Kinyarwanda S3", "History S3", "Religion S3", "Literature S3"],
+  "A-Level": ["Mathematics A", "Biology A", "Chemistry A", "Physics A", "Geography A", "History A", "Economics A", "Literature A", "Computer Science A", "French A", "Kinyarwanda A", "Entrepreneurship A"],
+  "Other": ["Fiction", "Reference", "Textbook", "Other"],
+};
 
 type Tab = "home" | "overview" | "catalog" | "add-book" | "lend-return";
 type StudentInfo = {
@@ -71,6 +72,7 @@ type StudentInfo = {
   has_card?: boolean;
 };
 type BookOption = { id: string; title: string; author?: string | null; isbn?: string | null; location?: string | null; available_copies?: number; total_copies?: number; category?: string | null };
+type NameResult = { id: string; name: string; studentCode: string; className: string; hasCard: boolean };
 
 export default function LibraryPage() {
   const { user, loading: authLoading } = useAuth();
@@ -96,8 +98,10 @@ export default function LibraryPage() {
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogSearch, setCatalogSearch] = useState("");
   const [catalogCategory, setCatalogCategory] = useState("All");
+  const [catalogLevel, setCatalogLevel] = useState("All");
 
   /* ── Add Book ──────────────────────────────────────────────── */
+  const [addBookLevel, setAddBookLevel] = useState("");
   const [bookForm, setBookForm] = useState({
     book_number: "", title: "", author: "", category: "", location: "", total_copies: 1,
   });
@@ -114,7 +118,14 @@ export default function LibraryPage() {
   const [returning, setReturning] = useState<string | null>(null);
   const [renewingId, setRenewingId] = useState<string | null>(null);
   const [continuousMode, setContinuousMode] = useState(true);
-  const [deskSubTab, setDeskSubTab] = useState<"card-desk" | "quick-return" | "check-book">("card-desk");
+  const [deskSubTab, setDeskSubTab] = useState<"card-desk" | "name-search" | "quick-return" | "check-book">("card-desk");
+  const [nameQuery, setNameQuery] = useState("");
+  const [nameResults, setNameResults] = useState<NameResult[]>([]);
+  const [nameSearching, setNameSearching] = useState(false);
+  const [modalSearchMode, setModalSearchMode] = useState<"card" | "name">("card");
+  const [modalNameQuery, setModalNameQuery] = useState("");
+  const [modalNameResults, setModalNameResults] = useState<NameResult[]>([]);
+  const [modalNameSearching, setModalNameSearching] = useState(false);
   const [returnTagInput, setReturnTagInput] = useState("");
   const [returningTag, setReturningTag] = useState(false);
 
@@ -284,6 +295,9 @@ export default function LibraryPage() {
     setSelectedBook(bk);
     setModalCardInput("");
     setModalStudent(null);
+    setModalSearchMode("card");
+    setModalNameQuery("");
+    setModalNameResults([]);
     setShowLendModal(true);
   }
 
@@ -455,6 +469,46 @@ export default function LibraryPage() {
     }
   }
 
+  async function searchByName(q: string) {
+    setNameQuery(q);
+    if (!q.trim() || !user?.school_id) { setNameResults([]); return; }
+    setNameSearching(true);
+    try {
+      const students = await supabaseStudentService.listSchoolStudents(user.school_id, null, q.trim());
+      setNameResults(students.map(s => ({
+        id: s.id,
+        name: `${s.user.first_name} ${s.user.last_name}`.trim(),
+        studentCode: s.student_code,
+        className: s.class?.name ?? "",
+        hasCard: s.card !== null,
+      })));
+    } catch {
+      setNameResults([]);
+    } finally {
+      setNameSearching(false);
+    }
+  }
+
+  async function searchModalByName(q: string) {
+    setModalNameQuery(q);
+    if (!q.trim() || !user?.school_id) { setModalNameResults([]); return; }
+    setModalNameSearching(true);
+    try {
+      const students = await supabaseStudentService.listSchoolStudents(user.school_id, null, q.trim());
+      setModalNameResults(students.map(s => ({
+        id: s.id,
+        name: `${s.user.first_name} ${s.user.last_name}`.trim(),
+        studentCode: s.student_code,
+        className: s.class?.name ?? "",
+        hasCard: s.card !== null,
+      })));
+    } catch {
+      setModalNameResults([]);
+    } finally {
+      setModalNameSearching(false);
+    }
+  }
+
   function openLendModal() {
     setShowLendModal(true);
     setModalCardInput("");
@@ -463,6 +517,9 @@ export default function LibraryPage() {
     setBookSearch("");
     setBookResults([]);
     setDueDays(7);
+    setModalSearchMode("card");
+    setModalNameQuery("");
+    setModalNameResults([]);
   }
 
   /* ── Return ────────────────────────────────────────────────── */
@@ -622,6 +679,9 @@ export default function LibraryPage() {
 
   const now = new Date();
   const overdueItems = recentBorrows.filter(b => new Date(b.due_at) < now);
+  const displayedCatalog = catalogLevel === "All" || catalogCategory !== "All"
+    ? catalogBooks
+    : catalogBooks.filter(bk => (LEVEL_CATEGORIES[catalogLevel] ?? []).includes(bk.category ?? ""));
 
   /* ── Shared book search UI (used in both lend contexts) ─────── */
   function BookSearchUI({ onConfirm }: { onConfirm: () => void }) {
@@ -997,24 +1057,43 @@ export default function LibraryPage() {
                   </button>
                 </div>
 
-                {/* Category Pills */}
+                {/* Level Picker */}
                 <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                  {["All", ...CATEGORIES].map(cat => (
-                    <button
-                      key={cat}
-                      type="button"
+                  {["All", "S1", "S2", "S3", "A-Level", "Other"].map(lvl => (
+                    <button key={lvl} type="button"
                       onClick={() => {
-                        setCatalogCategory(cat);
-                        loadCatalog(catalogSearch, cat);
+                        setCatalogLevel(lvl);
+                        setCatalogCategory("All");
+                        loadCatalog(catalogSearch, "All");
                       }}
                       className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
-                        catalogCategory === cat ? "bg-[#16A34A] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                      }`}
-                    >
-                      {cat}
+                        catalogLevel === lvl ? "bg-[#16A34A] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}>
+                      {lvl}
                     </button>
                   ))}
                 </div>
+                {/* Subject chips for selected level */}
+                {catalogLevel !== "All" && (
+                  <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                    <button type="button"
+                      onClick={() => { setCatalogCategory("All"); loadCatalog(catalogSearch, "All"); }}
+                      className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
+                        catalogCategory === "All" ? "bg-black text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}>
+                      All {catalogLevel}
+                    </button>
+                    {(LEVEL_CATEGORIES[catalogLevel] ?? []).map(cat => (
+                      <button key={cat} type="button"
+                        onClick={() => { setCatalogCategory(cat); loadCatalog(catalogSearch, cat); }}
+                        className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
+                          catalogCategory === cat ? "bg-[#16A34A] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        }`}>
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Books List / Grid */}
@@ -1024,12 +1103,12 @@ export default function LibraryPage() {
                     <BookOpen size={14} style={{ color: "#16A34A" }} />
                     <span className="text-sm font-bold" style={{ color: "#121212" }}>Library Books Catalog</span>
                   </div>
-                  <span className="text-xs text-gray-400 font-semibold">{catalogBooks.length} books listed</span>
+                  <span className="text-xs text-gray-400 font-semibold">{displayedCatalog.length} books listed</span>
                 </div>
 
                 {catalogLoading ? (
                   <div className="flex justify-center py-16"><Loader2 size={24} className="animate-spin text-[#16A34A]" /></div>
-                ) : catalogBooks.length === 0 ? (
+                ) : displayedCatalog.length === 0 ? (
                   <div className="py-12 text-center">
                     <Book size={32} className="mx-auto text-gray-300 mb-2" />
                     <p className="text-sm font-semibold text-gray-500">No books found</p>
@@ -1037,7 +1116,7 @@ export default function LibraryPage() {
                   </div>
                 ) : (
                   <div className="divide-y divide-gray-50">
-                    {catalogBooks.map(bk => {
+                    {displayedCatalog.map(bk => {
                       const avail = bk.available_copies ?? bk.total_copies ?? 1;
                       return (
                         <div key={bk.id} className="p-4 flex items-center justify-between gap-3 hover:bg-gray-50/50 transition">
@@ -1145,18 +1224,37 @@ export default function LibraryPage() {
                   </div>
                   <div>
                     <p className="text-[10px] font-semibold text-gray-400 mb-2">Category</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {CATEGORIES.map(c => (
-                        <button key={c} type="button"
-                          onClick={() => setBookForm(f => ({ ...f, category: f.category === c ? "" : c }))}
+                    {/* Level picker */}
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {Object.keys(LEVEL_CATEGORIES).map(lvl => (
+                        <button key={lvl} type="button"
+                          onClick={() => { setAddBookLevel(addBookLevel === lvl ? "" : lvl); setBookForm(f => ({ ...f, category: "" })); }}
                           className="px-3 py-1 rounded-xl text-xs font-semibold transition"
-                          style={bookForm.category === c
-                            ? { background: "#16A34A", color: "#fff" }
-                            : { background: "#F3F4F6", color: "#555" }}>
-                          {c}
+                          style={addBookLevel === lvl
+                            ? { background: "#1D4ED8", color: "#fff" }
+                            : { background: "#EFF6FF", color: "#1D4ED8" }}>
+                          {lvl}
                         </button>
                       ))}
                     </div>
+                    {/* Subject chips */}
+                    {addBookLevel && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {(LEVEL_CATEGORIES[addBookLevel] ?? []).map(c => (
+                          <button key={c} type="button"
+                            onClick={() => setBookForm(f => ({ ...f, category: f.category === c ? "" : c }))}
+                            className="px-3 py-1 rounded-xl text-xs font-semibold transition"
+                            style={bookForm.category === c
+                              ? { background: "#16A34A", color: "#fff" }
+                              : { background: "#F3F4F6", color: "#555" }}>
+                            {c}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {bookForm.category && (
+                      <p className="text-[10px] text-[#16A34A] mt-1.5 font-semibold">{bookForm.category}</p>
+                    )}
                   </div>
                 </div>
 
@@ -1200,45 +1298,39 @@ export default function LibraryPage() {
 
               {/* Sub-tab Switcher */}
               <div className="flex items-center justify-between gap-2 p-1.5 bg-gray-100 rounded-2xl">
-                <div className="flex gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setDeskSubTab("card-desk")}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                <div className="flex gap-1 overflow-x-auto scrollbar-none">
+                  <button type="button" onClick={() => setDeskSubTab("card-desk")}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
                       deskSubTab === "card-desk" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-800"
-                    }`}
-                  >
-                    <CreditCard size={14} className={deskSubTab === "card-desk" ? "text-[#16A34A]" : ""} />
-                    Card Terminal
+                    }`}>
+                    <CreditCard size={13} className={deskSubTab === "card-desk" ? "text-[#16A34A]" : ""} />
+                    Card / NFC
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setDeskSubTab("quick-return")}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  <button type="button" onClick={() => setDeskSubTab("name-search")}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                      deskSubTab === "name-search" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-800"
+                    }`}>
+                    <Users size={13} className={deskSubTab === "name-search" ? "text-[#16A34A]" : ""} />
+                    Search by Name
+                  </button>
+                  <button type="button" onClick={() => setDeskSubTab("quick-return")}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
                       deskSubTab === "quick-return" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-800"
-                    }`}
-                  >
-                    <RotateCcw size={14} className={deskSubTab === "quick-return" ? "text-[#16A34A]" : ""} />
-                    Scan Book to Return
+                    }`}>
+                    <RotateCcw size={13} className={deskSubTab === "quick-return" ? "text-[#16A34A]" : ""} />
+                    Return Book
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setDeskSubTab("check-book")}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  <button type="button" onClick={() => setDeskSubTab("check-book")}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
                       deskSubTab === "check-book" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-800"
-                    }`}
-                  >
-                    <Search size={14} className={deskSubTab === "check-book" ? "text-[#16A34A]" : ""} />
+                    }`}>
+                    <Search size={13} className={deskSubTab === "check-book" ? "text-[#16A34A]" : ""} />
                     Check Book
                   </button>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={openLendModal}
-                  className="px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-[#16A34A] hover:bg-[#e0691b] flex items-center gap-1.5 shadow-sm transition active:scale-95 cursor-pointer"
-                >
-                  <BookMarked size={14} /> Quick Lend
+                <button type="button" onClick={openLendModal}
+                  className="px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-[#16A34A] flex items-center gap-1.5 shadow-sm transition active:scale-95 cursor-pointer flex-shrink-0">
+                  <BookMarked size={13} /> Lend
                 </button>
               </div>
 
@@ -1251,11 +1343,8 @@ export default function LibraryPage() {
                       <div>
                         <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
                           <Wifi size={16} className={listening ? "text-[#16A34A] animate-pulse" : "text-gray-400"} />
-                          Student NFC Card Terminal
+                          Card Terminal
                         </h3>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          Tap card or enter student code to check borrowed books, return, or lend
-                        </p>
                       </div>
                       <label className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-500 cursor-pointer select-none">
                         <input
@@ -1302,14 +1391,6 @@ export default function LibraryPage() {
                       >
                         {loadingStudent ? <Loader2 size={14} className="animate-spin" /> : "Check"}
                       </button>
-
-                      <VirtualCardTap
-                        onTap={(cn) => {
-                          setCardInput(cn);
-                          lookupCard(cn);
-                        }}
-                        busy={loadingStudent}
-                      />
                     </div>
 
 
@@ -1552,32 +1633,69 @@ export default function LibraryPage() {
                       </div>
                     </div>
                   ) : (
-                    <div className="bg-white rounded-3xl p-6 text-center shadow-sm border border-gray-100">
-                      <div className="w-14 h-14 rounded-2xl bg-orange-50 mx-auto flex items-center justify-center text-[#16A34A] mb-3">
-                        <BookMarked size={28} />
+                    <div className="bg-white rounded-3xl p-5 text-center shadow-sm border border-gray-100">
+                      <div className="w-11 h-11 rounded-2xl bg-green-50 mx-auto flex items-center justify-center mb-3">
+                        <BookMarked size={20} className="text-[#16A34A]" />
                       </div>
-                      <h4 className="text-sm font-bold text-gray-900">Library Desk Ready</h4>
-                      <p className="text-xs text-gray-500 max-w-sm mx-auto mt-1">
-                        Tap a student NFC card, scan their barcode, or enter student code above to check borrowed books, renew, or return.
+                      <p className="text-sm font-semibold text-gray-700">Tap card or enter student code</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        No card?{" "}
+                        <button type="button" onClick={() => setDeskSubTab("name-search")}
+                          className="text-[#16A34A] font-semibold underline cursor-pointer">
+                          Search by name
+                        </button>
                       </p>
+                    </div>
+                  )}
+                </div>
+              )}
 
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mt-5 max-w-md mx-auto text-left">
-                        <div className="p-3 rounded-2xl bg-gray-50 border border-gray-100">
-                          <CreditCard size={16} className="text-gray-400 mb-1" />
-                          <p className="text-xs font-bold text-gray-900 mt-1">1. Check Books</p>
-                          <p className="text-[10px] text-gray-500">Tap card to see books in possession and deadlines.</p>
-                        </div>
-                        <div className="p-3 rounded-2xl bg-gray-50 border border-gray-100">
-                          <RotateCcw size={16} className="text-gray-400 mb-1" />
-                          <p className="text-xs font-bold text-gray-900 mt-1">2. Return Books</p>
-                          <p className="text-[10px] text-gray-500">Tap card, click Return to clear fine and update wallet.</p>
-                        </div>
-                        <div className="p-3 rounded-2xl bg-gray-50 border border-gray-100">
-                          <BookOpen size={16} className="text-gray-400 mb-1" />
-                          <p className="text-xs font-bold text-gray-900 mt-1">3. Lend Books</p>
-                          <p className="text-[10px] text-gray-500">Pick book, set return days, and confirm loan.</p>
-                        </div>
-                      </div>
+              {/* SUB-TAB: NAME SEARCH */}
+              {deskSubTab === "name-search" && (
+                <div className="space-y-3">
+                  <div className="bg-white rounded-3xl p-4 shadow-sm border border-gray-100">
+                    <div className="relative">
+                      <Search size={14} className="absolute left-3.5 top-[13px] text-gray-400" />
+                      <input
+                        value={nameQuery}
+                        onChange={e => searchByName(e.target.value)}
+                        placeholder="Type student name…"
+                        className="w-full border border-gray-200 rounded-2xl pl-10 pr-3 py-2.5 text-sm outline-none focus:border-[#16A34A] text-gray-900"
+                        autoFocus
+                      />
+                      {nameSearching && <Loader2 size={14} className="animate-spin absolute right-3.5 top-[13px] text-gray-400" />}
+                    </div>
+                  </div>
+
+                  {nameResults.length > 0 && (
+                    <div className="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-100">
+                      {nameResults.map(s => (
+                        <button key={s.id} type="button"
+                          onClick={async () => {
+                            setDeskSubTab("card-desk");
+                            setCardInput(s.studentCode);
+                            await lookupCard(s.studentCode);
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-50 last:border-0 transition cursor-pointer">
+                          <div className="w-9 h-9 rounded-xl bg-[#16A34A] flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                            {s.name[0]?.toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-gray-900 truncate">{s.name}</p>
+                            <p className="text-xs text-gray-400">{s.className || "No class"} · {s.studentCode}</p>
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            {s.hasCard && <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-green-50 text-green-700">Card</span>}
+                            <ArrowRight size={14} className="text-gray-300" />
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {nameQuery.trim() && !nameSearching && nameResults.length === 0 && (
+                    <div className="bg-white rounded-3xl p-6 text-center shadow-sm border border-gray-100">
+                      <p className="text-sm text-gray-500">No students found for &quot;{nameQuery}&quot;</p>
                     </div>
                   )}
                 </div>
@@ -1587,13 +1705,10 @@ export default function LibraryPage() {
               {deskSubTab === "quick-return" && (
                 <div className="space-y-3">
                   <div className="bg-white rounded-3xl p-4 md:p-5 shadow-sm border border-gray-100">
-                    <h3 className="text-sm font-bold text-gray-900 mb-1 flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
                       <RotateCcw size={16} className="text-[#16A34A]" />
-                      Scan Book Tag or Barcode to Return
+                      Scan book tag or barcode
                     </h3>
-                    <p className="text-xs text-gray-500 mb-3">
-                      Scan book copy tag, barcode, or ISBN to immediately return the book, calculate fine, and update card wallet
-                    </p>
 
                     <div className="flex items-center gap-2">
                       <div className="relative flex-1">
@@ -1626,14 +1741,6 @@ export default function LibraryPage() {
               {deskSubTab === "check-book" && (
                 <div className="space-y-3">
                   <div className="bg-white rounded-3xl p-4 md:p-5 shadow-sm border border-gray-100">
-                    <h3 className="text-sm font-bold text-gray-900 mb-1 flex items-center gap-2">
-                      <Search size={16} className="text-[#16A34A]" />
-                      Check Book Availability in Library
-                    </h3>
-                    <p className="text-xs text-gray-500 mb-3">
-                      Search by book title, author, category, or ISBN to check shelf location and availability
-                    </p>
-
                     <div className="relative">
                       <Search size={14} className="absolute left-3.5 top-[13px] text-gray-400" />
                       <input
@@ -1719,62 +1826,88 @@ export default function LibraryPage() {
 
               {/* Student lookup */}
               <div>
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <CreditCard size={13} className="absolute left-3.5 top-[11px]" style={{ color: "#999" }} />
-                    <input
-                      value={modalCardInput}
-                      onChange={e => setModalCardInput(e.target.value)}
-                      onKeyDown={e => { if (e.key === "Enter") lookupModalStudent(modalCardInput); }}
-                      placeholder="e.g. KMS001 or KNT-KMS-2026-00001"
-                      className="w-full border border-gray-200 rounded-2xl pl-9 pr-3 py-2.5 text-sm outline-none focus:border-[#16A34A]"
-                      style={{ color: "#121212" }}
-                    />
-                  </div>
-
-                  {/* NFC Tap Button in Modal */}
-                  <button
-                    type="button"
-                    onClick={toggleNFC}
-                    title={listening ? "NFC active - click to stop" : "Tap NFC card"}
-                    className={`px-3 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-1 transition flex-shrink-0 cursor-pointer ${
-                      listening
-                        ? "bg-[#16A34A] text-white shadow-md animate-pulse ring-2 ring-orange-200"
-                        : "bg-orange-50 text-[#16A34A] hover:bg-orange-100 border border-orange-200"
-                    }`}
-                  >
-                    <Wifi size={14} />
-                    {listening ? "Listening…" : "NFC"}
+                {/* Mode toggle */}
+                <div className="flex gap-2 mb-2.5">
+                  <button type="button" onClick={() => { setModalSearchMode("card"); setModalNameQuery(""); setModalNameResults([]); }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${modalSearchMode === "card" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600"}`}>
+                    <CreditCard size={12} /> Card / Code
                   </button>
-
-                  <button
-                    onClick={() => lookupModalStudent(modalCardInput)}
-                    disabled={lookingUpModalStudent || !modalCardInput.trim()}
-                    className="px-4 py-2.5 rounded-2xl text-white text-xs font-bold disabled:opacity-40 flex-shrink-0 cursor-pointer"
-                    style={{ background: "#121212" }}
-                  >
-                    {lookingUpModalStudent ? <Loader2 size={14} className="animate-spin" /> : "Find"}
+                  <button type="button" onClick={() => setModalSearchMode("name")}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${modalSearchMode === "name" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600"}`}>
+                    <Users size={12} /> Search by Name
                   </button>
-
-                  <VirtualCardTap
-                    onTap={(cn) => {
-                      setModalCardInput(cn);
-                      lookupModalStudent(cn);
-                    }}
-                    busy={lookingUpModalStudent}
-                  />
                 </div>
 
-
-                {listening && (
-                  <div className="mt-2.5 p-2 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-between text-xs text-[#16A34A] font-semibold animate-pulse">
-                    <span className="flex items-center gap-1.5">
-                      <Wifi size={13} className="animate-bounce" />
-                      Waiting for student NFC card tap…
-                    </span>
-                    <button type="button" onClick={stopListen} className="text-[11px] font-bold text-gray-500 hover:text-gray-800 underline cursor-pointer">
-                      Stop
+                {modalSearchMode === "card" ? (
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <CreditCard size={13} className="absolute left-3.5 top-[11px]" style={{ color: "#999" }} />
+                      <input
+                        value={modalCardInput}
+                        onChange={e => setModalCardInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === "Enter") lookupModalStudent(modalCardInput); }}
+                        placeholder="e.g. KMS001 or KNT-KMS-2026-00001"
+                        className="w-full border border-gray-200 rounded-2xl pl-9 pr-3 py-2.5 text-sm outline-none focus:border-[#16A34A]"
+                        style={{ color: "#121212" }}
+                      />
+                    </div>
+                    <button type="button" onClick={toggleNFC}
+                      className={`px-3 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-1 transition flex-shrink-0 cursor-pointer ${
+                        listening ? "bg-[#16A34A] text-white shadow-md animate-pulse ring-2 ring-orange-200" : "bg-orange-50 text-[#16A34A] hover:bg-orange-100 border border-orange-200"
+                      }`}>
+                      <Wifi size={14} />
+                      {listening ? "…" : "NFC"}
                     </button>
+                    <button onClick={() => lookupModalStudent(modalCardInput)}
+                      disabled={lookingUpModalStudent || !modalCardInput.trim()}
+                      className="px-4 py-2.5 rounded-2xl text-white text-xs font-bold disabled:opacity-40 flex-shrink-0 cursor-pointer"
+                      style={{ background: "#121212" }}>
+                      {lookingUpModalStudent ? <Loader2 size={14} className="animate-spin" /> : "Find"}
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="relative">
+                      <Search size={13} className="absolute left-3.5 top-[11px] text-gray-400" />
+                      <input
+                        value={modalNameQuery}
+                        onChange={e => searchModalByName(e.target.value)}
+                        placeholder="Type student name…"
+                        autoFocus
+                        className="w-full border border-gray-200 rounded-2xl pl-9 pr-3 py-2.5 text-sm outline-none focus:border-[#16A34A]"
+                        style={{ color: "#121212" }}
+                      />
+                      {modalNameSearching && <Loader2 size={13} className="animate-spin absolute right-3.5 top-[11px] text-gray-400" />}
+                    </div>
+                    {modalNameResults.length > 0 && (
+                      <div className="mt-1.5 border border-gray-100 rounded-2xl overflow-hidden bg-white shadow-sm max-h-48 overflow-y-auto">
+                        {modalNameResults.map(s => (
+                          <button key={s.id} type="button"
+                            onClick={async () => {
+                              setModalSearchMode("card");
+                              setModalCardInput(s.studentCode);
+                              await lookupModalStudent(s.studentCode);
+                            }}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 text-left border-b border-gray-50 last:border-0 hover:bg-gray-50 transition cursor-pointer">
+                            <div className="w-7 h-7 rounded-lg bg-[#16A34A] flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
+                              {s.name[0]?.toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold text-gray-900 truncate">{s.name}</p>
+                              <p className="text-[10px] text-gray-400">{s.className} · {s.studentCode}</p>
+                            </div>
+                            <ArrowRight size={13} className="text-gray-300 flex-shrink-0" />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {modalSearchMode === "card" && listening && (
+                  <div className="mt-2.5 p-2 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-between text-xs text-[#16A34A] font-semibold animate-pulse">
+                    <span className="flex items-center gap-1.5"><Wifi size={13} className="animate-bounce" /> Waiting for NFC tap…</span>
+                    <button type="button" onClick={stopListen} className="text-[11px] font-bold text-gray-500 hover:text-gray-800 underline cursor-pointer">Stop</button>
                   </div>
                 )}
 

@@ -135,6 +135,9 @@ function PaymentModal({
       if (!phone) { toast("Enter a phone number for mobile payment", "error"); return; }
       setLoading(true);
       const txRef = `FEE-${student.student_id}-${Date.now()}`;
+      // Open window synchronously on user gesture — before any async work,
+      // otherwise browsers block it as a popup
+      const paymentWindow = window.open("about:blank", "_blank");
       try {
         const res = await fetch("/api/fees/initiate-payment", {
           method: "POST",
@@ -148,16 +151,21 @@ function PaymentModal({
           }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Failed to send payment request");
+        if (!res.ok) {
+          paymentWindow?.close();
+          throw new Error(data.error || "Failed to send payment request");
+        }
         setLoading(false);
         setPollingState("waiting");
         if (data.mode === "redirect") {
-          window.open(data.redirect_url, "_blank");
+          if (paymentWindow) paymentWindow.location.href = data.redirect_url;
           pollPayment(null, txRef, "", 0);
         } else {
+          paymentWindow?.close();
           pollPayment(data.transaction_id, txRef, data.flw_ref, 0);
         }
       } catch (err) {
+        paymentWindow?.close();
         setLoading(false);
         toast(err instanceof Error ? err.message : "Failed to initiate payment", "error");
       }

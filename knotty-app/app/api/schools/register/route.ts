@@ -81,20 +81,18 @@ export async function POST(req: NextRequest) {
   }
   const authUserId = authData.user.id;
 
-  // 3. Register as staff (ADMIN role) via RPC
+  // 3. Bootstrap the first school admin (no actor needed — this is the initial setup)
   const { error: staffErr } = await admin.rpc(
-    "register_staff_from_edge" as never,
+    "bootstrap_school_admin" as never,
     {
-      p_actor_auth_user_id: authUserId,
-      p_staff_auth_user_id: authUserId,
+      p_auth_user_id: authUserId,
       p_school_id: schoolId,
       p_legal_name: cleanAdminName,
       p_email: cleanAdminEmail,
-      p_role_key: "ADMIN",
       p_employee_number: `ADM-${Date.now().toString(36).slice(-5).toUpperCase()}`,
       p_job_title: "School Administrator",
-      p_hired_on: new Date().toISOString().slice(0, 10),
       p_department: "Administration",
+      p_hired_on: new Date().toISOString().slice(0, 10),
     } as never
   );
 

@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
 
   // Send welcome email (best-effort — never block registration if email fails)
   const resendKey = process.env.RESEND_API_KEY;
-  const fromEmail = process.env.RESEND_FROM_EMAIL || "IshuriHUB <onboarding@resend.dev>";
+  const fromEmail = process.env.RESEND_FROM_EMAIL || "IshuriHUB <noreply@globaltonguesacademy.org>";
   if (resendKey) {
     try {
       const resend = new Resend(resendKey);

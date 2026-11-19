@@ -1,9 +1,9 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   GraduationCap, Bus, Wallet, MoreHorizontal,
   ChevronRight, ChevronLeft, Loader2, Users,
-  CheckCircle, AlertCircle, Clock, X, Receipt,
+  CheckCircle, AlertCircle, Clock, X, Receipt, Smartphone,
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import { supabaseFeesService, type FeeType, type StudentFeeStatus } from "@/lib/supabase/services";
@@ -51,7 +51,76 @@ function PaymentModal({
   const [expectedAmount, setExpectedAmount] = useState(String(student.total_amount > 0 ? student.total_amount : ""));
   const [phone, setPhone] = useState("");
   const [reference, setReference] = useState("");
+  const [pollingState, setPollingState] = useState<"idle" | "waiting" | "confirmed" | "failed">("idle");
   const noInvoice = !student.invoice_id;
+  const mountedRef = useRef(true);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    };
+  }, []);
+
+  async function recordInDB(schoolId: string, flwRef?: string) {
+    const amt = parseFloat(amount);
+    const expected = parseFloat(expectedAmount);
+    const invoiceId = student.invoice_id ?? await supabaseFeesService.upsertInvoice(schoolId, {
+      studentId: student.student_id,
+      feeType,
+      termLabel: tLabel,
+      totalAmount: expected,
+    });
+    const dbChannel = channel === "MTN" || channel === "AIRTEL" ? "MOMO" : channel === "BANK" ? "BANK" : "CASH";
+    await supabaseFeesService.payInvoice(schoolId, invoiceId, {
+      amount: amt,
+      channel: dbChannel,
+      phone: phone || undefined,
+    });
+    if (flwRef || reference) {
+      const client = getSafeBrowserClient();
+      if (client) {
+        const notesParts = [];
+        if (channel === "MTN" || channel === "AIRTEL") notesParts.push(`Provider: ${channel}`);
+        if (flwRef) notesParts.push(`FLW: ${flwRef}`);
+        if (reference) notesParts.push(`Ref: ${reference}`);
+        await client.from("fee_payments")
+          .update({ notes: notesParts.join(" | ") })
+          .eq("invoice_id", invoiceId)
+          .order("created_at", { ascending: false })
+          .limit(1);
+      }
+    }
+  }
+
+  async function pollPayment(txId: string, flwRef: string, attempt = 0) {
+    if (!mountedRef.current) return;
+    if (attempt > 20) {
+      setPollingState("failed");
+      toast("Payment not confirmed within 60s. Try again or use Cash.", "error");
+      return;
+    }
+    try {
+      const res = await fetch(`/api/fees/verify-payment?id=${txId}`);
+      const data = await res.json();
+      if (!mountedRef.current) return;
+      if (data.status === "successful") {
+        setPollingState("confirmed");
+        await recordInDB(user!.school_id!, flwRef);
+        toast("Payment confirmed!", "success");
+        onSuccess();
+        onClose();
+      } else if (data.status === "failed" || data.status === "cancelled") {
+        setPollingState("failed");
+        toast("Payment failed or was cancelled by user", "error");
+      } else {
+        pollTimerRef.current = setTimeout(() => pollPayment(txId, flwRef, attempt + 1), 3000);
+      }
+    } catch {
+      pollTimerRef.current = setTimeout(() => pollPayment(txId, flwRef, attempt + 1), 3000);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -60,47 +129,43 @@ function PaymentModal({
     const expected = parseFloat(expectedAmount);
     if (isNaN(amt) || amt <= 0) { toast("Enter a valid amount", "error"); return; }
     if (noInvoice && (isNaN(expected) || expected <= 0)) { toast("Enter expected fee amount", "error"); return; }
-    setLoading(true);
-    try {
-      // Get or create invoice
-      const invoiceId = student.invoice_id ?? await supabaseFeesService.upsertInvoice(user.school_id, {
-        studentId: student.student_id,
-        feeType,
-        termLabel: tLabel,
-        totalAmount: expected,
-      });
 
-      // Map channel to DB enum (CASH/MOMO/BANK)
-      const dbChannel = channel === "MTN" || channel === "AIRTEL" ? "MOMO" : channel === "BANK" ? "BANK" : "CASH";
-      const notesParts = [];
-      if (channel === "MTN" || channel === "AIRTEL") notesParts.push(`Provider: ${channel}`);
-      if (reference) notesParts.push(`Ref: ${reference}`);
-
-      await supabaseFeesService.payInvoice(user.school_id, invoiceId, {
-        amount: amt,
-        channel: dbChannel,
-        phone: phone || undefined,
-      });
-
-      // Store reference in notes if any — optional update
-      if (notesParts.length > 0) {
-        const client = getSafeBrowserClient();
-        if (client) {
-          await client.from("fee_payments")
-            .update({ notes: notesParts.join(" | ") })
-            .eq("invoice_id", invoiceId)
-            .order("created_at", { ascending: false })
-            .limit(1);
-        }
+    if (channel === "MTN" || channel === "AIRTEL") {
+      if (!phone) { toast("Enter a phone number for mobile payment", "error"); return; }
+      setLoading(true);
+      try {
+        const res = await fetch("/api/fees/initiate-payment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            phone,
+            amount: amt,
+            name: student.legal_name,
+            network: channel,
+            tx_ref: `FEE-${student.student_id}-${Date.now()}`,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to send payment request");
+        setLoading(false);
+        setPollingState("waiting");
+        pollPayment(data.transaction_id, data.flw_ref);
+      } catch (err) {
+        setLoading(false);
+        toast(err instanceof Error ? err.message : "Failed to initiate payment", "error");
       }
-
-      toast("Payment recorded", "success");
-      onSuccess();
-      onClose();
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to record payment", "error");
-    } finally {
-      setLoading(false);
+    } else {
+      setLoading(true);
+      try {
+        await recordInDB(user.school_id);
+        toast("Payment recorded", "success");
+        onSuccess();
+        onClose();
+      } catch (err) {
+        toast(err instanceof Error ? err.message : "Failed to record payment", "error");
+      } finally {
+        setLoading(false);
+      }
     }
   }
 
@@ -111,6 +176,8 @@ function PaymentModal({
     { id: "BANK",   label: "Bank",      color: "#2563EB" },
   ];
 
+  const isMoMo = channel === "MTN" || channel === "AIRTEL";
+
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-xl overflow-hidden">
@@ -119,100 +186,129 @@ function PaymentModal({
             <p className="font-bold text-sm text-gray-900">{student.legal_name}</p>
             <p className="text-xs text-gray-400">{student.admission_number} · {tLabel}</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center">
+          <button onClick={onClose} disabled={pollingState === "waiting"}
+            className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center disabled:opacity-30">
             <X size={14} />
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          {/* Fee summary */}
-          <div className="grid grid-cols-3 gap-2 text-center">
-            {[
-              { label: "Expected", value: noInvoice ? "—" : student.total_amount.toLocaleString(), color: "text-gray-700" },
-              { label: "Paid",     value: student.amount_paid.toLocaleString(),                     color: "text-green-700" },
-              { label: "Balance",  value: student.balance.toLocaleString(),                          color: student.balance > 0 ? "text-red-600" : "text-green-700" },
-            ].map((s) => (
-              <div key={s.label} className="bg-gray-50 rounded-2xl py-2 px-1">
-                <p className="text-[10px] text-gray-400 uppercase tracking-wide">{s.label}</p>
-                <p className={`text-sm font-bold ${s.color}`}>{s.value}</p>
-                <p className="text-[9px] text-gray-300">RWF</p>
-              </div>
-            ))}
-          </div>
 
-          {/* Expected amount — only if creating new invoice */}
-          {noInvoice && (
-            <div>
-              <p className="text-xs font-semibold text-gray-500 mb-1.5">EXPECTED FEE AMOUNT (RWF)</p>
-              <input
-                type="number" required min={1} value={expectedAmount}
-                onChange={(e) => setExpectedAmount(e.target.value)}
-                placeholder="e.g. 300000"
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-400"
-              />
+        {/* Waiting for MoMo confirmation */}
+        {pollingState === "waiting" ? (
+          <div className="p-8 flex flex-col items-center gap-4 text-center">
+            <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: "#FEF9C3" }}>
+              <Smartphone size={28} style={{ color: "#D97706" }} className="animate-pulse" />
             </div>
-          )}
-
-          {/* Payment channel */}
-          <div>
-            <p className="text-xs font-semibold text-gray-500 mb-1.5">PAYMENT METHOD</p>
-            <div className="grid grid-cols-4 gap-1.5">
-              {channels.map((c) => (
-                <button key={c.id} type="button"
-                  onClick={() => setChannel(c.id)}
-                  className="py-2 rounded-xl text-xs font-semibold border transition"
-                  style={channel === c.id
-                    ? { background: c.color, color: "#fff", borderColor: c.color }
-                    : { background: "#fff", color: "#666", borderColor: "#e5e5e5" }}>
-                  {c.label}
-                </button>
+            <div>
+              <p className="font-bold text-gray-900">Waiting for confirmation</p>
+              <p className="text-sm text-gray-500 mt-1">A payment prompt has been sent to <span className="font-semibold">{phone}</span>. Ask the payer to enter their PIN.</p>
+            </div>
+            <Loader2 size={20} className="animate-spin text-gray-400" />
+            <p className="text-xs text-gray-400">This will confirm automatically…</p>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="p-5 space-y-4">
+            {/* Fee summary */}
+            <div className="grid grid-cols-3 gap-2 text-center">
+              {[
+                { label: "Expected", value: noInvoice ? "—" : student.total_amount.toLocaleString(), color: "text-gray-700" },
+                { label: "Paid",     value: student.amount_paid.toLocaleString(),                     color: "text-green-700" },
+                { label: "Balance",  value: student.balance.toLocaleString(),                          color: student.balance > 0 ? "text-red-600" : "text-green-700" },
+              ].map((s) => (
+                <div key={s.label} className="bg-gray-50 rounded-2xl py-2 px-1">
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wide">{s.label}</p>
+                  <p className={`text-sm font-bold ${s.color}`}>{s.value}</p>
+                  <p className="text-[9px] text-gray-300">RWF</p>
+                </div>
               ))}
             </div>
-          </div>
 
-          {/* Amount */}
-          <div>
-            <p className="text-xs font-semibold text-gray-500 mb-1.5">AMOUNT TO PAY (RWF)</p>
-            <input
-              type="number" required min={1}
-              value={amount} onChange={(e) => setAmount(e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-400"
-            />
-          </div>
+            {/* Expected amount — only if creating new invoice */}
+            {noInvoice && (
+              <div>
+                <p className="text-xs font-semibold text-gray-500 mb-1.5">EXPECTED FEE AMOUNT (RWF)</p>
+                <input
+                  type="number" required min={1} value={expectedAmount}
+                  onChange={(e) => setExpectedAmount(e.target.value)}
+                  placeholder="e.g. 300000"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-400"
+                />
+              </div>
+            )}
 
-          {/* Phone — for mobile money */}
-          {(channel === "MTN" || channel === "AIRTEL") && (
+            {/* Payment channel */}
             <div>
-              <p className="text-xs font-semibold text-gray-500 mb-1.5">PHONE NUMBER</p>
+              <p className="text-xs font-semibold text-gray-500 mb-1.5">PAYMENT METHOD</p>
+              <div className="grid grid-cols-4 gap-1.5">
+                {channels.map((c) => (
+                  <button key={c.id} type="button"
+                    onClick={() => setChannel(c.id)}
+                    className="py-2 rounded-xl text-xs font-semibold border transition"
+                    style={channel === c.id
+                      ? { background: c.color, color: "#fff", borderColor: c.color }
+                      : { background: "#fff", color: "#666", borderColor: "#e5e5e5" }}>
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+              {isMoMo && (
+                <p className="text-[11px] text-amber-600 mt-1.5 flex items-center gap-1">
+                  <Smartphone size={11} /> Payment request will be sent to the payer&apos;s phone
+                </p>
+              )}
+            </div>
+
+            {/* Amount */}
+            <div>
+              <p className="text-xs font-semibold text-gray-500 mb-1.5">AMOUNT TO PAY (RWF)</p>
               <input
-                type="tel" placeholder="e.g. 0780000000"
-                value={phone} onChange={(e) => setPhone(e.target.value)}
+                type="number" required min={1}
+                value={amount} onChange={(e) => setAmount(e.target.value)}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-400"
               />
             </div>
-          )}
 
-          {/* Reference */}
-          <div>
-            <p className="text-xs font-semibold text-gray-500 mb-1.5">REFERENCE NUMBER <span className="font-normal">(optional)</span></p>
-            <input
-              placeholder="Transaction ref…"
-              value={reference} onChange={(e) => setReference(e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-400"
-            />
-          </div>
+            {/* Phone — for mobile money */}
+            {isMoMo && (
+              <div>
+                <p className="text-xs font-semibold text-gray-500 mb-1.5">PHONE NUMBER</p>
+                <input
+                  type="tel" required placeholder="e.g. 0780000000"
+                  value={phone} onChange={(e) => setPhone(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-400"
+                />
+              </div>
+            )}
 
-          <div className="flex gap-2 pt-1">
-            <button type="button" onClick={onClose}
-              className="flex-1 py-3 rounded-2xl text-sm font-medium bg-gray-100 text-gray-600">
-              Cancel
-            </button>
-            <button type="submit" disabled={loading}
-              className="flex-1 py-3 rounded-2xl text-sm font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2"
-              style={{ background: "#16A34A" }}>
-              {loading ? <Loader2 size={14} className="animate-spin" /> : <><Receipt size={14} /> Record Payment</>}
-            </button>
-          </div>
-        </form>
+            {/* Reference — only for Cash/Bank */}
+            {!isMoMo && (
+              <div>
+                <p className="text-xs font-semibold text-gray-500 mb-1.5">REFERENCE NUMBER <span className="font-normal">(optional)</span></p>
+                <input
+                  placeholder="Transaction ref…"
+                  value={reference} onChange={(e) => setReference(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-400"
+                />
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <button type="button" onClick={onClose}
+                className="flex-1 py-3 rounded-2xl text-sm font-medium bg-gray-100 text-gray-600">
+                Cancel
+              </button>
+              <button type="submit" disabled={loading}
+                className="flex-1 py-3 rounded-2xl text-sm font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2"
+                style={{ background: isMoMo ? "#D97706" : "#16A34A" }}>
+                {loading
+                  ? <Loader2 size={14} className="animate-spin" />
+                  : isMoMo
+                    ? <><Smartphone size={14} /> Send Request</>
+                    : <><Receipt size={14} /> Record Payment</>
+                }
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import type { Database } from "../database.types";
 export type CanteenProductRow = Database["public"]["Tables"]["canteen_products"]["Row"];
 export type CanteenTransactionRow = Database["public"]["Tables"]["canteen_transactions"]["Row"];
 export type CardHolderResult = Database["public"]["Functions"]["lookup_card_holder"]["Returns"][number];
+export type CanteenSaleRow = { id: string; card_assignment_id: string; student_name: string; total_amount: number; wallet_balance_after: number; created_at: string };
 
 export const supabaseCanteenService = {
   async listProducts(schoolId: string): Promise<CanteenProductRow[]> {
@@ -142,6 +143,15 @@ export const supabaseCanteenService = {
       .limit(limit);
     if (error) throw new Error(error.message);
     return data || [];
+  },
+
+  async listSales(schoolId: string, limit = 50): Promise<CanteenSaleRow[]> {
+    const client = getSafeBrowserClient();
+    if (!client) throw new Error("Supabase is not configured");
+    const rpc = client.rpc as unknown as (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
+    const { data, error } = await rpc("list_canteen_sales", { p_school_id: schoolId, p_limit: limit });
+    if (error) throw new Error(error.message);
+    return (data || []) as CanteenSaleRow[];
   },
 
   async listStudentTransactions(schoolId: string, studentId: string, limit = 20): Promise<CanteenTransactionRow[]> {

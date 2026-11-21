@@ -1,36 +1,32 @@
 "use client";
 import { useEffect, useState, useRef, useCallback } from "react";
 import {
-  Plus, Minus, ShoppingCart, CreditCard, Trash2,
-  Wifi, WifiOff, CheckCircle, Loader2, X, Search, ReceiptText, Upload,
+  Plus, Minus, ShoppingCart, Trash2,
+  Wifi, WifiOff, CheckCircle, Loader2, X, Search,
   PackagePlus, Utensils,
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import VirtualCardTap from "@/components/VirtualCardTap";
-import { supabaseCanteenService, CardHolderResult, CanteenTransactionRow } from "@/lib/supabase/services";
+import { supabaseCanteenService, CardHolderResult, CanteenSaleRow } from "@/lib/supabase/services";
 import { useNFC } from "@/hooks/useNFC";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
 import { isFinanceRole } from "@/lib/roles";
 
-type ScannedCardLocal = {
-  card_number: string;
+type ScannedCard = {
   card_assignment_id: string;
   wallet_balance: number;
-  daily_limit?: number | null;
   student: { id: string; name: string; class: string; student_code: string; photo: string | null };
 };
-function toScannedCard(r: CardHolderResult): ScannedCardLocal {
+function toScannedCard(r: CardHolderResult): ScannedCard {
   return {
-    card_number: r.card_number,
     card_assignment_id: r.card_assignment_id,
     wallet_balance: r.wallet_balance,
-    daily_limit: null,
     student: { id: r.student_id, name: r.legal_name, class: r.class_name, student_code: r.admission_number, photo: r.profile_photo_path ?? null },
   };
 }
 
-function playAudioTone(type: "success" | "error") {
+function playTone(type: "success" | "error") {
   if (typeof window === "undefined") return;
   try {
     const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -38,37 +34,28 @@ function playAudioTone(type: "success" | "error") {
     const ctx = new AudioCtx();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
+    osc.connect(gain); gain.connect(ctx.destination);
     if (type === "success") {
       osc.frequency.setValueAtTime(880, ctx.currentTime);
       osc.frequency.setValueAtTime(1174.66, ctx.currentTime + 0.08);
       gain.gain.setValueAtTime(0.18, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.24);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.24);
+      osc.start(); osc.stop(ctx.currentTime + 0.24);
     } else {
       osc.type = "sawtooth";
       osc.frequency.setValueAtTime(220, ctx.currentTime);
       gain.gain.setValueAtTime(0.2, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.35);
+      osc.start(); osc.stop(ctx.currentTime + 0.35);
     }
   } catch (_) {}
 }
 
 const CATEGORIES = ["All", "Snacks", "Drinks", "Meals", "Fruits", "Bread", "Other"];
 
-type MenuItem = {
-  id: string;
-  name: string;
-  price: number;
-  img: string;
-  cat: string;
-  stock_qty?: number | null;
-  fromApi?: boolean;
-};
+type MenuItem = { id: string; name: string; price: number; img: string; cat: string; stock_qty?: number | null; fromApi?: boolean };
+type CartMap = Record<string, number>;
+type PayResult = { name: string; total: number; balance: number };
 
 const CANTEEN_PRESETS = [
   { name: "Samosa", url: "/canteen/sambusa.png" },
@@ -88,17 +75,13 @@ const CANTEEN_PRESETS = [
   { name: "Biscuits", url: "/canteen/maria.png" },
 ];
 
-const DEFAULT_CATEGORY_PHOTOS: Record<string, string> = {
-  Snacks: "/canteen/sambusa.png",
-  Drinks: "/canteen/water.png",
-  Meals: "/canteen/rice_meat.png",
-  Fruits: "/canteen/banana.png",
-  Bread: "/canteen/chapati.png",
-  Bakery: "/canteen/chapati.png",
-  Other: "/canteen/rice_meat.png",
+const CAT_PHOTOS: Record<string, string> = {
+  Snacks: "/canteen/sambusa.png", Drinks: "/canteen/water.png",
+  Meals: "/canteen/rice_meat.png", Fruits: "/canteen/banana.png",
+  Bread: "/canteen/chapati.png", Other: "/canteen/rice_meat.png",
 };
 
-function getRealFoodPhoto(name?: string, category?: string): string {
+function foodPhoto(name?: string, cat?: string): string {
   const n = (name || "").toLowerCase();
   if (n.includes("water") || n.includes("amazi")) return "/canteen/water.png";
   if (n.includes("samosa") || n.includes("sambusa")) return "/canteen/sambusa.png";
@@ -111,241 +94,83 @@ function getRealFoodPhoto(name?: string, category?: string): string {
   if (n.includes("banana") || n.includes("igitoki") || n.includes("umuneke")) return "/canteen/banana.png";
   if (n.includes("avocado") || n.includes("avoka")) return "/canteen/avocado.png";
   if (n.includes("mandazi") || n.includes("amandazi")) return "/canteen/amandazi.png";
-  if (n.includes("egg") || n.includes("igi") || n.includes("amagi")) return "/canteen/egg.png";
+  if (n.includes("egg") || n.includes("amagi")) return "/canteen/egg.png";
   if (n.includes("biscuit") || n.includes("maria") || n.includes("cookie")) return "/canteen/maria.png";
   if (n.includes("beans") || n.includes("ibishyimbo")) return "/canteen/rice_beans.png";
-  if (n.includes("meat") || n.includes("beef") || n.includes("chicken") || n.includes("rice") || n.includes("lunch") || n.includes("plate") || n.includes("meal")) return "/canteen/rice_meat.png";
-  if (category && DEFAULT_CATEGORY_PHOTOS[category]) return DEFAULT_CATEGORY_PHOTOS[category];
+  if (n.includes("meat") || n.includes("beef") || n.includes("chicken") || n.includes("rice") || n.includes("meal")) return "/canteen/rice_meat.png";
+  if (cat && CAT_PHOTOS[cat]) return CAT_PHOTOS[cat];
   return "/canteen/rice_meat.png";
 }
 
-function resolveImgUrl(url: string | null | undefined): string | null {
+function resolveImg(url: string | null | undefined): string | null {
   if (!url) return null;
-  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) return url;
+  if (url.startsWith("http") || url.startsWith("data:")) return url;
   if (url.startsWith("/uploads/")) {
-    const backendOrigin = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/api\/v1\/?$/, "");
-    return backendOrigin ? `${backendOrigin}${url}` : url;
+    const base = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/api\/v1\/?$/, "");
+    return base ? `${base}${url}` : url;
   }
   return url;
 }
-
-type CartMap = Record<string, number>;
-type PayResult = { student: ScannedCardLocal["student"]; total: number; new_balance: number };
 
 /* ── Add Product Modal ─────────────────────────────────────────── */
 function AddProductModal({ onClose, onCreated }: { onClose: () => void; onCreated: (p: import("@/lib/supabase/services").CanteenProductRow) => void }) {
   const { toast } = useToast();
   const { user } = useAuth();
-  const [name, setName] = useState("");
-  const [price, setPrice] = useState("");
-  const [stock, setStock] = useState("");
-  const [category, setCategory] = useState("Other");
-  const [photo, setPhoto] = useState<File | null>(null);
-  const [selectedPreset, setSelectedPreset] = useState<string>("/canteen/sambusa.png");
+  const [name, setName] = useState(""); const [price, setPrice] = useState("");
+  const [stock, setStock] = useState(""); const [category, setCategory] = useState("Other");
+  const [selectedPreset, setSelectedPreset] = useState("/canteen/sambusa.png");
   const [preview, setPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0] ?? null;
-    if (f) setPreview(URL.createObjectURL(f));
-    else setPreview(null);
-  }
+  const activePhoto = preview || selectedPreset || foodPhoto(name, category);
 
   async function submit() {
     const p = parseFloat(price);
     if (!name.trim() || !p || p <= 0) { toast("Name and valid price required", "error"); return; }
     if (!user?.school_id) { toast("No school selected", "error"); return; }
-    const parsedStock = stock.trim() ? parseInt(stock.trim(), 10) : null;
     setSaving(true);
     try {
-      const chosenPhotoUrl = selectedPreset || getRealFoodPhoto(name, category);
       const res = await supabaseCanteenService.createProduct(user.school_id, {
-        name, price: p, category, photo_url: chosenPhotoUrl, stock_qty: parsedStock,
+        name, price: p, category, photo_url: selectedPreset || foodPhoto(name, category),
+        stock_qty: stock.trim() ? parseInt(stock, 10) : null,
       });
-      onCreated(res);
-      toast(`${name} added to menu`, "success");
-      onClose();
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed", "error");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const activePhoto = preview || selectedPreset || getRealFoodPhoto(name, category);
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl w-full max-w-sm p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-bold text-gray-800">Add Menu Item</h3>
-            <p className="text-xs text-gray-400">All items use authentic food photography</p>
-          </div>
-          <button onClick={onClose}><X size={18} className="text-gray-400" /></button>
-        </div>
-
-        {/* Real Food Photo Selector & Upload */}
-        <div className="space-y-2">
-          <label className="text-xs font-semibold text-gray-700 block">Food Photo</label>
-          <div className="flex gap-3 items-center">
-            {/* Live photo preview box */}
-            <label className="relative w-20 h-20 rounded-2xl border-2 border-dashed border-gray-200 hover:border-orange-400 transition cursor-pointer overflow-hidden flex-shrink-0 flex items-center justify-center bg-gray-50 group">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={activePhoto}
-                alt="preview"
-                className="w-full h-full object-cover rounded-2xl"
-              />
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-[10px] font-semibold">
-                Change
-              </div>
-              <input type="file" accept="image/*" className="hidden" onChange={handleFile} />
-            </label>
-
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-gray-800 font-medium">Real Food Photo</p>
-              <p className="text-[11px] text-gray-400 mb-1.5">Pick a preset below or upload custom image</p>
-              <label className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold text-orange-600 bg-orange-50 border border-orange-200 hover:bg-orange-100 transition cursor-pointer">
-                <Upload size={12} />
-                <span>Upload Custom</span>
-                <input type="file" accept="image/*" className="hidden" onChange={handleFile} />
-              </label>
-            </div>
-          </div>
-
-          {/* Quick preset photo chooser */}
-          <div>
-            <span className="text-[11px] text-gray-500 font-medium block mb-1">Quick Photo Presets:</span>
-            <div className="grid grid-cols-5 gap-1.5 max-h-32 overflow-y-auto p-1.5 bg-gray-50 rounded-2xl border border-gray-100">
-              {CANTEEN_PRESETS.map((item) => (
-                <button
-                  key={item.name}
-                  type="button"
-                  onClick={() => {
-                    setSelectedPreset(item.url);
-                    setPreview(null);
-                    setPhoto(null);
-                  }}
-                  title={item.name}
-                  className={`aspect-square rounded-xl overflow-hidden border-2 transition relative ${(selectedPreset === item.url && !preview) ? "border-orange-500 ring-2 ring-orange-200" : "border-transparent hover:border-gray-300"}`}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={item.url} alt={item.name} className="w-full h-full object-cover" />
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Product name (e.g. Samosa, Fanta, Rice)"
-          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-orange-400" />
-
-        <input value={price} onChange={(e) => setPrice(e.target.value)} type="number" placeholder="Price (RWF)"
-          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-orange-400" />
-
-        <input
-          value={stock}
-          onChange={(e) => setStock(e.target.value)}
-          type="number"
-          placeholder="Initial stock (e.g. 50, or leave blank for unlimited)"
-          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-orange-400"
-        />
-
-        <select value={category} onChange={(e) => setCategory(e.target.value)}
-          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-orange-400 bg-white">
-          {["Snacks", "Drinks", "Meals", "Fruits", "Bread", "Other"].map((c) => (
-            <option key={c} value={c}>{c}</option>
-          ))}
-        </select>
-
-        <button onClick={submit} disabled={saving}
-          className="w-full py-3 rounded-2xl font-bold text-sm text-white flex items-center justify-center gap-2 disabled:opacity-60 transition shadow-sm"
-          style={{ background: "#16A34A" }}>
-          {saving ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
-          {saving ? "Saving…" : "Add to Menu"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/* ── Restock Modal ─────────────────────────────────────────────── */
-function RestockModal({
-  product,
-  onClose,
-  onUpdated,
-}: {
-  product: MenuItem;
-  onClose: () => void;
-  onUpdated: (p: import("@/lib/supabase/services").CanteenProductRow) => void;
-}) {
-  const { toast } = useToast();
-  const { user } = useAuth();
-  const [qty, setQty] = useState("20");
-  const [saving, setSaving] = useState(false);
-
-  async function submit() {
-    const q = parseInt(qty, 10);
-    if (!q || q <= 0) {
-      toast("Please enter a valid positive quantity", "error");
-      return;
-    }
-    if (!user?.school_id) { toast("No school selected", "error"); return; }
-    setSaving(true);
-    try {
-      const res = await supabaseCanteenService.restockProduct(user.school_id, product.id, q);
-      onUpdated(res);
-      toast(`Added +${q} to ${product.name} stock`, "success");
-      onClose();
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to restock", "error");
-    } finally {
-      setSaving(false);
-    }
+      onCreated(res); toast(`${name} added`, "success"); onClose();
+    } catch (err) { toast(err instanceof Error ? err.message : "Failed", "error"); }
+    finally { setSaving(false); }
   }
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl w-full max-w-xs p-6 space-y-4 shadow-xl animate-in fade-in zoom-in-95">
+      <div className="bg-white rounded-3xl w-full max-w-sm p-5 space-y-3 shadow-xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between">
-          <h3 className="font-bold text-gray-800 text-sm">Restock {product.name}</h3>
+          <h3 className="font-bold text-gray-800 text-sm">Add Menu Item</h3>
           <button onClick={onClose}><X size={16} className="text-gray-400" /></button>
         </div>
-        <p className="text-xs text-gray-500">
-          Current stock: <strong className="text-gray-800">{product.stock_qty !== null && product.stock_qty !== undefined ? `${product.stock_qty} units` : "Unlimited"}</strong>
-        </p>
-        <div className="flex gap-2">
-          {[10, 25, 50, 100].map((preset) => (
-            <button
-              key={preset}
-              type="button"
-              onClick={() => setQty(String(preset))}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition ${
-                qty === String(preset)
-                  ? "bg-orange-50 border-orange-400 text-orange-600"
-                  : "border-gray-200 text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              +{preset}
-            </button>
-          ))}
+        <div className="flex gap-3 items-center">
+          <label className="relative w-16 h-16 rounded-xl border-2 border-dashed border-gray-200 cursor-pointer overflow-hidden flex-shrink-0 bg-gray-50 group">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={activePhoto} alt="preview" className="w-full h-full object-cover" />
+            <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) setPreview(URL.createObjectURL(f)); }} />
+          </label>
+          <div className="grid grid-cols-5 gap-1 flex-1">
+            {CANTEEN_PRESETS.map((item) => (
+              <button key={item.name} type="button" onClick={() => { setSelectedPreset(item.url); setPreview(null); }} title={item.name}
+                className={`aspect-square rounded-lg overflow-hidden border-2 ${selectedPreset === item.url && !preview ? "border-orange-500" : "border-transparent"}`}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={item.url} alt={item.name} className="w-full h-full object-cover" />
+              </button>
+            ))}
+          </div>
         </div>
-        <input
-          value={qty}
-          onChange={(e) => setQty(e.target.value)}
-          type="number"
-          placeholder="Quantity to add"
-          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-orange-400 text-center font-bold"
-        />
-        <button
-          onClick={submit}
-          disabled={saving}
-          className="w-full py-2.5 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition"
-          style={{ background: "#16A34A" }}
-        >
-          {saving ? <Loader2 size={13} className="animate-spin" /> : <PackagePlus size={14} />}
-          {saving ? "Restocking…" : "Add to Stock"}
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (e.g. Samosa)" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-orange-400" />
+        <input value={price} onChange={(e) => setPrice(e.target.value)} type="number" placeholder="Price (RWF)" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-orange-400" />
+        <input value={stock} onChange={(e) => setStock(e.target.value)} type="number" placeholder="Stock (blank = unlimited)" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-orange-400" />
+        <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-orange-400 bg-white">
+          {["Snacks","Drinks","Meals","Fruits","Bread","Other"].map((c) => <option key={c}>{c}</option>)}
+        </select>
+        <button onClick={submit} disabled={saving} className="w-full py-2.5 rounded-2xl font-bold text-sm text-white flex items-center justify-center gap-2 disabled:opacity-60" style={{ background: "#16A34A" }}>
+          {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+          {saving ? "Saving…" : "Add to Menu"}
         </button>
       </div>
     </div>
@@ -357,7 +182,7 @@ export default function CanteenPage() {
   const { loading: authLoading, user } = useAuth();
   const { startListen, stopListen, listening, isSupported } = useNFC();
 
-  /* ── Products from API ─────────────────────────────────────── */
+  /* ── Products ──────────────────────────────────────────────── */
   const [apiProducts, setApiProducts] = useState<MenuItem[]>([]);
   const [productsLoaded, setProductsLoaded] = useState(false);
   const [showAddProduct, setShowAddProduct] = useState(false);
@@ -366,12 +191,13 @@ export default function CanteenPage() {
   const loadProducts = useCallback(() => {
     if (!user?.school_id) return;
     supabaseCanteenService.listProducts(user.school_id).then((rows) => {
-      setApiProducts(rows.map((p) => {
-        const photo = resolveImgUrl(p.photo_url) || getRealFoodPhoto(p.name, p.category);
-        return { id: p.id, name: p.name, price: p.price, img: photo, cat: p.category, stock_qty: p.stock_qty, fromApi: true };
-      }));
+      setApiProducts(rows.map((p) => ({
+        id: p.id, name: p.name, price: p.price,
+        img: resolveImg(p.photo_url) || foodPhoto(p.name, p.category),
+        cat: p.category, stock_qty: p.stock_qty, fromApi: true,
+      })));
       setProductsLoaded(true);
-    }).catch(() => { setProductsLoaded(true); });
+    }).catch(() => setProductsLoaded(true));
   }, [user?.school_id]);
 
   async function handleDeleteProduct(id: string) {
@@ -380,13 +206,10 @@ export default function CanteenPage() {
     try {
       await supabaseCanteenService.deleteProduct(user.school_id, id);
       setApiProducts((prev) => prev.filter((p) => p.id !== id));
-      setCart((c) => { const next = { ...c }; delete next[id]; return next; });
-      toast("Product removed", "success");
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Delete failed", "error");
-    } finally {
-      setDeletingId(null);
-    }
+      setCart((c) => { const n = { ...c }; delete n[id]; return n; });
+      toast("Removed", "success");
+    } catch (err) { toast(err instanceof Error ? err.message : "Delete failed", "error"); }
+    finally { setDeletingId(null); }
   }
 
   /* ── Category + search ─────────────────────────────────────── */
@@ -394,66 +217,46 @@ export default function CanteenPage() {
   const [search, setSearch] = useState("");
   const [failedImgs, setFailedImgs] = useState<Record<string, boolean>>({});
 
-  const allMenu: MenuItem[] = apiProducts;
-
-  const visible = allMenu.filter((m) => {
+  const visible = apiProducts.filter((m) => {
     const matchCat = activeCategory === "All" || m.cat === activeCategory;
-    const matchSearch = !search || m.name.toLowerCase().includes(search.toLowerCase());
-    return matchCat && matchSearch;
+    return matchCat && (!search || m.name.toLowerCase().includes(search.toLowerCase()));
   });
 
   /* ── Cart ──────────────────────────────────────────────────── */
   const [cart, setCart] = useState<CartMap>({});
-  const cartItems = allMenu
-    .filter((m) => (cart[m.id] ?? 0) > 0)
-    .map((m) => ({ ...m, quantity: cart[m.id] }));
+  const cartItems = apiProducts.filter((m) => (cart[m.id] ?? 0) > 0).map((m) => ({ ...m, quantity: cart[m.id] }));
   const total = cartItems.reduce((s, i) => s + i.price * i.quantity, 0);
   const cartCount = cartItems.reduce((s, i) => s + i.quantity, 0);
 
   function inc(id: string) { setCart((c) => ({ ...c, [id]: (c[id] ?? 0) + 1 })); }
-  function dec(id: string) {
-    setCart((c) => {
-      const next = { ...c };
-      if ((next[id] ?? 0) <= 1) delete next[id]; else next[id]--;
-      return next;
-    });
-  }
-  function clearCart() {
-    setCart({}); setCardInput(""); setPayResult(null); setShowCart(false);
-    stopListen();
-  }
+  function dec(id: string) { setCart((c) => { const n = { ...c }; if ((n[id] ?? 0) <= 1) delete n[id]; else n[id]--; return n; }); }
+  function clearCart() { setCart({}); setCardInput(""); setPayResult(null); setShowCart(false); stopListen(); }
 
-  /* ── Cart panel toggle (mobile) ────────────────────────────── */
   const [showCart, setShowCart] = useState(false);
 
   /* ── Payment ───────────────────────────────────────────────── */
   const [cardInput, setCardInput] = useState("");
   const [scanLoading, setScanLoading] = useState(false);
   const [payResult, setPayResult] = useState<PayResult | null>(null);
-  const [payPhotoError, setPayPhotoError] = useState(false);
   const [submittingPayment, setSubmittingPayment] = useState(false);
   const processingRef = useRef(false);
 
-  async function executePurchase(card: ScannedCardLocal) {
+  async function executePurchase(card: ScannedCard) {
     setSubmittingPayment(true);
     if (!user?.school_id) { toast("No school selected", "error"); setSubmittingPayment(false); return; }
     try {
       const items = cartItems.map(({ id, name, price, quantity }) => ({ product_id: id, name, price, qty: quantity }));
       const res = await supabaseCanteenService.purchase(user.school_id, card.card_assignment_id, items, total);
-      playAudioTone("success");
-      setPayPhotoError(false);
-      setPayResult({ student: card.student, total, new_balance: res.new_balance });
+      playTone("success");
+      setPayResult({ name: card.student.name, total, balance: res.new_balance });
       setCart({});
       stopListen();
       loadReport();
-      toast(`Paid ${total.toLocaleString()} RWF · Balance: ${res.new_balance.toLocaleString()} RWF`, "success");
+      toast(`${total.toLocaleString()} RWF · Balance: ${res.new_balance.toLocaleString()} RWF`, "success");
     } catch (err) {
-      playAudioTone("error");
+      playTone("error");
       toast(err instanceof Error ? err.message : "Payment failed", "error");
-    } finally {
-      setSubmittingPayment(false);
-      processingRef.current = false;
-    }
+    } finally { setSubmittingPayment(false); processingRef.current = false; }
   }
 
   async function handlePayment(cardNum: string, isNFC = false) {
@@ -465,78 +268,62 @@ export default function CanteenPage() {
       let holder = isNFC
         ? await supabaseCanteenService.lookupCardHolderByNfcUid(user.school_id, cardNum.trim())
         : await supabaseCanteenService.lookupCardHolder(user.school_id, cardNum.trim());
-      if (!holder && !isNFC) {
-        holder = await supabaseCanteenService.lookupCardHolderByNfcUid(user.school_id, cardNum.trim()).catch(() => null);
-      }
-      if (!holder) throw new Error("Card not found or not active");
-      if (holder.is_frozen) throw new Error("This card is frozen");
-      const balance = holder.wallet_balance;
-      if (balance < total) {
-        playAudioTone("error");
-        toast(`Insufficient — ${balance.toLocaleString()} RWF available, need ${total.toLocaleString()} RWF`, "error");
+      if (!holder && !isNFC) holder = await supabaseCanteenService.lookupCardHolderByNfcUid(user.school_id, cardNum.trim()).catch(() => null);
+      if (!holder) throw new Error("Card not found");
+      if (holder.is_frozen) throw new Error("Card is frozen");
+      if (holder.wallet_balance < total) {
+        playTone("error");
+        toast(`Insufficient — ${holder.wallet_balance.toLocaleString()} RWF available`, "error");
         processingRef.current = false;
         return;
       }
       await executePurchase(toScannedCard(holder));
     } catch (err) {
-      playAudioTone("error");
+      playTone("error");
       toast(err instanceof Error ? err.message : "Card scan failed", "error");
       processingRef.current = false;
-    } finally {
-      setScanLoading(false);
-    }
+    } finally { setScanLoading(false); }
   }
 
-  // Keep a ref to the latest handlePayment so the NFC callback is never stale
   const payHandlerRef = useRef(handlePayment);
-  useEffect(() => {
-    payHandlerRef.current = handlePayment;
-  }); // no deps — always keep latest closure
+  useEffect(() => { payHandlerRef.current = handlePayment; }); // always latest
 
-  // Auto-start NFC when items are in the cart
+  // Auto-start NFC when cart has items
   useEffect(() => {
     if (cartCount > 0 && !payResult && isSupported && !listening && !processingRef.current) {
-      startListen((result) => {
-        if (result.type === "uid") payHandlerRef.current(result.value, true);
-        else payHandlerRef.current(result.value, false);
+      startListen((r) => {
+        if (r.type === "uid") payHandlerRef.current(r.value, true);
+        else payHandlerRef.current(r.value, false);
       });
     }
   }, [cartCount, payResult, listening, isSupported]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Stop NFC on unmount
   useEffect(() => () => stopListen(), []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ── Daily report ──────────────────────────────────────────── */
-  const [report, setReport] = useState<{
-    transactions: CanteenTransactionRow[];
-    total_revenue: number;
-    transaction_count: number;
-  } | null>(null);
-  const [reportLoading, setReportLoading] = useState(true);
+  /* ── Today's sales ─────────────────────────────────────────── */
+  const [sales, setSales] = useState<CanteenSaleRow[]>([]);
+  const [salesLoading, setSalesLoading] = useState(true);
+  const [todayRevenue, setTodayRevenue] = useState(0);
 
   const loadReport = useCallback(() => {
     if (!user?.school_id) return;
-    setReportLoading(true);
-    supabaseCanteenService.listTransactions(user.school_id, 50)
+    setSalesLoading(true);
+    supabaseCanteenService.listSales(user.school_id, 50)
       .then((rows) => {
         const today = new Date().toLocaleDateString("en-CA");
         const todayRows = rows.filter((r) => r.created_at.startsWith(today));
-        setReport({
-          transactions: todayRows,
-          total_revenue: todayRows.reduce((s, r) => s + r.total_amount, 0),
-          transaction_count: todayRows.length,
-        });
+        setSales(todayRows);
+        setTodayRevenue(todayRows.reduce((s, r) => s + r.total_amount, 0));
       })
       .catch(console.error)
-      .finally(() => setReportLoading(false));
+      .finally(() => setSalesLoading(false));
   }, [user?.school_id]);
 
   useEffect(() => {
-    if (!authLoading) {
-      loadReport();
-      loadProducts();
-    }
+    if (!authLoading) { loadReport(); loadProducts(); }
   }, [authLoading, loadReport, loadProducts]);
+
+  const isAdmin = isFinanceRole(user?.role) || user?.role === "CANTEEN";
 
   /* ── UI ────────────────────────────────────────────────────── */
   return (
@@ -545,82 +332,49 @@ export default function CanteenPage() {
         <AddProductModal
           onClose={() => setShowAddProduct(false)}
           onCreated={(p) => {
-            const photo = resolveImgUrl(p.photo_url) || getRealFoodPhoto(p.name, p.category);
-            setApiProducts((prev) => [...prev, {
-              id: p.id,
-              name: p.name,
-              price: p.price,
-              img: photo,
-              cat: p.category,
-              stock_qty: p.stock_qty,
-              fromApi: true,
-            }]);
+            const img = resolveImg(p.photo_url) || foodPhoto(p.name, p.category);
+            setApiProducts((prev) => [...prev, { id: p.id, name: p.name, price: p.price, img, cat: p.category, stock_qty: p.stock_qty, fromApi: true }]);
           }}
         />
       )}
 
       <div className="h-full flex flex-col overflow-hidden">
 
-        {/* ── Top bar ─────────────────────────────────────────── */}
-        <div className="flex items-center gap-3 px-3 md:px-4 pt-1 pb-3 flex-shrink-0">
-          <div className="flex-1">
-            <h1 className="text-lg font-bold" style={{ color: "#121212" }}>Canteen POS</h1>
-            <p className="text-xs" style={{ color: "#666666" }}>Select items → student taps card to pay</p>
-          </div>
-
-          {(isFinanceRole(user?.role) || user?.role === "CANTEEN") && (
-            <button
-              onClick={() => setShowAddProduct(true)}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white"
-              style={{ background: "#16A34A" }}
-            >
-              <Plus size={13} /> Add Product
+        {/* ── Top bar ───────────────────────────────────────── */}
+        <div className="flex items-center gap-2 px-3 md:px-4 pt-1 pb-2 flex-shrink-0">
+          <h1 className="text-base font-bold flex-1" style={{ color: "#121212" }}>Canteen</h1>
+          {isAdmin && (
+            <button onClick={() => setShowAddProduct(true)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-white" style={{ background: "#16A34A" }}>
+              <Plus size={12} /> Add
             </button>
           )}
-          {/* Cart badge (mobile) */}
-          <button
-            onClick={() => setShowCart((v) => !v)}
-            className="relative lg:hidden w-10 h-10 rounded-2xl flex items-center justify-center text-white"
-            style={{ background: cartCount > 0 ? "#16A34A" : "#e5e5e5" }}
-          >
-            <ShoppingCart size={18} style={{ color: cartCount > 0 ? "white" : "#999" }} />
+          <button onClick={() => setShowCart((v) => !v)} className="relative lg:hidden w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: cartCount > 0 ? "#16A34A" : "#e5e5e5" }}>
+            <ShoppingCart size={16} style={{ color: cartCount > 0 ? "white" : "#999" }} />
             {cartCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
-                {cartCount}
-              </span>
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">{cartCount}</span>
             )}
           </button>
         </div>
 
-        <div className="flex flex-1 gap-3 px-3 md:px-4 pb-3 md:pb-4 overflow-hidden min-h-0">
+        <div className="flex flex-1 gap-2 px-3 md:px-4 pb-3 overflow-hidden min-h-0">
 
-          {/* ── LEFT: Menu ──────────────────────────────────────── */}
+          {/* ── LEFT: Menu ──────────────────────────────────── */}
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
-            {/* Search bar */}
-            <div className="flex items-center gap-2 bg-white rounded-2xl px-3 py-2.5 mb-3 flex-shrink-0">
-              <Search size={15} style={{ color: "#999" }} />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search menu items…"
-                className="flex-1 text-sm bg-transparent outline-none"
-                style={{ color: "#121212" }}
-              />
-              {search && <button onClick={() => setSearch("")}><X size={13} style={{ color: "#999" }} /></button>}
+            {/* Search */}
+            <div className="flex items-center gap-1.5 bg-white rounded-xl px-2.5 py-1.5 mb-2 flex-shrink-0">
+              <Search size={13} style={{ color: "#aaa" }} />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…"
+                className="flex-1 text-xs bg-transparent outline-none" style={{ color: "#121212" }} />
+              {search && <button onClick={() => setSearch("")}><X size={11} style={{ color: "#aaa" }} /></button>}
             </div>
 
-            {/* Category tabs */}
-            <div className="flex gap-2 mb-3 overflow-x-auto flex-shrink-0 pb-1">
+            {/* Category chips */}
+            <div className="flex gap-1.5 mb-2 overflow-x-auto flex-shrink-0 pb-0.5">
               {CATEGORIES.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setActiveCategory(cat)}
-                  className="px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition flex-shrink-0"
-                  style={activeCategory === cat
-                    ? { background: "#16A34A", color: "#fff" }
-                    : { background: "#fff", color: "#666666" }}
-                >
+                <button key={cat} onClick={() => setActiveCategory(cat)}
+                  className="px-2.5 py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap flex-shrink-0 transition"
+                  style={activeCategory === cat ? { background: "#16A34A", color: "#fff" } : { background: "#fff", color: "#666" }}>
                   {cat}
                 </button>
               ))}
@@ -628,265 +382,137 @@ export default function CanteenPage() {
 
             {/* Menu grid */}
             <div className="flex-1 overflow-y-auto">
-
+              {productsLoaded && apiProducts.length === 0 && !search && (
+                <div className="flex flex-col items-center justify-center py-16 gap-3">
+                  <Utensils size={28} className="text-orange-300" />
+                  <div className="text-center">
+                    <p className="font-bold text-gray-500 text-sm">No items yet</p>
+                    <p className="text-xs text-gray-400 mt-0.5">Add products to start selling</p>
+                  </div>
+                  {isAdmin && <button onClick={() => setShowAddProduct(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white rounded-xl text-xs font-semibold"><PackagePlus size={13} /> Add Product</button>}
+                </div>
+              )}
               {visible.length === 0 && search && (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <p className="font-semibold text-gray-400 text-sm">No items match &quot;{search}&quot;</p>
-                </div>
+                <p className="text-center text-gray-400 text-sm py-12">No results for &quot;{search}&quot;</p>
               )}
-              {productsLoaded && allMenu.length === 0 && !search && (
-                <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
-                  <div className="w-16 h-16 rounded-3xl bg-orange-50 flex items-center justify-center">
-                    <Utensils size={28} className="text-orange-400" />
-                  </div>
-                  <div>
-                    <p className="font-bold text-gray-700">No menu items yet</p>
-                    <p className="text-sm text-gray-400 mt-1">This canteen hasn&apos;t set up products.<br />Add items using the button above.</p>
-                  </div>
-                  <button
-                    onClick={() => setShowAddProduct(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-xl text-sm font-semibold"
-                  >
-                    <PackagePlus size={15} /> Add First Product
-                  </button>
-                </div>
-              )}
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-4 gap-2.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">
                 {visible.map((item) => {
                   const qty = cart[item.id] ?? 0;
-                  const isAdmin = isFinanceRole(user?.role) || user?.role === "CANTEEN";
                   return (
-                    <div
-                      key={item.id}
-                      className="bg-white rounded-2xl p-3 flex flex-col gap-2 relative cursor-pointer transition"
-                      style={{ border: qty > 0 ? "2px solid #16A34A" : "2px solid transparent" }}
-                      onClick={() => inc(item.id)}
-                    >
-                      {/* Delete button (API products only, admin/canteen) */}
+                    <div key={item.id} onClick={() => inc(item.id)}
+                      className="bg-white rounded-xl p-2.5 flex flex-col gap-1.5 relative cursor-pointer"
+                      style={{ border: qty > 0 ? "2px solid #16A34A" : "2px solid transparent" }}>
                       {item.fromApi && isAdmin && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleDeleteProduct(item.id); }}
-                          disabled={deletingId === item.id}
-                          className="absolute top-2 left-2 w-6 h-6 rounded-full bg-red-50 border border-red-100 flex items-center justify-center z-10 hover:bg-red-100 transition"
-                        >
-                          {deletingId === item.id ? <Loader2 size={10} className="animate-spin text-red-400" /> : <Trash2 size={9} className="text-red-400" />}
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteProduct(item.id); }} disabled={deletingId === item.id}
+                          className="absolute top-1.5 left-1.5 w-5 h-5 rounded-full bg-red-50 border border-red-100 flex items-center justify-center z-10">
+                          {deletingId === item.id ? <Loader2 size={8} className="animate-spin text-red-400" /> : <Trash2 size={8} className="text-red-400" />}
                         </button>
                       )}
-                      {/* Qty badge */}
                       {qty > 0 && (
-                        <span
-                          className="absolute top-2 right-2 w-6 h-6 rounded-full text-white text-xs font-bold flex items-center justify-center z-10"
-                          style={{ background: "#16A34A" }}
-                        >
-                          {qty}
-                        </span>
+                        <span className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full text-white text-[10px] font-bold flex items-center justify-center z-10" style={{ background: "#16A34A" }}>{qty}</span>
                       )}
-                      {/* Item image hero */}
-                      <div
-                        className="w-full aspect-square rounded-xl flex items-center justify-center overflow-hidden relative group"
-                        style={{ background: qty > 0 ? "#DCFCE7" : "#F5F5F5" }}
-                      >
+                      <div className="w-full aspect-square rounded-lg overflow-hidden" style={{ background: qty > 0 ? "#DCFCE7" : "#F5F5F5" }}>
                         {failedImgs[item.id] ? (
-                          <div className="w-full h-full flex flex-col items-center justify-center p-2 text-center select-none">
-                            <div className="w-10 h-10 rounded-full flex items-center justify-center mb-1" style={{ background: qty > 0 ? "#DCFCE7" : "#EBEBEB" }}>
-                              <Utensils size={18} style={{ color: "#16A34A" }} />
-                            </div>
-                            <span className="text-[11px] font-bold text-gray-800 leading-tight line-clamp-1">{item.name}</span>
-                            <span className="text-[9px] font-medium text-gray-400 mt-0.5">{item.cat}</span>
-                          </div>
+                          <div className="w-full h-full flex items-center justify-center"><Utensils size={20} style={{ color: "#16A34A" }} /></div>
                         ) : (
                           /* eslint-disable-next-line @next/next/no-img-element */
-                          <img
-                            src={item.img || getRealFoodPhoto(item.name, item.cat)}
-                            alt={item.name}
-                            className="w-full h-full object-cover rounded-xl transition duration-200 group-hover:scale-105"
-                            draggable={false}
+                          <img src={item.img || foodPhoto(item.name, item.cat)} alt={item.name}
+                            className="w-full h-full object-cover" draggable={false}
                             onError={(e) => {
-                              const fallback = getRealFoodPhoto(item.name, item.cat);
-                              if (e.currentTarget.src !== fallback && !e.currentTarget.src.endsWith(fallback)) {
-                                e.currentTarget.src = fallback;
-                              } else {
-                                setFailedImgs((prev) => ({ ...prev, [item.id]: true }));
-                              }
-                            }}
-                          />
+                              const fb = foodPhoto(item.name, item.cat);
+                              if (!e.currentTarget.src.endsWith(fb)) e.currentTarget.src = fb;
+                              else setFailedImgs((p) => ({ ...p, [item.id]: true }));
+                            }} />
                         )}
                       </div>
                       <div>
-                        <p className="text-sm font-semibold leading-tight" style={{ color: "#121212" }}>{item.name}</p>
-                        <div className="flex items-center justify-between mt-1">
-                          <span className="text-sm font-bold" style={{ color: "#16A34A" }}>
-                            {item.price.toLocaleString()} <span className="text-[10px] font-normal text-gray-400">RWF</span>
-                          </span>
+                        <p className="text-xs font-semibold leading-tight truncate" style={{ color: "#121212" }}>{item.name}</p>
+                        <div className="flex items-center justify-between mt-0.5">
+                          <span className="text-xs font-bold" style={{ color: "#16A34A" }}>{item.price.toLocaleString()}<span className="text-[9px] font-normal text-gray-400 ml-0.5">RWF</span></span>
                           {qty > 0 ? (
-                            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); dec(item.id); }}
-                                className="w-6 h-6 rounded-lg flex items-center justify-center text-white"
-                                style={{ background: "#121212" }}
-                              >
-                                <Minus size={10} />
-                              </button>
+                            <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                              <button onClick={(e) => { e.stopPropagation(); dec(item.id); }} className="w-5 h-5 rounded flex items-center justify-center text-white" style={{ background: "#121212" }}><Minus size={9} /></button>
                               <span className="text-xs font-bold w-4 text-center">{qty}</span>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); inc(item.id); }}
-                                className="w-6 h-6 rounded-lg flex items-center justify-center text-white"
-                                style={{ background: "#16A34A" }}
-                              >
-                                <Plus size={10} />
-                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); inc(item.id); }} className="w-5 h-5 rounded flex items-center justify-center text-white" style={{ background: "#16A34A" }}><Plus size={9} /></button>
                             </div>
                           ) : (
-                            <div
-                              className="w-6 h-6 rounded-lg flex items-center justify-center text-white"
-                              style={{ background: "#16A34A" }}
-                            >
-                              <Plus size={12} />
-                            </div>
+                            <div className="w-5 h-5 rounded flex items-center justify-center text-white" style={{ background: "#16A34A" }}><Plus size={10} /></div>
                           )}
                         </div>
                       </div>
                     </div>
                   );
                 })}
-
-                {/* Add product card (admin/canteen only) */}
-                {(isFinanceRole(user?.role) || user?.role === "CANTEEN") && (
-                  <button
-                    onClick={() => setShowAddProduct(true)}
-                    className="bg-white rounded-2xl p-3 flex flex-col items-center justify-center gap-2 border-2 border-dashed hover:border-orange-300 transition min-h-[120px]"
-                    style={{ borderColor: "#e5e5e5" }}
-                  >
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "#DCFCE7" }}>
-                      <Plus size={20} style={{ color: "#16A34A" }} />
-                    </div>
-                    <span className="text-xs font-semibold text-gray-400">Add Product</span>
+                {isAdmin && (
+                  <button onClick={() => setShowAddProduct(true)}
+                    className="bg-white rounded-xl p-2.5 flex flex-col items-center justify-center gap-1.5 border-2 border-dashed min-h-[100px]" style={{ borderColor: "#e5e5e5" }}>
+                    <Plus size={18} style={{ color: "#ccc" }} />
+                    <span className="text-[10px] text-gray-300">Add</span>
                   </button>
                 )}
               </div>
             </div>
           </div>
 
-          {/* ── RIGHT: Cart + Pay ──────────────────────────────────
-              Desktop: always visible. Mobile: slide-over panel.    */}
-          <div className={`
-            lg:w-80 lg:flex-shrink-0 flex flex-col bg-white rounded-3xl overflow-hidden
-            ${showCart
-              ? "fixed inset-3 z-50 lg:relative lg:inset-auto"
-              : "hidden lg:flex"
-            }
-          `}>
+          {/* ── RIGHT: Cart + Pay ─────────────────────────── */}
+          <div className={`lg:w-64 lg:flex-shrink-0 flex flex-col bg-white rounded-2xl overflow-hidden ${showCart ? "fixed inset-2 z-50 lg:relative lg:inset-auto" : "hidden lg:flex"}`}>
+
             {/* Cart header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 flex-shrink-0">
+              <span className="text-xs font-bold" style={{ color: "#121212" }}>Order · {cartCount}</span>
               <div className="flex items-center gap-2">
-                <ShoppingCart size={16} style={{ color: "#16A34A" }} />
-                <h3 className="font-bold text-sm" style={{ color: "#121212" }}>
-                  Order ({cartCount} item{cartCount !== 1 ? "s" : ""})
-                </h3>
-              </div>
-              <div className="flex items-center gap-2">
-                {cartCount > 0 && (
-                  <button onClick={clearCart} className="text-xs text-gray-400 hover:text-red-500 transition">Clear</button>
-                )}
-                <button onClick={() => setShowCart(false)} className="lg:hidden p-1 text-gray-400">
-                  <X size={16} />
-                </button>
+                {cartCount > 0 && <button onClick={clearCart} className="text-[11px] text-gray-400 hover:text-red-500">Clear</button>}
+                <button onClick={() => setShowCart(false)} className="lg:hidden"><X size={14} className="text-gray-400" /></button>
               </div>
             </div>
 
             {/* Success state */}
             {payResult && (
-              <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-                <div className="relative mb-3">
-                  {payResult.student.photo && !payPhotoError ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={resolveImgUrl(payResult.student.photo)!}
-                      alt={payResult.student.name}
-                      className="w-20 h-20 rounded-full object-cover border-4 border-green-200 shadow-md"
-                      onError={() => setPayPhotoError(true)}
-                    />
-                  ) : (
-                    <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: "#f0fdf4" }}>
-                      <CheckCircle size={32} className="text-green-500" />
-                    </div>
-                  )}
-                  {payResult.student.photo && !payPhotoError && (
-                    <span className="absolute bottom-0 right-0 w-6 h-6 bg-green-500 rounded-full border-2 border-white flex items-center justify-center text-white text-[10px]">
-                      ✓
-                    </span>
-                  )}
+              <div className="flex-1 flex flex-col items-center justify-center p-5 text-center gap-3">
+                <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{ background: "#f0fdf4" }}>
+                  <CheckCircle size={28} className="text-green-500" />
                 </div>
-                <p className="font-bold text-green-700 text-lg mb-1">Payment Done!</p>
-                <p className="text-sm font-medium" style={{ color: "#121212" }}>{payResult.student.name}</p>
-                <p className="text-xs text-gray-400 mb-4">{payResult.student.class}</p>
-                <div className="w-full grid grid-cols-2 gap-2 mb-4">
-                  <div className="rounded-2xl p-3 text-center" style={{ background: "#F5F5F5" }}>
-                    <p className="text-xs text-gray-400">Charged</p>
-                    <p className="font-bold text-sm" style={{ color: "#121212" }}>{payResult.total.toLocaleString()} RWF</p>
-                  </div>
-                  <div className="rounded-2xl p-3 text-center" style={{ background: "#DCFCE7" }}>
-                    <p className="text-xs text-gray-400">Remaining</p>
-                    <p className="font-bold text-sm" style={{ color: "#16A34A" }}>{payResult.new_balance.toLocaleString()} RWF</p>
-                  </div>
+                <div>
+                  <p className="font-bold text-green-700">Done!</p>
+                  <p className="text-sm font-semibold text-gray-800 mt-0.5">{payResult.name}</p>
+                  <p className="text-xs text-gray-400">{payResult.total.toLocaleString()} RWF charged</p>
+                  <p className="text-xs text-green-600 font-semibold mt-0.5">{payResult.balance.toLocaleString()} RWF left</p>
                 </div>
-                <button
-                  onClick={() => { setPayResult(null); setShowCart(false); }}
-                  className="w-full py-3 rounded-2xl font-bold text-sm text-white"
-                  style={{ background: "#16A34A" }}
-                >
+                <button onClick={() => { setPayResult(null); setShowCart(false); }}
+                  className="w-full py-2.5 rounded-xl font-bold text-sm text-white" style={{ background: "#16A34A" }}>
                   New Order
                 </button>
               </div>
             )}
 
-            {/* Cart items */}
+            {/* Cart + pay panel */}
             {!payResult && (
               <>
-                <div className="flex-1 overflow-y-auto px-3 py-2">
+                {/* Cart items */}
+                <div className="flex-1 overflow-y-auto px-2.5 py-2 min-h-0">
                   {cartItems.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full py-8 text-gray-300">
-                      <ShoppingCart size={36} className="mb-2" />
-                      <p className="text-sm">No items yet</p>
-                      <p className="text-xs mt-1">Tap items on the left to add</p>
+                    <div className="flex flex-col items-center justify-center h-full py-8 text-gray-200">
+                      <ShoppingCart size={28} className="mb-1.5" />
+                      <p className="text-xs">Empty</p>
                     </div>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       {cartItems.map((item) => (
-                        <div key={item.id} className="flex items-center gap-2 p-2 rounded-xl" style={{ background: "#F5F5F5" }}>
-                          <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
+                        <div key={item.id} className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg" style={{ background: "#F5F5F5" }}>
+                          <div className="w-7 h-7 rounded overflow-hidden flex-shrink-0 bg-gray-100">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={item.img || getRealFoodPhoto(item.name, item.cat)}
-                              alt={item.name}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                const fallback = getRealFoodPhoto(item.name, item.cat);
-                                if (e.currentTarget.src !== fallback) {
-                                  e.currentTarget.src = fallback;
-                                }
-                              }}
-                            />
+                            <img src={item.img || foodPhoto(item.name, item.cat)} alt={item.name} className="w-full h-full object-cover"
+                              onError={(e) => { const fb = foodPhoto(item.name, item.cat); if (e.currentTarget.src !== fb) e.currentTarget.src = fb; }} />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold truncate" style={{ color: "#121212" }}>{item.name}</p>
-                            <p className="text-xs" style={{ color: "#16A34A" }}>{item.price.toLocaleString()} RWF</p>
+                            <p className="text-[11px] font-semibold truncate" style={{ color: "#121212" }}>{item.name}</p>
                           </div>
-                          <div className="flex items-center gap-1 flex-shrink-0">
-                            <button onClick={() => dec(item.id)}
-                              className="w-5 h-5 rounded-lg flex items-center justify-center bg-white border border-gray-200 hover:bg-gray-50">
-                              <Minus size={9} />
-                            </button>
-                            <span className="text-xs font-bold w-4 text-center">{item.quantity}</span>
-                            <button onClick={() => inc(item.id)}
-                              className="w-5 h-5 rounded-lg flex items-center justify-center text-white"
-                              style={{ background: "#16A34A" }}>
-                              <Plus size={9} />
-                            </button>
+                          <div className="flex items-center gap-0.5 flex-shrink-0">
+                            <button onClick={() => dec(item.id)} className="w-4 h-4 rounded flex items-center justify-center bg-white border border-gray-200"><Minus size={8} /></button>
+                            <span className="text-[10px] font-bold w-3.5 text-center">{item.quantity}</span>
+                            <button onClick={() => inc(item.id)} className="w-4 h-4 rounded flex items-center justify-center text-white" style={{ background: "#16A34A" }}><Plus size={8} /></button>
                           </div>
-                          <span className="text-xs font-bold w-16 text-right flex-shrink-0" style={{ color: "#121212" }}>
-                            {(item.price * item.quantity).toLocaleString()}
-                          </span>
+                          <span className="text-[11px] font-bold w-12 text-right" style={{ color: "#121212" }}>{(item.price * item.quantity).toLocaleString()}</span>
                         </div>
                       ))}
                     </div>
@@ -894,118 +520,80 @@ export default function CanteenPage() {
                 </div>
 
                 {/* Total + pay */}
-                <div className="px-4 py-3 border-t border-gray-100 flex-shrink-0 space-y-3">
+                <div className="px-3 py-2.5 border-t border-gray-100 flex-shrink-0 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm" style={{ color: "#666666" }}>Total Amount</span>
-                    <span className="text-xl font-bold" style={{ color: "#121212" }}>
-                      {total.toLocaleString()} <span className="text-xs font-normal text-gray-400">RWF</span>
-                    </span>
+                    <span className="text-xs text-gray-500">Total</span>
+                    <span className="text-lg font-bold" style={{ color: "#121212" }}>{total.toLocaleString()} <span className="text-[10px] font-normal text-gray-400">RWF</span></span>
                   </div>
 
                   {cartItems.length > 0 ? (
-                    <div className="space-y-2">
-                      {/* NFC tap indicator */}
-                      <div
-                        className="rounded-2xl p-3 flex flex-col items-center gap-2 border-2 border-dashed"
-                        style={{ borderColor: "#16A34A", background: "#DCFCE7" }}
-                      >
+                    <div className="space-y-1.5">
+                      {/* NFC indicator */}
+                      <div className="rounded-xl p-2.5 flex flex-col items-center gap-1 border border-dashed" style={{ borderColor: "#16A34A", background: "#f0fdf4" }}>
                         {listening ? (
                           <>
-                            <div
-                              className="w-12 h-12 rounded-full flex items-center justify-center animate-pulse"
-                              style={{ background: "#16A34A" }}
-                            >
-                              <Wifi size={20} className="text-white" />
+                            <div className="w-9 h-9 rounded-full flex items-center justify-center animate-pulse" style={{ background: "#16A34A" }}>
+                              <Wifi size={16} className="text-white" />
                             </div>
-                            <p className="text-xs font-bold text-center" style={{ color: "#16A34A" }}>
-                              Tap card to pay
-                            </p>
-                            <p className="text-[11px] text-center text-gray-400">
-                              Student tap phone or NFC card here
-                            </p>
-                            {scanLoading && <Loader2 size={16} className="animate-spin" style={{ color: "#16A34A" } as React.CSSProperties} />}
+                            <p className="text-[11px] font-bold" style={{ color: "#16A34A" }}>Tap card</p>
+                            {scanLoading && <Loader2 size={12} className="animate-spin" style={{ color: "#16A34A" } as React.CSSProperties} />}
                           </>
                         ) : (
                           <>
-                            <WifiOff size={20} style={{ color: "#999" }} />
-                            <p className="text-xs text-gray-400 text-center">NFC not available — enter card number below</p>
+                            <WifiOff size={16} style={{ color: "#aaa" }} />
+                            <p className="text-[10px] text-gray-400">Enter card below</p>
                           </>
                         )}
                       </div>
 
-                      {/* Manual card entry fallback */}
-                      <div className="flex gap-1.5">
-                        <input
-                          value={cardInput}
-                          onChange={(e) => setCardInput(e.target.value)}
+                      {/* Manual entry */}
+                      <div className="flex gap-1">
+                        <input value={cardInput} onChange={(e) => setCardInput(e.target.value)}
                           onKeyDown={(e) => e.key === "Enter" && handlePayment(cardInput)}
-                          placeholder="Card number…"
-                          className="flex-1 border border-gray-200 rounded-xl px-2.5 py-2 text-xs font-mono"
-                        />
-                        <button
-                          onClick={() => handlePayment(cardInput)}
-                          disabled={scanLoading || !cardInput.trim()}
-                          className="px-3 py-2 rounded-xl text-white text-xs font-bold disabled:opacity-60"
-                          style={{ background: "#121212" }}
-                        >
-                          {scanLoading ? <Loader2 size={12} className="animate-spin" /> : "Pay"}
+                          placeholder="Card number…" className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-[11px] font-mono" />
+                        <button onClick={() => handlePayment(cardInput)} disabled={scanLoading || !cardInput.trim()}
+                          className="px-2.5 py-1.5 rounded-lg text-white text-[11px] font-bold disabled:opacity-50" style={{ background: "#121212" }}>
+                          {scanLoading ? <Loader2 size={11} className="animate-spin" /> : "Pay"}
                         </button>
                       </div>
 
-                      <div className="flex gap-1.5">
+                      <div className="flex gap-1">
                         <VirtualCardTap onTap={(cn) => handlePayment(cn)} busy={scanLoading} />
-                        <button
-                          onClick={clearCart}
-                          className="flex-1 py-2 rounded-xl text-xs font-medium text-gray-500 bg-gray-100 hover:bg-gray-200 transition"
-                        >
-                          Clear
-                        </button>
+                        <button onClick={clearCart} className="flex-1 py-1.5 rounded-lg text-[11px] text-gray-500 bg-gray-100">Clear</button>
                       </div>
                     </div>
                   ) : (
-                    <div className="flex items-center justify-center gap-2 py-3 rounded-2xl text-xs font-semibold text-gray-300" style={{ background: "#F5F5F5" }}>
-                      <CreditCard size={15} />
-                      <span>Add items to start</span>
+                    <div className="flex items-center justify-center py-2 text-[11px] text-gray-300 gap-1.5" style={{ background: "#F9F9F9", borderRadius: 10 }}>
+                      <ShoppingCart size={13} /> Add items
                     </div>
                   )}
                 </div>
 
-                {/* Today's sales summary (compact) */}
-                <div className="px-4 pb-3 border-t border-gray-100 pt-3 flex-shrink-0">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-1.5">
-                      <ReceiptText size={12} style={{ color: "#16A34A" }} />
-                      <span className="text-xs font-semibold" style={{ color: "#121212" }}>Today&apos;s Sales</span>
-                    </div>
-                    {reportLoading
-                      ? <Loader2 size={12} className="animate-spin text-gray-300" />
-                      : report && (
-                        <span className="text-xs font-bold" style={{ color: "#16A34A" }}>
-                          {report.total_revenue.toLocaleString()} RWF
-                        </span>
-                      )}
+                {/* Today's sales */}
+                <div className="px-3 pb-3 border-t border-gray-100 pt-2.5 flex-shrink-0">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] font-semibold text-gray-500">Today</span>
+                    {salesLoading
+                      ? <Loader2 size={11} className="animate-spin text-gray-300" />
+                      : <span className="text-[11px] font-bold" style={{ color: "#16A34A" }}>{todayRevenue.toLocaleString()} RWF</span>
+                    }
                   </div>
 
-                  {!reportLoading && report && report.transaction_count === 0 && (
-                    <p className="text-xs text-center text-gray-300 py-2">No sales yet today</p>
+                  {!salesLoading && sales.length === 0 && (
+                    <p className="text-[10px] text-center text-gray-300 py-1">No sales yet</p>
                   )}
 
-                  {/* Per-student transactions */}
-                  {!reportLoading && report && report.transactions.length > 0 && (
-                    <div className="space-y-1 max-h-28 overflow-y-auto">
-                      {report.transactions.slice(0, 6).map((t) => (
-                        <div key={t.id} className="flex items-center justify-between py-0.5">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs truncate" style={{ color: "#121212" }}>
-                              Student
-                            </p>
+                  {!salesLoading && sales.length > 0 && (
+                    <div className="space-y-0.5 max-h-32 overflow-y-auto">
+                      {sales.slice(0, 8).map((t) => (
+                        <div key={t.id} className="flex items-center justify-between py-1 border-b border-gray-50 last:border-0">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[11px] font-semibold truncate" style={{ color: "#121212" }}>{t.student_name}</p>
                             <p className="text-[10px] text-gray-400">
                               {new Date(t.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                             </p>
                           </div>
-                          <span className="text-xs font-bold text-red-500 ml-2">
-                            -{t.total_amount.toLocaleString()}
-                          </span>
+                          <span className="text-[11px] font-bold text-red-500 ml-2 flex-shrink-0">-{t.total_amount.toLocaleString()}</span>
                         </div>
                       ))}
                     </div>

@@ -19,10 +19,10 @@ export async function POST(req: NextRequest) {
   }
 
   const serviceRoleKey = clean(process.env.SUPABASE_SERVICE_ROLE_KEY || "");
+  const anonKey = clean(process.env.SUPABASE_ANON_KEY || "");
   const supabaseUrl = clean(process.env.NEXT_PUBLIC_SUPABASE_URL || "");
-  const supabaseAnonKey = clean(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "");
 
-  if (!serviceRoleKey || !supabaseUrl || !supabaseAnonKey) {
+  if (!serviceRoleKey || !anonKey || !supabaseUrl) {
     return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
   }
 
@@ -41,11 +41,12 @@ export async function POST(req: NextRequest) {
   }
 
   // For each auth_user_id, fetch their synthetic email and attempt sign-in
+  // using the classic anon JWT (not the publishable key) so GoTrue accepts it.
   for (const row of rows as { auth_user_id: string }[]) {
     const { data: authUser } = await adminClient.auth.admin.getUserById(row.auth_user_id);
     if (!authUser?.user?.email) continue;
 
-    const anonClient = createClient(supabaseUrl, supabaseAnonKey, {
+    const anonClient = createClient(supabaseUrl, anonKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 

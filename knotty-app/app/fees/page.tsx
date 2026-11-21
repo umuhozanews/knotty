@@ -7,7 +7,7 @@ import {
   Zap, PenLine,
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
-import { supabaseFeesService, type FeeType, type StudentFeeStatus } from "@/lib/supabase/services";
+import { supabaseFeesService, supabaseCardService, type FeeType, type StudentFeeStatus } from "@/lib/supabase/services";
 import { supabaseCanteenService } from "@/lib/supabase/services/canteenService";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
@@ -468,6 +468,40 @@ export default function FeesPage() {
   const [nfcCard, setNfcCard] = useState<NfcStudentCard | null>(null);
   const [nfcLoading, setNfcLoading] = useState(false);
 
+  // Manual wallet top-up for the NFC card check panel
+  const [topupAmt, setTopupAmt] = useState("");
+  const [topupLoading, setTopupLoading] = useState(false);
+  const [showTopup, setShowTopup] = useState(false);
+
+  async function handleNfcTopUp() {
+    if (!nfcCard || !schoolId) return;
+    const amount = parseFloat(topupAmt);
+    if (isNaN(amount) || amount <= 0) { toast("Enter a valid amount", "error"); return; }
+    setTopupLoading(true);
+    try {
+      const client = getSafeBrowserClient();
+      if (!client) throw new Error("No connection");
+      const { data: cards } = await client
+        .from("card_assignments")
+        .select("id")
+        .eq("school_id", schoolId)
+        .eq("student_id", nfcCard.student_id)
+        .in("status", ["active", "issued"])
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (!cards || cards.length === 0) throw new Error("No active card found for this student");
+      const newBal = await supabaseCardService.topUpWallet(schoolId, cards[0].id, amount);
+      setNfcCard({ ...nfcCard, wallet_balance: newBal });
+      toast(`Wallet topped up → ${newBal.toLocaleString()} RWF`, "success");
+      setTopupAmt("");
+      setShowTopup(false);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Top-up failed", "error");
+    } finally {
+      setTopupLoading(false);
+    }
+  }
+
   const schoolId = activeSchool?.id ?? user?.school_id ?? "";
 
   async function handleNfcScan() {
@@ -592,7 +626,7 @@ export default function FeesPage() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Card Check Result</p>
-                    <button onClick={() => setNfcCard(null)} className="w-6 h-6 rounded-lg bg-gray-100 flex items-center justify-center">
+                    <button onClick={() => { setNfcCard(null); setShowTopup(false); setTopupAmt(""); }} className="w-6 h-6 rounded-lg bg-gray-100 flex items-center justify-center">
                       <X size={12} />
                     </button>
                   </div>
@@ -614,6 +648,42 @@ export default function FeesPage() {
                       <p className="text-[10px] text-gray-400">wallet RWF</p>
                     </div>
                   </div>
+
+                  {/* Inline wallet top-up */}
+                  {!showTopup ? (
+                    <button
+                      onClick={() => setShowTopup(true)}
+                      className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold transition"
+                      style={{ background: "#F5F3FF", color: "#7C3AED" }}
+                    >
+                      <Wallet size={13} /> Top Up Wallet
+                    </button>
+                  ) : (
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="number"
+                        min={1}
+                        value={topupAmt}
+                        onChange={(e) => setTopupAmt(e.target.value)}
+                        placeholder="Amount (RWF)"
+                        className="flex-1 border border-purple-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-purple-400"
+                        autoFocus
+                      />
+                      <button
+                        onClick={handleNfcTopUp}
+                        disabled={topupLoading || !topupAmt}
+                        className="px-3 py-2 rounded-xl text-xs font-bold text-white flex items-center gap-1 disabled:opacity-60"
+                        style={{ background: "#7C3AED" }}
+                      >
+                        {topupLoading ? <Loader2 size={12} className="animate-spin" /> : <Wallet size={12} />}
+                        {topupLoading ? "…" : "Add"}
+                      </button>
+                      <button onClick={() => { setShowTopup(false); setTopupAmt(""); }} className="px-2 py-2 rounded-xl text-xs text-gray-400 bg-gray-100">
+                        <X size={12} />
+                      </button>
+                    </div>
+                  )}
+
                   {nfcCard.fees.length > 0 ? (
                     <div className="grid grid-cols-2 gap-2">
                       {nfcCard.fees.map((f) => {

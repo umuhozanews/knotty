@@ -110,19 +110,18 @@ export type PortalStats = {
 };
 
 export const portalService = {
-  async login(schoolCode: string, admissionNumber: string, pin: string): Promise<{
+  async login(email: string, password: string): Promise<{
     token: string;
     session: PortalSession;
   }> {
     const client = getSafeBrowserClient();
     if (!client) throw new Error("Supabase not configured");
-    const { data, error } = await rpc(client)("portal_login", {
-      p_school_code: schoolCode.trim(),
-      p_admission_number: admissionNumber.trim(),
-      p_pin: pin,
+    const { data, error } = await rpc(client)("portal_login_email", {
+      p_email: email.trim().toLowerCase(),
+      p_password: password,
     });
     if (error) throw new Error(error.message);
-    if (!data || !(data as any[]).length) throw new Error("Invalid credentials");
+    if (!data || !(data as any[]).length) throw new Error("Invalid email or password");
     const row = (data as any[])[0];
     return {
       token: row.session_token,
@@ -134,6 +133,18 @@ export const portalService = {
         profile_photo_path: row.profile_photo_path,
       },
     };
+  },
+
+  async adminSetPortalEmail(schoolId: string, studentId: string, portalEmail: string, password: string): Promise<void> {
+    const client = getSafeBrowserClient();
+    if (!client) throw new Error("Supabase not configured");
+    const { error } = await rpc(client)("admin_set_portal_email", {
+      p_school_id: schoolId,
+      p_student_id: studentId,
+      p_portal_email: portalEmail.trim().toLowerCase(),
+      p_password: password,
+    });
+    if (error) throw new Error(error.message);
   },
 
   async validateSession(token: string): Promise<PortalSession | null> {

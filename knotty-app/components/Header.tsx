@@ -1,7 +1,6 @@
 "use client";
-import { Sun, Moon, User, Menu, Shield, ArrowLeft } from "lucide-react";
+import { User, Menu, Shield, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { useTheme } from "@/context/ThemeContext";
 import { useRouter, usePathname } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
 import { isManagementRole } from "@/lib/roles";
@@ -10,7 +9,6 @@ import { getDashboardPath } from "@/context/AuthContext";
 
 export default function Header({ onMenuClick, hideSidebarToggle }: { onMenuClick?: () => void; hideSidebarToggle?: boolean }) {
   const { user, logout } = useAuth();
-  const { theme, toggle } = useTheme();
   const router = useRouter();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -69,15 +67,15 @@ export default function Header({ onMenuClick, hideSidebarToggle }: { onMenuClick
             <ArrowLeft size={16} className="text-gray-600" />
           </button>
         )}
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: "#DCFCE7" }}>
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+        <div className="flex items-center gap-2 md:gap-3">
+          <div className="w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0" style={{ background: "#DCFCE7" }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
               <path d="M12 2L2 7l10 5 10-5-10-5z" fill="#16A34A" />
               <path d="M2 17l10 5 10-5" stroke="#16A34A" strokeWidth="2" strokeLinecap="round" />
               <path d="M2 12l10 5 10-5" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </div>
-          <span className="font-extrabold text-2xl text-gray-800 tracking-tight">IshuriHUB</span>
+          <span className={`font-extrabold text-xl md:text-2xl text-gray-800 tracking-tight ${showBack ? "hidden sm:block" : ""}`}>IshuriHUB</span>
         </div>
       </div>
 
@@ -99,14 +97,6 @@ export default function Header({ onMenuClick, hideSidebarToggle }: { onMenuClick
         </span>
 
         <NFCQuickCheck />
-
-        <button
-          onClick={toggle}
-          title={theme === "dark" ? "Light mode" : "Dark mode"}
-          className="w-8 h-8 md:w-9 md:h-9 bg-white rounded-full flex items-center justify-center hover:bg-gray-50 transition"
-        >
-          {theme === "dark" ? <Sun size={16} style={{ color: "#16A34A" }} /> : <Moon size={16} className="text-gray-500" />}
-        </button>
 
         <div ref={menuRef} className="relative">
           <button

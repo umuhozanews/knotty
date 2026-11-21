@@ -11,7 +11,7 @@ import { getSafeBrowserClient } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import type { DisciplineRecord, HealthRecord } from "@/lib/api";
 
-type View = "home" | "attendance" | "discipline" | "health" | "gate" | "canteen" | "material";
+type View = "home" | "attendance" | "discipline" | "health" | "gate" | "canteen" | "material" | "staff_attendance";
 
 type ClassAttendanceData = {
   classId: string;
@@ -59,6 +59,17 @@ type MaterialRow = {
   school_materials: { name: string; unit: string } | null;
 };
 
+type StaffAttRow = {
+  staff_record_id: string;
+  legal_name: string;
+  job_title: string;
+  status: string;
+  first_arrived_at: string | null;
+  departed_at: string | null;
+  rank: number | null;
+  punchStatus: "on_time" | "late" | "absent";
+};
+
 function fmtTime(iso: string | null | undefined) {
   if (!iso) return "—";
   return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
@@ -97,6 +108,7 @@ export default function ReportsPage() {
   const [gateVisitors, setGateVisitors]   = useState<VisitorRow[]>([]);
   const [canteenRows, setCanteenRows]     = useState<CanteenRow[]>([]);
   const [materialRows, setMaterialRows]   = useState<MaterialRow[]>([]);
+  const [staffAttRows, setStaffAttRows]   = useState<StaffAttRow[]>([]);
 
   const loadAttendance = useCallback(async () => {
     if (!schoolId) return;
@@ -221,15 +233,57 @@ export default function ReportsPage() {
     finally { setLoading(false); }
   }, [schoolId, date]);
 
+  const loadStaffAtt = useCallback(async () => {
+    if (!schoolId) return;
+    setLoading(true);
+    try {
+      const client = getSafeBrowserClient();
+      if (!client) return;
+      const startTime = (typeof window !== "undefined" && localStorage.getItem("staff_attendance_start_time")) || "07:30";
+
+      const [staffRes, attRes] = await Promise.all([
+        client.rpc("list_school_staff_members", { p_school_id: schoolId }),
+        client
+          .from("staff_attendance_records")
+          .select("staff_record_id, status, first_arrived_at, departed_at")
+          .eq("school_id", schoolId)
+          .eq("attendance_date", date),
+      ]);
+
+      const staffList = ((staffRes.data || []) as any[]).filter((s: any) => s.employment_status === "active");
+      const attMap = new Map<string, any>();
+      for (const r of (attRes.data || []) as any[]) attMap.set(r.staff_record_id, r);
+
+      const present: StaffAttRow[] = [];
+      const absent: StaffAttRow[] = [];
+
+      for (const s of staffList) {
+        const att = attMap.get(s.staff_record_id) ?? null;
+        if (att?.first_arrived_at) {
+          const arrTime = new Date(att.first_arrived_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+          present.push({ staff_record_id: s.staff_record_id, legal_name: s.legal_name, job_title: s.job_title, status: att.status, first_arrived_at: att.first_arrived_at, departed_at: att.departed_at, rank: null, punchStatus: arrTime > startTime ? "late" : "on_time" });
+        } else {
+          absent.push({ staff_record_id: s.staff_record_id, legal_name: s.legal_name, job_title: s.job_title, status: "absent", first_arrived_at: null, departed_at: null, rank: null, punchStatus: "absent" });
+        }
+      }
+
+      present.sort((a, b) => (a.first_arrived_at ?? "").localeCompare(b.first_arrived_at ?? ""));
+      present.forEach((r, i) => { r.rank = i + 1; });
+      setStaffAttRows([...present, ...absent]);
+    } catch { /* ignore */ }
+    finally { setLoading(false); }
+  }, [schoolId, date]);
+
   useEffect(() => {
     if (authLoading) return;
-    if (view === "attendance")  loadAttendance();
-    else if (view === "discipline") loadDiscipline();
-    else if (view === "health") loadHealth();
-    else if (view === "gate")   loadGate();
-    else if (view === "canteen") loadCanteen();
-    else if (view === "material") loadMaterials();
-  }, [view, authLoading, date, loadAttendance, loadDiscipline, loadHealth, loadGate, loadCanteen, loadMaterials]);
+    if (view === "attendance")       loadAttendance();
+    else if (view === "discipline")  loadDiscipline();
+    else if (view === "health")      loadHealth();
+    else if (view === "gate")        loadGate();
+    else if (view === "canteen")     loadCanteen();
+    else if (view === "material")    loadMaterials();
+    else if (view === "staff_attendance") loadStaffAtt();
+  }, [view, authLoading, date, loadAttendance, loadDiscipline, loadHealth, loadGate, loadCanteen, loadMaterials, loadStaffAtt]);
 
   const viewTitle: Record<View, string> = {
     home: "Reports",
@@ -239,6 +293,7 @@ export default function ReportsPage() {
     gate: "Gate Report",
     canteen: "Canteen Report",
     material: "Materials Report",
+    staff_attendance: "Staff Attendance Report",
   };
 
   // Canteen totals
@@ -322,6 +377,15 @@ export default function ReportsPage() {
               </div>
               <p className="text-sm font-semibold text-gray-700">Health</p>
               <p className="text-xs text-gray-400 mt-0.5">Health incidents by date</p>
+            </button>
+
+            <button onClick={() => setView("staff_attendance")}
+              className="bg-white rounded-2xl p-4 shadow-sm hover:shadow-md transition text-left">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3 bg-indigo-50">
+                <UserCheck size={20} className="text-indigo-600" />
+              </div>
+              <p className="text-sm font-semibold text-gray-700">Staff Attendance</p>
+              <p className="text-xs text-gray-400 mt-0.5">Staff arrival &amp; departure log</p>
             </button>
           </div>
         )}
@@ -666,6 +730,74 @@ export default function ReportsPage() {
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          )
+        )}
+
+        {/* ── Staff Attendance ── */}
+        {view === "staff_attendance" && (
+          loading ? (
+            <div className="flex justify-center py-16"><Loader2 size={22} className="animate-spin text-gray-300" /></div>
+          ) : staffAttRows.length === 0 ? (
+            <div className="flex flex-col items-center py-16 text-gray-300">
+              <UserCheck size={32} className="mb-2" />
+              <p className="text-sm">No staff data for this date</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {/* Summary */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-white rounded-2xl p-3 text-center shadow-sm">
+                  <p className="text-lg font-bold text-green-600">{staffAttRows.filter(r => r.punchStatus !== "absent").length}</p>
+                  <p className="text-[10px] text-gray-400">Present</p>
+                </div>
+                <div className="bg-white rounded-2xl p-3 text-center shadow-sm">
+                  <p className="text-lg font-bold text-amber-500">{staffAttRows.filter(r => r.punchStatus === "late").length}</p>
+                  <p className="text-[10px] text-gray-400">Late</p>
+                </div>
+                <div className="bg-white rounded-2xl p-3 text-center shadow-sm">
+                  <p className="text-lg font-bold text-red-500">{staffAttRows.filter(r => r.punchStatus === "absent").length}</p>
+                  <p className="text-[10px] text-gray-400">Absent</p>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                {staffAttRows.map((r, idx) => (
+                  <div key={r.staff_record_id}
+                    className={`flex items-center gap-3 px-4 py-3 ${idx < staffAttRows.length - 1 ? "border-b border-gray-50" : ""} ${r.punchStatus === "absent" ? "opacity-55" : ""}`}>
+                    <div className="w-7 text-center shrink-0">
+                      {r.rank ? (
+                        <span className="text-xs font-bold text-gray-400">#{r.rank}</span>
+                      ) : (
+                        <XCircle size={14} className="text-red-300 mx-auto" />
+                      )}
+                    </div>
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+                      style={{ background: `hsl(${(r.legal_name.charCodeAt(0) * 37) % 360}, 55%, 55%)` }}>
+                      {r.legal_name.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-gray-800 truncate">{r.legal_name}</p>
+                      <p className="text-[10px] text-gray-400 truncate">{r.job_title}</p>
+                    </div>
+                    <div className="text-right shrink-0 space-y-0.5">
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${r.punchStatus === "on_time" ? "bg-green-100 text-green-700" : r.punchStatus === "late" ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-600"}`}>
+                        {r.punchStatus === "on_time" ? "On Time" : r.punchStatus === "late" ? "Late" : "Absent"}
+                      </span>
+                      {r.first_arrived_at && (
+                        <div className="flex items-center justify-end gap-1 text-[10px] text-green-600">
+                          <LogIn size={9} /> {fmtTime(r.first_arrived_at)}
+                        </div>
+                      )}
+                      {r.departed_at && (
+                        <div className="flex items-center justify-end gap-1 text-[10px] text-blue-500">
+                          <LogOut size={9} /> {fmtTime(r.departed_at)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )

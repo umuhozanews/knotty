@@ -160,7 +160,22 @@ function IssueCardModal({
       }
       onClose();
     } catch (err: any) {
-      setError(err instanceof Error ? err.message : "Card issuance failed");
+      const raw = err instanceof Error ? err.message : "Card issuance failed";
+      let msg = raw;
+      if (raw.includes("duplicate key") || raw.includes("unique constraint") || raw.toLowerCase().includes("already assigned")) {
+        msg = "This NFC card is already assigned to someone else. Please use a different card.";
+      } else if (raw === "forbidden" || raw.includes("permission required") || raw.includes("cards.issue")) {
+        msg = "You don't have permission to issue cards for this school.";
+      } else if (raw === "invalid_session" || raw.includes("session expired") || raw.includes("JWT")) {
+        msg = "Your session has expired. Please refresh the page and try again.";
+      } else if (raw === "invalid_card_request") {
+        msg = "Invalid card request. Please check the student or staff selection and NFC UID.";
+      } else if (raw.includes("active student") || raw.includes("enrolled student")) {
+        msg = "This student's account is not active. Ask them to activate their account first, or use 'Activate' in the Students page.";
+      } else if (raw.includes("active staff")) {
+        msg = "This staff member is not active. Please check their employment status.";
+      }
+      setError(msg);
     } finally {
       setLoading(false);
     }

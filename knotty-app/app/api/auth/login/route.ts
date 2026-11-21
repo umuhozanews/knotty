@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
 
   const serviceRoleKey = clean(process.env.SUPABASE_SERVICE_ROLE_KEY || "");
   const supabaseUrl = clean(process.env.NEXT_PUBLIC_SUPABASE_URL || "");
-  const supabaseAnonKey = clean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "");
+  const supabaseAnonKey = clean(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "");
 
   if (!serviceRoleKey || !supabaseUrl || !supabaseAnonKey) {
     return NextResponse.json({ error: "Server configuration error" }, { status: 500 });

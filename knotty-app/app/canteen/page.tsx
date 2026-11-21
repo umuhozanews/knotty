@@ -3,7 +3,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import {
   Plus, Minus, ShoppingCart, CreditCard, Trash2,
   Wifi, WifiOff, CheckCircle, Loader2, X, Search, ReceiptText, Upload,
-  ShieldCheck, Zap, AlertTriangle, UserCheck, PackagePlus, Utensils,
+  PackagePlus, Utensils,
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import VirtualCardTap from "@/components/VirtualCardTap";
@@ -11,7 +11,7 @@ import { supabaseCanteenService, CardHolderResult, CanteenTransactionRow } from 
 import { useNFC } from "@/hooks/useNFC";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
-import { isManagementRole } from "@/lib/roles";
+import { isFinanceRole } from "@/lib/roles";
 
 type ScannedCardLocal = {
   card_number: string;
@@ -129,24 +129,6 @@ function resolveImgUrl(url: string | null | undefined): string | null {
   return url;
 }
 
-const DEFAULT_MENU_ITEMS: MenuItem[] = [
-  { id: "amandazi",    name: "Amandazi",      price: 200,  img: "/canteen/amandazi.png",   cat: "Snacks", stock_qty: null },
-  { id: "sambusa",     name: "Sambusa",        price: 300,  img: "/canteen/sambusa.png",    cat: "Snacks", stock_qty: null },
-  { id: "egg",         name: "Boiled Egg",     price: 200,  img: "/canteen/egg.png",        cat: "Snacks", stock_qty: null },
-  { id: "maria",       name: "Bolacha Maria",  price: 300,  img: "/canteen/maria.png",      cat: "Snacks", stock_qty: null },
-  { id: "inyange",     name: "Inyange Juice",  price: 500,  img: "/canteen/inyange.png",    cat: "Drinks", stock_qty: null },
-  { id: "fanta",       name: "Fanta",          price: 600,  img: "/canteen/fanta.png",      cat: "Drinks", stock_qty: null },
-  { id: "milk",        name: "Milk",           price: 400,  img: "/canteen/milk.png",       cat: "Drinks", stock_qty: null },
-  { id: "water",       name: "Water",          price: 200,  img: "/canteen/water.png",      cat: "Drinks", stock_qty: null },
-  { id: "rice_beans",  name: "Rice & Beans",   price: 1500, img: "/canteen/rice_beans.png", cat: "Meals",  stock_qty: null },
-  { id: "rice_meat",   name: "Rice & Meat",    price: 2000, img: "/canteen/rice_meat.png",  cat: "Meals",  stock_qty: null },
-  { id: "porridge",    name: "Porridge",       price: 500,  img: "/canteen/porridge.png",   cat: "Meals",  stock_qty: null },
-  { id: "embe",        name: "Embe (Mango)",   price: 300,  img: "/canteen/embe.png",       cat: "Fruits", stock_qty: null },
-  { id: "banana",      name: "Banana",         price: 150,  img: "/canteen/banana.png",     cat: "Fruits", stock_qty: null },
-  { id: "avocado",     name: "Avocado",        price: 300,  img: "/canteen/avocado.png",    cat: "Fruits", stock_qty: null },
-  { id: "chapati",     name: "Chapati",        price: 300,  img: "/canteen/chapati.png",    cat: "Bread",  stock_qty: null },
-  { id: "mandazi_big", name: "Mandazi (Big)",  price: 300,  img: "/canteen/amandazi.png",   cat: "Bread",  stock_qty: null },
-];
 type CartMap = Record<string, number>;
 type PayResult = { student: ScannedCardLocal["student"]; total: number; new_balance: number };
 
@@ -412,7 +394,6 @@ export default function CanteenPage() {
   const [search, setSearch] = useState("");
   const [failedImgs, setFailedImgs] = useState<Record<string, boolean>>({});
 
-  // Each school manages their own menu — no shared default items
   const allMenu: MenuItem[] = apiProducts;
 
   const visible = allMenu.filter((m) => {
@@ -439,22 +420,18 @@ export default function CanteenPage() {
   }
   function clearCart() {
     setCart({}); setCardInput(""); setPayResult(null); setShowCart(false);
-    if (listening) stopListen();
+    stopListen();
   }
 
   /* ── Cart panel toggle (mobile) ────────────────────────────── */
   const [showCart, setShowCart] = useState(false);
 
   /* ── Payment ───────────────────────────────────────────────── */
-  const [paying, setPaying]       = useState(false);
   const [cardInput, setCardInput] = useState("");
   const [scanLoading, setScanLoading] = useState(false);
   const [payResult, setPayResult] = useState<PayResult | null>(null);
-  const [scannedCard, setScannedCard] = useState<ScannedCardLocal | null>(null);
-  const [fastMode, setFastMode] = useState(false);
-  const [submittingPayment, setSubmittingPayment] = useState(false);
-  const [studentPhotoError, setStudentPhotoError] = useState(false);
   const [payPhotoError, setPayPhotoError] = useState(false);
+  const [submittingPayment, setSubmittingPayment] = useState(false);
   const processingRef = useRef(false);
 
   async function executePurchase(card: ScannedCardLocal) {
@@ -466,9 +443,8 @@ export default function CanteenPage() {
       playAudioTone("success");
       setPayPhotoError(false);
       setPayResult({ student: card.student, total, new_balance: res.new_balance });
-      setScannedCard(null);
       setCart({});
-      setPaying(false);
+      stopListen();
       loadReport();
       toast(`Paid ${total.toLocaleString()} RWF · Balance: ${res.new_balance.toLocaleString()} RWF`, "success");
     } catch (err) {
@@ -501,14 +477,7 @@ export default function CanteenPage() {
         processingRef.current = false;
         return;
       }
-      stopListen();
-      const scanned = toScannedCard(holder);
-      if (fastMode) {
-        await executePurchase(scanned);
-      } else {
-        setStudentPhotoError(false);
-        setScannedCard(scanned);
-      }
+      await executePurchase(toScannedCard(holder));
     } catch (err) {
       playAudioTone("error");
       toast(err instanceof Error ? err.message : "Card scan failed", "error");
@@ -522,30 +491,20 @@ export default function CanteenPage() {
   const payHandlerRef = useRef(handlePayment);
   useEffect(() => {
     payHandlerRef.current = handlePayment;
-  }, [handlePayment]);
+  }); // no deps — always keep latest closure
 
-  // Stop NFC on unmount so the listener doesn't fire on other pages
-  useEffect(() => () => stopListen(), []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  function startPaying() {
-    if (total === 0) return;
-    setPaying(true); setPayResult(null); setScannedCard(null);
-    if (isSupported) {
-      // Use payHandlerRef so the NFC callback always sees the up-to-date cart/total
+  // Auto-start NFC when items are in the cart
+  useEffect(() => {
+    if (cartCount > 0 && !payResult && isSupported && !listening && !processingRef.current) {
       startListen((result) => {
         if (result.type === "uid") payHandlerRef.current(result.value, true);
         else payHandlerRef.current(result.value, false);
       });
     }
-  }
+  }, [cartCount, payResult, listening, isSupported]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function cancelPay() {
-    setPaying(false);
-    setCardInput("");
-    setScannedCard(null);
-    processingRef.current = false;
-    if (listening) stopListen();
-  }
+  // Stop NFC on unmount
+  useEffect(() => () => stopListen(), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Daily report ──────────────────────────────────────────── */
   const [report, setReport] = useState<{
@@ -600,114 +559,16 @@ export default function CanteenPage() {
         />
       )}
 
-      {/* ── Student Verification Modal ── */}
-      {scannedCard && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-orange-600">
-                <ShieldCheck size={16} />
-                <span>Verify Student Identity</span>
-              </div>
-              <button
-                onClick={() => { setScannedCard(null); processingRef.current = false; }}
-                className="text-gray-400 hover:text-gray-600 p-1"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="flex flex-col items-center text-center pt-1">
-              <div className="relative mb-3">
-                {scannedCard.student.photo && !studentPhotoError ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={resolveImgUrl(scannedCard.student.photo)!}
-                    alt={scannedCard.student.name}
-                    className="w-24 h-24 rounded-full object-cover border-4 border-orange-100 shadow-md"
-                    onError={() => setStudentPhotoError(true)}
-                  />
-                ) : (
-                  <div className="w-24 h-24 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-2xl font-bold border-4 border-orange-50 shadow-md">
-                    {scannedCard.student.name.slice(0, 2).toUpperCase()}
-                  </div>
-                )}
-                <span className="absolute bottom-0 right-0 w-6 h-6 bg-green-500 rounded-full border-2 border-white flex items-center justify-center text-white text-[10px]">
-                  ✓
-                </span>
-              </div>
-
-              <h4 className="font-bold text-gray-900 text-base">{scannedCard.student.name}</h4>
-              <p className="text-xs text-gray-500 font-medium">{scannedCard.student.class} · {scannedCard.student.student_code}</p>
-            </div>
-
-            <div className="rounded-2xl p-3.5 space-y-2 bg-gray-50 text-xs">
-              <div className="flex justify-between items-center text-gray-500">
-                <span>Current Balance</span>
-                <span className="font-semibold text-gray-700">{scannedCard.wallet_balance.toLocaleString()} RWF</span>
-              </div>
-              <div className="flex justify-between items-center text-orange-600 font-bold">
-                <span>Charge Amount</span>
-                <span>-{total.toLocaleString()} RWF</span>
-              </div>
-              <div className="border-t border-gray-200 pt-1.5 flex justify-between items-center">
-                <span className="font-medium text-gray-600">Balance After</span>
-                <span className="font-bold text-green-700">{(scannedCard.wallet_balance - total).toLocaleString()} RWF</span>
-              </div>
-              {scannedCard.daily_limit && (
-                <div className="border-t border-gray-200 pt-1.5 flex justify-between items-center text-[11px] text-amber-700">
-                  <span>Daily Limit</span>
-                  <span>{scannedCard.daily_limit.toLocaleString()} RWF</span>
-                </div>
-              )}
-            </div>
-
-            <div className="flex gap-2 pt-1">
-              <button
-                onClick={() => { setScannedCard(null); processingRef.current = false; }}
-                disabled={submittingPayment}
-                className="flex-1 py-3 rounded-xl text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => executePurchase(scannedCard)}
-                disabled={submittingPayment}
-                className="flex-2 py-3 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-1.5 transition shadow-sm"
-                style={{ background: "#16A34A" }}
-              >
-                {submittingPayment ? <Loader2 size={14} className="animate-spin" /> : <UserCheck size={14} />}
-                {submittingPayment ? "Processing..." : `Charge ${total.toLocaleString()} RWF`}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="h-full flex flex-col overflow-hidden">
 
         {/* ── Top bar ─────────────────────────────────────────── */}
         <div className="flex items-center gap-3 px-3 md:px-4 pt-1 pb-3 flex-shrink-0">
           <div className="flex-1">
             <h1 className="text-lg font-bold" style={{ color: "#121212" }}>Canteen POS</h1>
-            <p className="text-xs" style={{ color: "#666666" }}>Select items → student taps to pay</p>
+            <p className="text-xs" style={{ color: "#666666" }}>Select items → student taps card to pay</p>
           </div>
 
-          {/* Fast Tap vs Verify Photo toggle */}
-          <button
-            onClick={() => setFastMode((v) => !v)}
-            title={fastMode ? "Fast Mode: Instant charge on tap" : "Verify Mode: Cashier verifies student photo before charge"}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition border ${
-              fastMode
-                ? "bg-amber-50 border-amber-300 text-amber-700"
-                : "bg-emerald-50 border-emerald-300 text-emerald-700"
-            }`}
-          >
-            {fastMode ? <Zap size={13} className="text-amber-600" /> : <ShieldCheck size={13} className="text-emerald-600" />}
-            <span>{fastMode ? "Fast Tap" : "Verify Photo"}</span>
-          </button>
-
-          {(isManagementRole(user?.role) || user?.role === "CANTEEN") && (
+          {(isFinanceRole(user?.role) || user?.role === "CANTEEN") && (
             <button
               onClick={() => setShowAddProduct(true)}
               className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white"
@@ -793,7 +654,7 @@ export default function CanteenPage() {
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-4 gap-2.5">
                 {visible.map((item) => {
                   const qty = cart[item.id] ?? 0;
-                  const isAdmin = isManagementRole(user?.role) || user?.role === "CANTEEN";
+                  const isAdmin = isFinanceRole(user?.role) || user?.role === "CANTEEN";
                   return (
                     <div
                       key={item.id}
@@ -890,7 +751,7 @@ export default function CanteenPage() {
                 })}
 
                 {/* Add product card (admin/canteen only) */}
-                {(isManagementRole(user?.role) || user?.role === "CANTEEN") && (
+                {(isFinanceRole(user?.role) || user?.role === "CANTEEN") && (
                   <button
                     onClick={() => setShowAddProduct(true)}
                     className="bg-white rounded-2xl p-3 flex flex-col items-center justify-center gap-2 border-2 border-dashed hover:border-orange-300 transition min-h-[120px]"
@@ -1041,20 +902,9 @@ export default function CanteenPage() {
                     </span>
                   </div>
 
-                  {/* Payment UI */}
-                  {!paying ? (
-                    <button
-                      onClick={startPaying}
-                      disabled={cartItems.length === 0}
-                      className="w-full py-3.5 rounded-2xl font-bold text-sm text-white flex items-center justify-center gap-2 disabled:opacity-40 transition"
-                      style={{ background: "#16A34A" }}
-                    >
-                      <CreditCard size={16} />
-                      Student Tap to Pay
-                    </button>
-                  ) : (
+                  {cartItems.length > 0 ? (
                     <div className="space-y-2">
-                      {/* NFC waiting indicator */}
+                      {/* NFC tap indicator */}
                       <div
                         className="rounded-2xl p-3 flex flex-col items-center gap-2 border-2 border-dashed"
                         style={{ borderColor: "#16A34A", background: "#DCFCE7" }}
@@ -1068,22 +918,22 @@ export default function CanteenPage() {
                               <Wifi size={20} className="text-white" />
                             </div>
                             <p className="text-xs font-bold text-center" style={{ color: "#16A34A" }}>
-                              Waiting for card tap…
+                              Tap card to pay
                             </p>
                             <p className="text-[11px] text-center text-gray-400">
-                              Student bring phone or NFC card close to this device
+                              Student tap phone or NFC card here
                             </p>
                             {scanLoading && <Loader2 size={16} className="animate-spin" style={{ color: "#16A34A" } as React.CSSProperties} />}
                           </>
                         ) : (
                           <>
                             <WifiOff size={20} style={{ color: "#999" }} />
-                            <p className="text-xs text-gray-400 text-center">NFC not available — use card number</p>
+                            <p className="text-xs text-gray-400 text-center">NFC not available — enter card number below</p>
                           </>
                         )}
                       </div>
 
-                      {/* Manual entry + virtual tap */}
+                      {/* Manual card entry fallback */}
                       <div className="flex gap-1.5">
                         <input
                           value={cardInput}
@@ -1105,12 +955,17 @@ export default function CanteenPage() {
                       <div className="flex gap-1.5">
                         <VirtualCardTap onTap={(cn) => handlePayment(cn)} busy={scanLoading} />
                         <button
-                          onClick={cancelPay}
+                          onClick={clearCart}
                           className="flex-1 py-2 rounded-xl text-xs font-medium text-gray-500 bg-gray-100 hover:bg-gray-200 transition"
                         >
-                          Cancel
+                          Clear
                         </button>
                       </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center gap-2 py-3 rounded-2xl text-xs font-semibold text-gray-300" style={{ background: "#F5F5F5" }}>
+                      <CreditCard size={15} />
+                      <span>Add items to start</span>
                     </div>
                   )}
                 </div>

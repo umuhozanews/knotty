@@ -604,7 +604,12 @@ export default function StudentProfilePage() {
         show("IshuriHUB Card issued successfully", "success");
       }
       await loadProfile();
-    } catch (err) { show(err instanceof Error ? err.message : "Error", "error"); }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Error";
+      show(msg.includes("identifier_global_unique") || msg.includes("duplicate key")
+        ? "This QR token is already in use. Try issuing the card again."
+        : msg, "error");
+    }
   }
 
   async function assignNFC() {
@@ -642,7 +647,10 @@ export default function StudentProfilePage() {
       setNfcError(null);
       await loadProfile();
     } catch (err) {
-      setNfcError(err instanceof Error ? err.message : "Failed to link NFC card");
+      const msg = err instanceof Error ? err.message : "Failed to link NFC card";
+      setNfcError(msg.includes("identifier_global_unique") || msg.includes("duplicate key")
+        ? `NFC card ${nfcUid} is already assigned to someone else. Use a different physical card.`
+        : msg);
     }
   }
 

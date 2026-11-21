@@ -693,7 +693,12 @@ function IssueStaffCardModal({
       onSuccess();
       onClose();
     } catch (err: any) {
-      setError(err?.message || "Failed to issue staff card");
+      const msg: string = err?.message || "";
+      if (msg.includes("card_identifiers_identifier_global_unique") || msg.includes("duplicate key value")) {
+        setError(`NFC card ${uid} is already assigned to someone else. Tap a different physical card.`);
+      } else {
+        setError(msg || "Failed to issue staff card");
+      }
     } finally {
       setLoading(false);
     }

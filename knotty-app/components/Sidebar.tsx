@@ -23,8 +23,9 @@ const ALL_NAV = [
   { icon: Building2,       label: "Schools Hub",   href: "/schools",        roles: ["ADMIN"] },
 
   // ── Attendance — teacher and discipline mark it ──
-  { icon: ClipboardCheck,  label: "Attendance",    href: "/attendance",     roles: ["ADMIN","TEACHER","DISCIPLINE"] },
-  { icon: ClipboardList,   label: "Class Register",href: "/class-attendance",roles: ["ADMIN","TEACHER","DISCIPLINE"] },
+  { icon: ClipboardCheck,  label: "Attendance",    href: "/attendance",          roles: ["ADMIN","TEACHER","DISCIPLINE"] },
+  { icon: ClipboardList,   label: "Class Register",href: "/class-attendance",    roles: ["ADMIN","TEACHER","DISCIPLINE"] },
+  { icon: UserCheck,       label: "Staff Attendance", href: "/attendance/staff", roles: ["ADMIN","TEACHER","DISCIPLINE"] },
 
   // ── Library — librarian manages; admin oversees ──
   { icon: Library,         label: "Library",       href: "/library",        roles: ["ADMIN","LIBRARIAN"] },
@@ -38,8 +39,8 @@ const ALL_NAV = [
   // ── Cards — bursar issues/manages cards ──
   { icon: CreditCard,      label: "Cards",         href: "/cards",          roles: ["ADMIN","BURSAR"] },
 
-  // ── Canteen — canteen staff ──
-  { icon: ShoppingCart,    label: "Canteen",       href: "/canteen",        roles: ["ADMIN","CANTEEN"] },
+  // ── Canteen — canteen staff and bursar ──
+  { icon: ShoppingCart,    label: "Canteen",       href: "/canteen",        roles: ["ADMIN","CANTEEN","BURSAR"] },
 
   // ── Fees — bursar + student/parent (self-service) ──
   { icon: Banknote,        label: "Fees",          href: "/fees",           roles: ["ADMIN","BURSAR","STUDENT","PARENT"] },

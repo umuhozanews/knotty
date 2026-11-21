@@ -42,6 +42,7 @@ interface AuthContextValue {
 
 export function getDashboardPath(role: string): string {
   switch (role) {
+    case "PLATFORM_ADMIN": return "/platform";
     case "STUDENT":    return "/my-dashboard";
     case "PARENT":     return "/my-dashboard";
     case "LIBRARIAN":  return "/library";
@@ -151,6 +152,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         localStorage.setItem("ishuri_token", session.access_token);
         if (session.refresh_token) localStorage.setItem("ishuri_refresh", session.refresh_token);
+
+        // Platform admin check FIRST — takes priority over any school membership
+        const { data: platformAdmin } = await client
+          .from("platform_admins" as any)
+          .select("id, email, full_name, is_active")
+          .eq("auth_user_id", session.user.id)
+          .eq("is_active", true)
+          .maybeSingle();
+
+        if (platformAdmin) {
+          const paMeta = platformAdmin as any;
+          const paFirstName = paMeta.full_name?.split(" ")[0] || "Admin";
+          const paLastName = paMeta.full_name?.split(" ").slice(1).join(" ") || "";
+
+          // Check if platform admin has entered a specific school
+          let enteredSchoolId = "";
+          try { enteredSchoolId = localStorage.getItem("ishuri_platform_entered_school") || ""; } catch {}
+
+          if (enteredSchoolId) {
+            // Impersonate ADMIN of the entered school
+            const paUser: User = {
+              id: session.user.id,
+              role: "ADMIN",
+              school_id: enteredSchoolId,
+              first_name: paFirstName,
+              last_name: paLastName,
+              email: session.user.email || paMeta.email || "",
+              profile_photo: null,
+            };
+            localStorage.setItem("ishuri_user", JSON.stringify(paUser));
+            setUser(paUser);
+            fetchSchools(enteredSchoolId);
+            setLoading(false);
+            return paUser;
+          }
+
+          const paUser: User = {
+            id: session.user.id,
+            role: "PLATFORM_ADMIN",
+            school_id: "",
+            first_name: paFirstName,
+            last_name: paLastName,
+            email: session.user.email || paMeta.email || "",
+            profile_photo: null,
+          };
+          localStorage.setItem("ishuri_user", JSON.stringify(paUser));
+          setUser(paUser);
+          fetchSchools();
+          setLoading(false);
+          return paUser;
+        }
 
         const { data: personData } = await client
           .from("persons")
@@ -277,13 +329,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const client = getSafeBrowserClient();
     if (!client) throw new Error("Failed to initialize auth client.");
 
-    const { data, error: supaErr } = await client.auth.signInWithPassword({ email: normEmail, password });
-    if (supaErr || !data?.user) throw new Error("Invalid email or password. Please check your credentials.");
+    // Try direct sign-in first (works for admins, platform admins, legacy users)
+    const { data: directData, error: supaErr } = await client.auth.signInWithPassword({ email: normEmail, password });
+
+    let authUser = directData?.user ?? null;
+    let authSession = directData?.session ?? null;
+
+    // Fallback: students/staff have school-scoped synthetic auth emails.
+    // If direct sign-in fails, look up their auth_user_id via real contact email.
+    if (supaErr || !authUser) {
+      try {
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: normEmail, password }),
+        });
+        if (res.ok) {
+          const { access_token, refresh_token } = await res.json();
+          const { data: setData } = await client.auth.setSession({ access_token, refresh_token });
+          if (setData?.user) {
+            authUser = setData.user;
+            authSession = setData.session;
+          }
+        }
+      } catch { /* ignore network errors */ }
+    }
+
+    if (!authUser) throw new Error("Invalid email or password. Please check your credentials.");
+
+    // Platform admin check FIRST — takes priority over any school membership
+    const { data: platformAdmin } = await client
+      .from("platform_admins" as any)
+      .select("id, email, full_name, is_active")
+      .eq("auth_user_id", authUser.id)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (platformAdmin) {
+      const paUser: User = {
+        id: authUser.id,
+        role: "PLATFORM_ADMIN",
+        school_id: "",
+        first_name: (platformAdmin as any).full_name?.split(" ")[0] || "Admin",
+        last_name: (platformAdmin as any).full_name?.split(" ").slice(1).join(" ") || "",
+        email: normEmail,
+        profile_photo: null,
+      };
+      localStorage.setItem("ishuri_user", JSON.stringify(paUser));
+      if (authSession?.access_token) localStorage.setItem("ishuri_token", authSession.access_token);
+      if (authSession?.refresh_token) localStorage.setItem("ishuri_refresh", authSession.refresh_token);
+      setUser(paUser);
+      fetchSchools();
+      return "PLATFORM_ADMIN";
+    }
 
     const { data: personData } = await client
       .from("persons")
       .select("id, status")
-      .eq("auth_user_id", data.user.id)
+      .eq("auth_user_id", authUser.id)
       .maybeSingle();
 
     let role = "";
@@ -330,22 +433,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error("Your account is not configured for any school. Please contact your administrator.");
     }
 
-    const userMeta = (data.user.user_metadata || {}) as Record<string, unknown>;
+    const userMeta = (authUser.user_metadata || {}) as Record<string, unknown>;
     const mustChangePassword = userMeta.must_change_password === true;
 
     const loggedUser: User = {
-      id: data.user.id,
+      id: authUser.id,
       role,
       school_id: targetSchoolId,
-      first_name: (userMeta.first_name as string) || data.user.email?.split("@")[0] || "User",
+      first_name: (userMeta.first_name as string) || normEmail.split("@")[0] || "User",
       last_name: (userMeta.last_name as string) || "",
-      email: data.user.email || normEmail,
+      email: normEmail,
       profile_photo: null,
     };
 
     localStorage.setItem("ishuri_user", JSON.stringify(loggedUser));
-    if (data.session?.access_token) localStorage.setItem("ishuri_token", data.session.access_token);
-    if (data.session?.refresh_token) localStorage.setItem("ishuri_refresh", data.session.refresh_token);
+    if (authSession?.access_token) localStorage.setItem("ishuri_token", authSession.access_token);
+    if (authSession?.refresh_token) localStorage.setItem("ishuri_refresh", authSession.refresh_token);
     setUser(loggedUser);
     fetchSchools(targetSchoolId);
 
@@ -353,7 +456,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (targetSchoolId) {
       void Promise.resolve(client.rpc("log_staff_session" as never, {
         p_school_id: targetSchoolId,
-        p_auth_user_id: data.user.id,
+        p_auth_user_id: authUser.id,
         p_event_type: "login",
       } as never)).catch(() => {});
     }
@@ -392,12 +495,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (data) {
       const school = buildSchoolItem(data);
-      const updatedUser = { ...user, school_id: schoolId };
-      setUser(updatedUser);
-      setActiveSchool(school);
-      setSchoolsList([school]);
       try {
-        localStorage.setItem("ishuri_user", JSON.stringify(updatedUser));
+        // If platform admin is entering a school, store the flag so auth respects it on reload
+        if (user.role === "PLATFORM_ADMIN") {
+          localStorage.setItem("ishuri_platform_entered_school", schoolId);
+        }
         localStorage.setItem("ishuri_active_school", JSON.stringify(school));
       } catch {}
       window.location.reload();
@@ -416,7 +518,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     if (isSupabaseConfigured()) getSafeBrowserClient()?.auth.signOut().catch(() => {});
     ["ishuri_token", "ishuri_refresh", "ishuri_user", "ishuri_active_school", "ishuri_demo",
-     "ishuri_demo_user", "knotty_token", "knotty_refresh", "knotty_demo", "knotty_demo_user"]
+     "ishuri_demo_user", "knotty_token", "knotty_refresh", "knotty_demo", "knotty_demo_user",
+     "ishuri_platform_entered_school"]
       .forEach(k => { try { localStorage.removeItem(k); } catch {} });
     setUser(null);
     setActiveSchool(null);

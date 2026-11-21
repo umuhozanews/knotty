@@ -28,6 +28,7 @@ type LocalWorkerItem = {
   is_active: boolean;
   status: string;
   card_number?: string | null;
+  card_id?: string | null;
   has_card?: boolean;
 };
 
@@ -670,15 +671,25 @@ function IssueStaffCardModal({
 
     setLoading(true);
     try {
-      await supabaseCardService.issueCard({
-        schoolId,
-        holderKind: "staff",
-        staffRecordId: worker.id,
-        identifierKind: "nfc_uid",
-        identifier: uid,
-      });
-
-      show(`Card ${uid} issued to ${worker.full_name}`, "success");
+      if (worker.has_card && worker.card_id) {
+        await supabaseCardService.replaceCard({
+          schoolId,
+          oldCardAssignmentId: worker.card_id,
+          identifierKind: "nfc_uid",
+          identifier: uid,
+          reason: "Card replaced by admin",
+        });
+        show(`Card replaced for ${worker.full_name}`, "success");
+      } else {
+        await supabaseCardService.issueCard({
+          schoolId,
+          holderKind: "staff",
+          staffRecordId: worker.id,
+          identifierKind: "nfc_uid",
+          identifier: uid,
+        });
+        show(`Card issued to ${worker.full_name}`, "success");
+      }
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -939,12 +950,12 @@ export default function WorkersPage() {
     setLoading(true);
     try {
       const rows = await supabaseStaffService.listStaffMembers(schoolId) as any[];
-      let cardMap: Record<string, string> = {};
+      let cardMap: Record<string, { number: string; id: string }> = {};
       try {
         const cards = await supabaseCardService.listSchoolCards(schoolId);
         (cards || []).forEach((c: any) => {
           if (c.holder_kind === "staff" && c.staff_record_id && (c.status === "active" || c.status === "issued")) {
-            cardMap[c.staff_record_id] = c.card_number || "Active";
+            cardMap[c.staff_record_id] = { number: c.card_number || "Active", id: c.id };
           }
         });
       } catch { /* ignore */ }
@@ -972,7 +983,8 @@ export default function WorkersPage() {
           employee_code: r.staff_number ?? "",
           is_active: r.employment_status === "active",
           status: r.employment_status ?? "",
-          card_number: cardMap[r.staff_record_id] || null,
+          card_number: cardMap[r.staff_record_id]?.number || null,
+          card_id: cardMap[r.staff_record_id]?.id || null,
           has_card: !!cardMap[r.staff_record_id],
         };
       });

@@ -39,9 +39,10 @@ export async function POST(req: NextRequest) {
   const rawContact = clean(contact);
   const rawPassword = password ? clean(password) : "Ishuri@2024";
   const cleanAdmission = clean(admission_number);
-  const email = contact_type === "email"
-    ? rawContact
-    : `${cleanAdmission.toLowerCase().replace(/\s+/g, "")}@ishurihub.school`;
+  // Always use a school-scoped synthetic auth email so the same real email
+  // can be registered at multiple schools without colliding in auth.users.
+  // The real contact is stored separately via the register_student_from_edge RPC.
+  const email = `s.${cleanAdmission.toLowerCase().replace(/[^a-z0-9]/g, "")}.${school_id.slice(-8)}@students.ishurihub.school`;
 
   // 1. Create auth user for the student
   const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({

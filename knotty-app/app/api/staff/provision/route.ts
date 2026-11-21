@@ -67,9 +67,14 @@ export async function POST(req: NextRequest) {
   const firstName = nameParts[0] ?? cleanName;
   const lastName = nameParts.slice(1).join(" ");
 
+  // Always use a school-scoped synthetic auth email so the same real email
+  // can be a staff member at multiple schools without colliding in auth.users.
+  const empNumClean = employeeNumber.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const syntheticEmail = `w.${empNumClean}.${school_id.slice(-8)}@staff.ishurihub.school`;
+
   // 1. Create auth user
   const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
-    email: cleanEmail,
+    email: syntheticEmail,
     password: cleanPassword,
     email_confirm: true,
     user_metadata: {
@@ -120,5 +125,5 @@ export async function POST(req: NextRequest) {
     } catch { /* non-critical */ }
   }
 
-  return NextResponse.json({ staff_id: staffId, email: cleanEmail, employee_number: employeeNumber });
+  return NextResponse.json({ staff_id: staffId, email: cleanEmail, synthetic_email: syntheticEmail, employee_number: employeeNumber });
 }

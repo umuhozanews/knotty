@@ -25,7 +25,7 @@ import type { FeeInvoiceRow } from "@/lib/supabase/services/feesService";
 import { getSafeBrowserClient } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
-import { isManagementRole } from "@/lib/roles";
+import { isManagementRole, isFinanceRole } from "@/lib/roles";
 
 type Tab = "overview" | "attendance" | "wallet" | "health" | "discipline" | "fees" | "canteen" | "consent";
 
@@ -56,6 +56,7 @@ type LocalCard = {
   is_frozen: boolean;
   is_active: boolean;
   status: string;
+  issued_at: string | null;
 };
 
 type LocalAttendance = {
@@ -357,6 +358,7 @@ function PayInvoiceModal({ studentId, schoolId, onClose, onSuccess }: { studentI
   );
 }
 
+// ─── Student ID Card ─────────────────────────────────────────────────────────
 // ─── Main Page ───────────────────────────────────────────────────────────────
 export default function StudentProfilePage() {
   const params = useParams<{ id: string }>();
@@ -408,14 +410,16 @@ export default function StudentProfilePage() {
       if (!row) { setLoading(false); return; }
 
       let walletBalance = 0;
+      let cardIssuedAt: string | null = null;
       if (row.card_assignment_id) {
         const { data: cardRow } = await client
           .from("card_assignments")
-          .select("wallet_balance")
+          .select("wallet_balance, created_at")
           .eq("id", row.card_assignment_id)
           .eq("school_id", schoolId)
           .maybeSingle();
         walletBalance = cardRow?.wallet_balance ?? 0;
+        cardIssuedAt = cardRow?.created_at ?? null;
       }
 
       const { data: attData } = await client
@@ -454,6 +458,7 @@ export default function StudentProfilePage() {
           is_frozen: row.card_status === "suspended",
           is_active: row.card_status === "active",
           status: row.card_status ?? "issued",
+          issued_at: cardIssuedAt,
         } : null,
         attendances: (attData ?? []).map((a: { id: string; attendance_date: string; status: string; first_arrived_at: string | null; departed_at: string | null }) => ({
           id: a.id,
@@ -579,14 +584,25 @@ export default function StudentProfilePage() {
       const qrToken = typeof crypto !== "undefined" && crypto.randomUUID
         ? crypto.randomUUID()
         : Math.random().toString(36).substring(2) + Date.now().toString(36);
-      await supabaseCardService.issueCard({
-        schoolId: user.school_id,
-        holderKind: "student",
-        studentId,
-        identifierKind: "qr_token",
-        identifier: qrToken,
-      });
-      show("IshuriHUB Card issued successfully", "success");
+      if (profile?.card?.id) {
+        await supabaseCardService.replaceCard({
+          schoolId: user.school_id,
+          oldCardAssignmentId: profile.card.id,
+          identifierKind: "qr_token",
+          identifier: qrToken,
+          reason: "Card re-issued by admin",
+        });
+        show("Card replaced successfully", "success");
+      } else {
+        await supabaseCardService.issueCard({
+          schoolId: user.school_id,
+          holderKind: "student",
+          studentId,
+          identifierKind: "qr_token",
+          identifier: qrToken,
+        });
+        show("IshuriHUB Card issued successfully", "success");
+      }
       await loadProfile();
     } catch (err) { show(err instanceof Error ? err.message : "Error", "error"); }
   }
@@ -903,7 +919,7 @@ export default function StudentProfilePage() {
                           }
                         </div>
                       )}
-                      {isManagementRole(user?.role) && (profile.card.status === "issued" || profile.card.status === "lost" || profile.card.status === "damaged") && (
+                      {isFinanceRole(user?.role) && (profile.card.status === "issued" || profile.card.status === "lost" || profile.card.status === "damaged") && (
                         <div className="pt-2">
                           <button onClick={assignNFC} disabled={nfcScanning}
                             className={`w-full py-2 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 transition disabled:opacity-70 ${nfcScanning ? "bg-[#121212] text-white animate-pulse" : "border border-[#dcd9d9] text-gray-600 hover:bg-gray-50"}`}>
@@ -925,7 +941,7 @@ export default function StudentProfilePage() {
                     <div className="text-center py-4">
                       <CreditCard size={28} className="text-gray-200 mx-auto mb-2" />
                       <p className="text-sm text-gray-400 mb-3">No card issued yet</p>
-                      {isManagementRole(user?.role) && (
+                      {isFinanceRole(user?.role) && (
                         <div className="flex flex-col gap-2 items-center">
                           <button onClick={assignNFC} disabled={nfcScanning}
                             className={`flex items-center gap-1.5 text-xs font-medium px-4 py-2 rounded-xl transition disabled:opacity-70 ${nfcScanning ? "bg-[#121212] text-white animate-pulse" : "bg-[#121212] text-white hover:bg-black"}`}>
@@ -1252,7 +1268,7 @@ export default function StudentProfilePage() {
           {/* CANTEEN */}
           {tab === "canteen" && (
             <div>
-              {profile.card && isManagementRole(user?.role) && (
+              {profile.card && isFinanceRole(user?.role) && (
                 <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-800 rounded-2xl p-4 mb-5">
                   <div className="flex items-center justify-between mb-3">
                     <div>

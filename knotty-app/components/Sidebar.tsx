@@ -51,6 +51,9 @@ const ALL_NAV = [
   // ── Gate — gatekeeper + discipline ──
   { icon: Shield,          label: "Gate",          href: "/gate",           roles: ["ADMIN","GATEKEEPER","DISCIPLINE"] },
 
+  // ── Permissions — exit passes, issued by teachers/discipline, verified anywhere ──
+  { icon: ClipboardCheck,  label: "Permissions",   href: "/permissions",    roles: ["ADMIN","TEACHER","DISCIPLINE","GATEKEEPER","NURSE"] },
+
   // ── Materials — materials staff ──
   { icon: Package,         label: "Materials",     href: "/materials",      roles: ["ADMIN","MATERIALS"] },
 

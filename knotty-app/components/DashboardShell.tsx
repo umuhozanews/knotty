@@ -25,6 +25,7 @@ const ROUTE_ACCESS: Array<{ path: string; roles: string[] }> = [
   { path: "/standalone-tap", roles: ["ADMIN","BURSAR","CANTEEN"] },
   { path: "/gate",           roles: ["ADMIN","GATEKEEPER","DISCIPLINE"] },
   { path: "/gate-access",    roles: ["ADMIN","GATEKEEPER"] },
+  { path: "/permissions",    roles: ["ADMIN","TEACHER","DISCIPLINE","GATEKEEPER","NURSE"] },
   { path: "/materials",      roles: ["ADMIN","MATERIALS"] },
   { path: "/logs",           roles: ["ADMIN"] },
   { path: "/reports",        roles: ["ADMIN"] },

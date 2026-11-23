@@ -37,6 +37,12 @@ export const PERMISSION_LABELS: Record<PermissionType, string> = {
   other:   "Other",
 };
 
+// RPCs below are not yet in generated DB types (migration pending) — cast to any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rpc(client: any, fn: string, args: Record<string, unknown>) {
+  return client.rpc(fn, args);
+}
+
 export const permissionsService = {
   async grantPermission(params: {
     schoolId: string;
@@ -47,7 +53,7 @@ export const permissionsService = {
   }): Promise<string> {
     const client = getSafeBrowserClient();
     if (!client) throw new Error("Supabase is not configured");
-    const { data, error } = await client.rpc("grant_student_permission", {
+    const { data, error } = await rpc(client, "grant_student_permission", {
       p_school_id:         params.schoolId,
       p_student_record_id: params.studentRecordId,
       p_permission_type:   params.permissionType,
@@ -61,7 +67,7 @@ export const permissionsService = {
   async getStudentPermissions(schoolId: string, studentRecordId: string): Promise<StudentPermission[]> {
     const client = getSafeBrowserClient();
     if (!client) throw new Error("Supabase is not configured");
-    const { data, error } = await client.rpc("get_student_permissions", {
+    const { data, error } = await rpc(client, "get_student_permissions", {
       p_school_id:         schoolId,
       p_student_record_id: studentRecordId,
     });
@@ -72,7 +78,7 @@ export const permissionsService = {
   async revokePermission(schoolId: string, permissionId: string): Promise<void> {
     const client = getSafeBrowserClient();
     if (!client) throw new Error("Supabase is not configured");
-    const { error } = await client.rpc("revoke_student_permission", {
+    const { error } = await rpc(client, "revoke_student_permission", {
       p_school_id:     schoolId,
       p_permission_id: permissionId,
     });
@@ -82,7 +88,7 @@ export const permissionsService = {
   async listTodayPermissions(schoolId: string, limit = 100): Promise<TodayPermissionRow[]> {
     const client = getSafeBrowserClient();
     if (!client) throw new Error("Supabase is not configured");
-    const { data, error } = await client.rpc("list_today_permissions", {
+    const { data, error } = await rpc(client, "list_today_permissions", {
       p_school_id: schoolId,
       p_limit:     limit,
     });

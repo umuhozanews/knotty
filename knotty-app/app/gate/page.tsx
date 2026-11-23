@@ -675,7 +675,7 @@ export default function GatePage() {
       try {
         if (isNfcUid) {
           const holder = await supabaseCanteenService.lookupCardHolderByNfcUid(schoolId, query);
-          if (holder) {
+          if (holder && (holder as any).holder_kind !== "staff" && holder.student_id) {
             studentData = {
               card_assignment_id: holder.card_assignment_id,
               card_number: holder.card_number,
@@ -707,7 +707,7 @@ export default function GatePage() {
           if (!studentData) {
             try {
               const holder = await supabaseCanteenService.lookupCardHolderByNfcUid(schoolId, query);
-              if (holder) {
+              if (holder && (holder as any).holder_kind !== "staff" && holder.student_id) {
                 studentData = {
                   card_assignment_id: holder.card_assignment_id,
                   card_number: holder.card_number,
@@ -963,7 +963,7 @@ export default function GatePage() {
       let resolved: StudentCard | null = null;
       if (isNfcUid) {
         const holder = await supabaseCanteenService.lookupCardHolderByNfcUid(schoolId, val.trim());
-        if (holder) {
+        if (holder && (holder as any).holder_kind !== "staff" && holder.student_id) {
           resolved = {
             card_assignment_id: holder.card_assignment_id,
             card_number: holder.card_number,

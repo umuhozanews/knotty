@@ -7,7 +7,7 @@ import {
   ArrowLeft,
   TrafficCone, Briefcase, GraduationCap, Banknote,
   ShoppingCart, Package, BookOpen, Stethoscope, Scale,
-  Users, UserCheck, Building2, TrendingUp, MessageSquare,
+  Users, UserCheck, Building2, TrendingUp, MessageSquare, KeyRound,
 } from "lucide-react";
 import { getSafeBrowserClient } from "@/lib/supabase/client";
 
@@ -92,9 +92,10 @@ const MANAGEMENT_BLOCKS = [
 ];
 
 const ACADEMIC_BLOCKS = [
-  { id: "library",  label: "Library",  sub: "Books & borrowing",    icon: BookOpen,   bg: "#7C3AED", href: "/library" },
-  { id: "health",   label: "Health",   sub: "Medical records",      icon: Stethoscope, bg: "#DC2626", href: "/health" },
-  { id: "conduct",  label: "Conduct",  sub: "Discipline & behaviour", icon: Scale,    bg: "#475569", href: "/discipline" },
+  { id: "library",     label: "Library",     sub: "Books & borrowing",       icon: BookOpen,    bg: "#7C3AED", href: "/library" },
+  { id: "health",      label: "Health",      sub: "Medical records",         icon: Stethoscope, bg: "#DC2626", href: "/health" },
+  { id: "conduct",     label: "Conduct",     sub: "Discipline & behaviour",  icon: Scale,       bg: "#475569", href: "/discipline" },
+  { id: "permissions", label: "Permissions", sub: "Student exit passes",     icon: KeyRound,    bg: "#0369A1", href: "/permissions" },
 ];
 
 export default function AdminDashboard() {

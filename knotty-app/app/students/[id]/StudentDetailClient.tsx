@@ -1094,6 +1094,20 @@ export default function StudentProfilePage() {
                       </button>
                     </form>
                   </div>
+
+                  <div className="flex gap-2 mb-5">
+                    {profile.card.is_frozen
+                      ? <button onClick={() => freezeCard(false)} className="flex-1 py-2.5 rounded-xl bg-green-500 text-sm text-white font-medium hover:bg-green-600 transition flex items-center justify-center gap-1.5">
+                          <ThermometerSnowflake size={14} /> Unfreeze Card
+                        </button>
+                      : <button onClick={() => freezeCard(true)} className="flex-1 py-2.5 rounded-xl bg-blue-500 text-sm text-white font-medium hover:bg-blue-600 transition flex items-center justify-center gap-1.5">
+                          <Snowflake size={14} /> Freeze Card
+                        </button>
+                    }
+                    <button onClick={issueCard} className="flex-1 py-2.5 rounded-xl bg-orange-500 text-sm text-white font-medium hover:bg-orange-600 transition flex items-center justify-center gap-1.5">
+                      <CreditCard size={14} /> Replace Card
+                    </button>
+                  </div>
                 </>
               ) : (
                 <div className="text-center py-8">

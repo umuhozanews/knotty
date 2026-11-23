@@ -1377,6 +1377,51 @@ export type Database = {
           wallet_balance: number;
         }[];
       };
+      grant_student_permission: {
+        Args: {
+          p_school_id: string;
+          p_student_record_id: string;
+          p_permission_type: string;
+          p_reason: string;
+          p_valid_until: string | null;
+        };
+        Returns: string;
+      };
+      get_student_permissions: {
+        Args: { p_school_id: string; p_student_record_id: string };
+        Returns: {
+          id: string;
+          permission_type: string;
+          reason: string;
+          granted_by_name: string;
+          granted_at: string;
+          valid_from: string;
+          valid_until: string | null;
+          status: string;
+          revoked_by_name: string | null;
+          revoked_at: string | null;
+        }[];
+      };
+      revoke_student_permission: {
+        Args: { p_school_id: string; p_permission_id: string };
+        Returns: void;
+      };
+      list_today_permissions: {
+        Args: { p_school_id: string; p_limit?: number };
+        Returns: {
+          id: string;
+          student_record_id: string;
+          student_name: string;
+          class_name: string;
+          profile_photo_path: string | null;
+          permission_type: string;
+          reason: string;
+          granted_by_name: string;
+          granted_at: string;
+          valid_until: string | null;
+          status: string;
+        }[];
+      };
       assign_scoped_role: {
         Args: {
           p_scope: string;

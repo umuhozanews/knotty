@@ -110,8 +110,9 @@ function PortalDashboardInner() {
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
   }
 
-  function handleLogout() {
-    clearPortalToken();
+  async function handleLogout() {
+    const token = getPortalToken();
+    if (token) await portalService.logout(token);
     router.replace("/portal");
   }
 

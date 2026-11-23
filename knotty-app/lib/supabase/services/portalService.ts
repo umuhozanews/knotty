@@ -336,5 +336,12 @@ export const portalService = {
     });
     if (error) throw new Error(error.message);
   },
+
+  async logout(token: string): Promise<void> {
+    const client = getSafeBrowserClient();
+    if (!client) return;
+    await rpc(client)("portal_logout", { p_token: token });
+    clearPortalToken();
+  },
 };
 

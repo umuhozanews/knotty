@@ -162,7 +162,7 @@ function IssueCardModal({
     } catch (err: any) {
       const raw = err instanceof Error ? err.message : "Card issuance failed";
       let msg = raw;
-      if (raw.includes("duplicate key") || raw.includes("unique constraint") || raw.toLowerCase().includes("already assigned")) {
+      if (raw === "card_already_in_use" || raw.includes("duplicate key") || raw.includes("unique constraint") || raw.toLowerCase().includes("already assigned")) {
         msg = "This NFC card is already assigned to someone else. Please use a different card.";
       } else if (raw === "forbidden" || raw.includes("permission required") || raw.includes("cards.issue")) {
         msg = "You don't have permission to issue cards for this school.";

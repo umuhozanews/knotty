@@ -50,7 +50,10 @@ Deno.serve(async (request) => {
     p_student_id: studentId, p_staff_record_id: staffId,
     p_identifier_kind: identifierKind, p_identifier_digest: `\\x${hex(digest)}`, p_digest_key_version: 1,
   });
-  if (error) return encode({ error: error.message || "card_issue_failed" }, 422);
+  if (error) {
+    if (error.code === "23505") return encode({ error: "card_already_in_use" }, 409);
+    return encode({ error: error.message || "card_issue_failed" }, 422);
+  }
   if (typeof cardId !== "string") return encode({ error: "card_issue_failed" }, 422);
   // Auto-activate so the card is immediately usable (no manual "Activate" step needed).
   const { error: activateError } = await userClient.rpc("activate_card", {

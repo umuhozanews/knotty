@@ -487,12 +487,6 @@ function ChangeCardStatusModal({
       setError("An audit reason of at least 3 characters is required.");
       return;
     }
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(card.id) || !uuidRegex.test(schoolId)) {
-      setError("This card was loaded from legacy storage and lacks a valid Supabase assignment UUID.");
-      return;
-    }
-
     setLoading(true);
     setError("");
     try {
@@ -601,52 +595,45 @@ export default function CardsPage() {
       const client = getSafeBrowserClient();
       if (!client) return;
 
-      // Load student cards, staff card assignments, and staff names in parallel
-      const [studentRes, staffCardRes, staffMembersRes] = await Promise.all([
+      // Load student cards, staff card assignments (via RPC — bypasses RLS), and staff names in parallel
+      const [studentRes, schoolCardsRes, staffMembersRes] = await Promise.all([
         client.rpc("list_school_students", { p_school_id: targetSchoolId, p_search: query || null }),
-        client.from("card_assignments")
-          .select("id, card_number, status, staff_record_id, wallet_balance")
-          .eq("school_id", targetSchoolId)
-          .eq("holder_kind", "staff"),
+        supabaseCardService.listSchoolCards(targetSchoolId).catch(() => [] as any[]),
         supabaseStaffService.listStaffMembers(targetSchoolId),
       ]);
 
       // ── Student cards ──────────────────────────────────────────────
       const studentRows = ((studentRes.data as any[]) ?? []).filter((r) => r.card_assignment_id);
-      const cardIds = studentRows.map((r: any) => r.card_assignment_id as string);
-      let walletMap: Record<string, number> = {};
-      if (cardIds.length > 0) {
-        const { data: wallets } = await client
-          .from("card_assignments")
-          .select("id, wallet_balance")
-          .in("id", cardIds);
-        (wallets || []).forEach((w: any) => { walletMap[w.id] = w.wallet_balance ?? 0; });
-      }
-      const studentCardItems: CardItem[] = studentRows.map((r: any) => ({
-        id: r.card_assignment_id,
-        card_number: r.card_number,
-        wallet_balance: walletMap[r.card_assignment_id] ?? 0,
-        is_frozen: r.card_status === "suspended",
-        holder_kind: "student" as const,
-        holder_name: r.legal_name ?? "",
-        holder_subtitle: [r.education_level_name, r.class_section_name].filter(Boolean).join(" · ") || "Student",
-      }));
+      // Build wallet map from the RPC cards list (which has wallet_balance for all cards)
+      const rpcCardMap = new Map(((schoolCardsRes as any[]) || []).map((c: any) => [c.card_assignment_id, c]));
+      const studentCardItems: CardItem[] = studentRows.map((r: any) => {
+        const rpcCard: any = rpcCardMap.get(r.card_assignment_id);
+        return {
+          id: r.card_assignment_id,
+          card_number: r.card_number,
+          wallet_balance: rpcCard?.wallet_balance ?? 0,
+          is_frozen: r.card_status === "suspended",
+          holder_kind: "student" as const,
+          holder_name: r.legal_name ?? "",
+          holder_subtitle: [r.education_level_name, r.class_section_name].filter(Boolean).join(" · ") || "Student",
+        };
+      });
 
-      // ── Staff cards ───────────────────────────────────────────────
+      // ── Staff cards (from RPC — not direct table, bypasses RLS correctly) ──
       const staffMap = new Map(((staffMembersRes as any[]) || []).map((s: any) => [s.staff_record_id, s]));
       const qLower = query.trim().toLowerCase();
-      const staffCardItems: CardItem[] = ((staffCardRes.data as any[]) ?? [])
-        .filter((c) => c.status !== "revoked" && c.status !== "replaced")
-        .filter((c) => {
+      const staffCardItems: CardItem[] = ((schoolCardsRes as any[]) ?? [])
+        .filter((c: any) => c.holder_kind === "staff" && c.status !== "revoked" && c.status !== "replaced")
+        .filter((c: any) => {
           if (!qLower) return true;
           const staff: any = staffMap.get(c.staff_record_id);
           return staff?.legal_name?.toLowerCase().includes(qLower) ?? false;
         })
-        .map((c) => {
+        .map((c: any) => {
           const staff: any = staffMap.get(c.staff_record_id);
           return {
-            id: c.id,
-            card_number: c.card_number,
+            id: c.card_assignment_id,
+            card_number: c.card_number ?? "",
             wallet_balance: c.wallet_balance ?? 0,
             is_frozen: c.status === "suspended",
             holder_kind: "staff" as const,

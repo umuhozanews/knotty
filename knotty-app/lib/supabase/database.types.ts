@@ -1373,6 +1373,8 @@ export type Database = {
           status: string;
           issued_at: string;
           activated_at: string | null;
+          card_number: string;
+          wallet_balance: number;
         }[];
       };
       assign_scoped_role: {

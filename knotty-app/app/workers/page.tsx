@@ -972,27 +972,29 @@ export default function WorkersPage() {
           : { first: (name ?? "").trim().slice(0, idx), last: (name ?? "").trim().slice(idx + 1) };
       };
 
-      const mapped: LocalWorkerItem[] = rows.map((r) => {
-        const { first, last } = nameParts(r.legal_name ?? "");
-        return {
-          id: r.staff_record_id,
-          person_id: r.person_id,
-          first_name: first,
-          last_name: last,
-          full_name: r.legal_name ?? "",
-          email: r.primary_email ?? "",
-          phone: r.primary_phone ?? "",
-          role: r.primary_role_category ?? "",
-          department: r.department ?? "",
-          job_title: r.job_title ?? "",
-          employee_code: r.staff_number ?? "",
-          is_active: r.employment_status === "active",
-          status: r.employment_status ?? "",
-          card_number: cardMap[r.staff_record_id]?.number || null,
-          card_id: cardMap[r.staff_record_id]?.id || null,
-          has_card: !!cardMap[r.staff_record_id],
-        };
-      });
+      const mapped: LocalWorkerItem[] = rows
+        .filter((r) => r.employment_status !== "terminated")
+        .map((r) => {
+          const { first, last } = nameParts(r.legal_name ?? "");
+          return {
+            id: r.staff_record_id,
+            person_id: r.person_id,
+            first_name: first,
+            last_name: last,
+            full_name: r.legal_name ?? "",
+            email: r.primary_email ?? "",
+            phone: r.primary_phone ?? "",
+            role: r.primary_role_category ?? "",
+            department: r.department ?? "",
+            job_title: r.job_title ?? "",
+            employee_code: r.staff_number ?? "",
+            is_active: r.employment_status === "active",
+            status: r.employment_status ?? "",
+            card_number: cardMap[r.staff_record_id]?.number || null,
+            card_id: cardMap[r.staff_record_id]?.id || null,
+            has_card: !!cardMap[r.staff_record_id],
+          };
+        });
       setAllWorkers(mapped);
     } catch (err: any) {
       const msg = err?.message || "";
@@ -1044,13 +1046,20 @@ export default function WorkersPage() {
     setDeletingId(worker.id);
     try {
       await supabaseStaffService.updateStaffStatus(schoolId, worker.id, "terminated", "Removed by admin");
-      setAllWorkers((prev) => prev.filter((w) => w.id !== worker.id));
-      show(`${worker.full_name} removed from staff`, "success");
     } catch (err: any) {
-      show(err?.message || "Failed to remove worker", "error");
-    } finally {
-      setDeletingId(null);
+      const msg = (err?.message || "").toLowerCase();
+      if (!msg.includes("terminal")) {
+        show(err?.message || "Failed to remove worker", "error");
+        setDeletingId(null);
+        return;
+      }
+      // Already terminated — still remove from UI
     }
+    // Revoke any active cards immediately
+    supabaseCardService.revokeStaffCards(schoolId, worker.id).catch(() => {});
+    setAllWorkers((prev) => prev.filter((w) => w.id !== worker.id));
+    show(`${worker.full_name} removed from staff`, "success");
+    setDeletingId(null);
   };
 
   const roleWorkers = selectedRole ? allWorkers.filter((w) => w.role === selectedRole) : [];

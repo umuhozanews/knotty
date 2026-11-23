@@ -15,6 +15,7 @@
     "supabase:migration:new": "supabase --workdir .. migration new"
   },
   "dependencies": {
+    "@sentry/nextjs": "^11.16.0",
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.118.0",
     "@swc/helpers": "^0.5.23",

@@ -670,7 +670,7 @@ export default function StudentProfilePage() {
     const amt = parseInt(canteenAmount, 10);
     if (isNaN(amt) || amt < 1) { show("Enter a valid amount", "error"); return; }
     if (amt > profile.card.wallet_balance) {
-      show(`Insufficient balance — ${profile.card.wallet_balance.toLocaleString()} RWF available`, "error");
+      show(`Insufficient balance — ${(profile.card.wallet_balance ?? 0).toLocaleString()} RWF available`, "error");
       return;
     }
     setProcessingPurchase(true);
@@ -789,7 +789,7 @@ export default function StudentProfilePage() {
                   <p className="text-xs text-green-100/70 font-mono mt-1">{profile.card.card_number}</p>
                   {user?.role !== "TEACHER" && (
                     <p className="text-base font-bold text-white mt-1">
-                      {profile.card.wallet_balance.toLocaleString()} <span className="text-xs font-normal text-green-100/70">RWF</span>
+                      {(profile.card.wallet_balance ?? 0).toLocaleString()} <span className="text-xs font-normal text-green-100/70">RWF</span>
                     </p>
                   )}
                 </div>
@@ -901,7 +901,7 @@ export default function StudentProfilePage() {
                     <div className="space-y-0">
                       {[
                         ["Card Number", profile.card.card_number],
-                        user?.role !== "TEACHER" ? ["Balance", `${profile.card.wallet_balance.toLocaleString()} RWF`] : null,
+                        user?.role !== "TEACHER" ? ["Balance", `${(profile.card.wallet_balance ?? 0).toLocaleString()} RWF`] : null,
                         ["Status", profile.card.status === "active" ? "Active"
                           : profile.card.status === "suspended" ? "Frozen"
                           : profile.card.status === "lost" ? "Lost"
@@ -1064,7 +1064,7 @@ export default function StudentProfilePage() {
                     <div className="flex items-start justify-between">
                       <div>
                         <p className="text-sm text-white/70 mb-1">Current Balance</p>
-                        <p className="text-4xl font-bold">{profile.card.wallet_balance.toLocaleString()}</p>
+                        <p className="text-4xl font-bold">{(profile.card.wallet_balance ?? 0).toLocaleString()}</p>
                         <p className="text-sm text-white/80">RWF</p>
                       </div>
                       <div className="text-right">
@@ -1282,7 +1282,7 @@ export default function StudentProfilePage() {
                     <div>
                       <p className="text-xs font-bold text-orange-800 dark:text-orange-300 uppercase tracking-wider">Quick Deduction</p>
                       <p className="text-xs text-orange-600 dark:text-orange-400 mt-0.5">
-                        Balance: <span className="font-bold">{profile.card.wallet_balance.toLocaleString()} RWF</span>
+                        Balance: <span className="font-bold">{(profile.card.wallet_balance ?? 0).toLocaleString()} RWF</span>
                       </p>
                     </div>
                     <ShoppingBag size={20} className="text-orange-400" />

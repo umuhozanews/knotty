@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -614,7 +614,7 @@ function StudentRow({ s, idx, onEdit, onDelete, onIssue, onStatus, issuing, isCl
         {user?.role !== "TEACHER" && (
           s.card ? (
             <p className="text-[11px] font-bold text-blue-600 dark:text-blue-400 mt-0.5 sm:hidden">
-              Balance: {s.card.wallet_balance.toLocaleString()} RWF
+              Balance: {(s.card.wallet_balance ?? 0).toLocaleString()} RWF
             </p>
           ) : (
             <p className="text-xs text-gray-400 mt-0.5 sm:hidden">No card</p>
@@ -630,7 +630,7 @@ function StudentRow({ s, idx, onEdit, onDelete, onIssue, onStatus, issuing, isCl
         {user?.role !== "TEACHER" ? (
           s.card ? (
             <p className="text-xs font-bold text-blue-600 dark:text-blue-400 mt-0.5">
-              {s.card.wallet_balance.toLocaleString()} <span className="text-[10px] font-normal text-blue-500/70 dark:text-blue-400/70">RWF</span>
+              {(s.card.wallet_balance ?? 0).toLocaleString()} <span className="text-[10px] font-normal text-blue-500/70 dark:text-blue-400/70">RWF</span>
             </p>
           ) : <p className="text-xs text-gray-300">No card</p>
         ) : null}

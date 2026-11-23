@@ -42,7 +42,7 @@ function TopUpModal({ card, schoolId, onClose, onSuccess }: { card: CardItem; sc
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
         <h3 className="font-bold text-gray-800 mb-4">Top Up Wallet</h3>
-        <p className="text-xs text-gray-400 mb-4">Card: <span className="font-mono">{card.card_number}</span> · Current: {card.wallet_balance.toLocaleString()} RWF</p>
+        <p className="text-xs text-gray-400 mb-4">Card: <span className="font-mono">{card.card_number}</span> · Current: {(card.wallet_balance ?? 0).toLocaleString()} RWF</p>
         <form onSubmit={submit} className="space-y-3">
           <input type="number" min={100} required value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount (RWF)" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500" />
           <div className="flex gap-3">
@@ -775,7 +775,7 @@ export default function CardsPage() {
                       <td className="py-3 font-mono text-xs text-gray-500 dark:text-gray-400">{card.card_number}</td>
                       <td className="py-3">
                         <span className={`text-sm font-bold ${card.wallet_balance < 1000 ? "text-red-500" : "text-teal-600"}`}>
-                          {card.wallet_balance.toLocaleString()} RWF
+                          {(card.wallet_balance ?? 0).toLocaleString()} RWF
                         </span>
                       </td>
                       <td className="py-3">

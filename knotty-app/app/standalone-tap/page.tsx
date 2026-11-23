@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect } from "react";
 import DashboardShell from "@/components/DashboardShell";
@@ -485,7 +485,7 @@ export default function StandaloneTapPage() {
                         </div>
                         <div className="p-3 bg-slate-950 rounded-xl border border-white/5">
                           <p className="text-gray-400">Wallet Balance</p>
-                          <p className="font-mono font-bold text-emerald-400 mt-1">{lastTapResult.student.wallet_balance.toLocaleString()} RWF</p>
+                          <p className="font-mono font-bold text-emerald-400 mt-1">{(lastTapResult.student.wallet_balance ?? 0).toLocaleString()} RWF</p>
                         </div>
                       </div>
                     </div>
@@ -598,7 +598,7 @@ export default function StandaloneTapPage() {
                           <td className="py-3 font-medium text-white">{s.first_name} {s.last_name}</td>
                           <td className="py-3 font-mono text-blue-400">{s.card_number}</td>
                           <td className="py-3 font-mono text-emerald-400">{s.nfc_uid || "Not linked"}</td>
-                          <td className="py-3 font-mono">{s.wallet_balance.toLocaleString()} RWF</td>
+                          <td className="py-3 font-mono">{(s.wallet_balance ?? 0).toLocaleString()} RWF</td>
                           <td className="py-3">
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${s.is_frozen ? "bg-rose-500/20 text-rose-400" : "bg-emerald-500/20 text-emerald-400"}`}>
                               {s.is_frozen ? "Frozen" : "Active"}

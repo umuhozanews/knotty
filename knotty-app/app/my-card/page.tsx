@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { getSafeBrowserClient } from "@/lib/supabase/client";
@@ -79,7 +79,7 @@ export default function MyCardPage() {
               <div className="mt-6">
                 <p className="text-xs opacity-50 mb-0.5 font-semibold">Wallet Balance</p>
                 <p className="text-3xl font-extrabold tracking-tight">
-                  {cardInfo.wallet_balance.toLocaleString()} <span className="text-base font-normal opacity-70">RWF</span>
+                  {(cardInfo.wallet_balance ?? 0).toLocaleString()} <span className="text-base font-normal opacity-70">RWF</span>
                 </p>
               </div>
               <div className="mt-4">
@@ -92,7 +92,7 @@ export default function MyCardPage() {
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-4 text-center">
                 <TrendingUp size={20} className="mx-auto text-[#121212] mb-1.5" />
-                <p className="text-lg font-extrabold tracking-tight text-[#121212]">{cardInfo.wallet_balance.toLocaleString()}</p>
+                <p className="text-lg font-extrabold tracking-tight text-[#121212]">{(cardInfo.wallet_balance ?? 0).toLocaleString()}</p>
                 <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Balance (RWF)</p>
               </div>
               <div className="bg-[#ffffff] rounded-lg border border-[#dcd9d9] p-4 text-center">

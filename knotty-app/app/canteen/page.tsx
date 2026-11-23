@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useState, useRef, useCallback } from "react";
 import {
   Plus, Minus, ShoppingCart, Trash2,
@@ -273,7 +273,7 @@ export default function CanteenPage() {
       if (holder.is_frozen) throw new Error("Card is frozen");
       if (holder.wallet_balance < total) {
         playTone("error");
-        toast(`Insufficient — ${holder.wallet_balance.toLocaleString()} RWF available`, "error");
+        toast(`Insufficient — ${(holder.wallet_balance ?? 0).toLocaleString()} RWF available`, "error");
         processingRef.current = false;
         return;
       }

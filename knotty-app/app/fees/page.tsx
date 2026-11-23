@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
   GraduationCap, Bus, Wallet, MoreHorizontal,
@@ -644,7 +644,7 @@ export default function FeesPage() {
                       <p className="text-xs text-gray-500">{nfcCard.class_name} · {nfcCard.admission_number}</p>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <p className="text-sm font-bold text-purple-700">{nfcCard.wallet_balance.toLocaleString()}</p>
+                      <p className="text-sm font-bold text-purple-700">{(nfcCard.wallet_balance ?? 0).toLocaleString()}</p>
                       <p className="text-[10px] text-gray-400">wallet RWF</p>
                     </div>
                   </div>

@@ -186,7 +186,7 @@ export default function NFCQuickCheck() {
                       <div className="flex items-center gap-1.5 mt-1">
                         <Wallet size={12} className="text-purple-600" />
                         <p className="text-sm font-bold text-purple-700">
-                          {student.wallet_balance.toLocaleString()} RWF
+                          {(student.wallet_balance ?? 0).toLocaleString()} RWF
                           <span className="text-xs font-normal text-gray-400 ml-1">pocket balance</span>
                         </p>
                       </div>

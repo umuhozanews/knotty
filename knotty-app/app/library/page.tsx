@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Book, BookOpen, Plus, X, Search, AlertTriangle, CheckCircle,
@@ -1922,7 +1922,7 @@ export default function LibraryPage() {
                       <p className="text-[11px]" style={{ color: "#666" }}>
                         {modalStudent.studentClass} · Card: {modalStudent.card_number}
                         {modalStudent.wallet_balance !== undefined && (
-                          <span className="ml-1 text-gray-700 font-semibold">({modalStudent.wallet_balance.toLocaleString()} RWF)</span>
+                          <span className="ml-1 text-gray-700 font-semibold">({(modalStudent.wallet_balance ?? 0).toLocaleString()} RWF)</span>
                         )}
                       </p>
                     </div>

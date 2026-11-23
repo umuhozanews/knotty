@@ -1417,9 +1417,13 @@ export default function LibraryPage() {
                   {student ? (
                     <div className="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-100">
                       <div className="px-5 py-4 flex items-center gap-3.5 bg-gradient-to-r from-orange-50 to-orange-100/50 border-b border-orange-100">
-                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-white text-lg flex-shrink-0 bg-[#16A34A] shadow-sm">
-                          {student.name[0]?.toUpperCase()}
-                        </div>
+                        {student.photo ? (
+                          <img src={student.photo} className="w-12 h-12 rounded-2xl object-cover flex-shrink-0 border border-white shadow-sm" alt="" />
+                        ) : (
+                          <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-white text-lg flex-shrink-0 bg-[#16A34A] shadow-sm">
+                            {student.name[0]?.toUpperCase()}
+                          </div>
+                        )}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <h4 className="text-base font-bold text-gray-900 truncate">{student.name}</h4>
@@ -1427,15 +1431,10 @@ export default function LibraryPage() {
                               Card Verified
                             </span>
                           </div>
-                          <div className="flex items-center gap-3 text-xs text-gray-600 mt-0.5">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-600 mt-0.5">
                             <span>Class: <strong>{student.studentClass || "General"}</strong></span>
                             {student.student_code && <span>ID: <strong>{student.student_code}</strong></span>}
-                            <span>Card: <strong>{student.card_number}</strong></span>
                           </div>
-                        </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Card Wallet</p>
-                          <p className="text-sm font-bold text-gray-900">{(student.wallet_balance ?? 0).toLocaleString()} RWF</p>
                         </div>
                         <button
                           type="button"

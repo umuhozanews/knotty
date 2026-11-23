@@ -199,4 +199,27 @@ export const supabaseCardService = {
     if (error) throw new Error(error.message);
     return data?.[0] ?? null;
   },
+
+  async revokeStaffCards(schoolId: string, staffRecordId: string): Promise<void> {
+    const client = getSafeBrowserClient();
+    if (!client) return;
+    const { data: activeCards } = await client
+      .from("card_assignments")
+      .select("id")
+      .eq("school_id", schoolId)
+      .eq("holder_kind", "staff")
+      .eq("staff_record_id", staffRecordId)
+      .eq("status", "active");
+    if (!activeCards?.length) return;
+    await Promise.all(
+      activeCards.map((card) =>
+        client.rpc("change_card_status", {
+          p_school_id: schoolId,
+          p_card_assignment_id: card.id,
+          p_new_status: "revoked",
+          p_reason: "Staff terminated",
+        })
+      )
+    );
+  },
 };

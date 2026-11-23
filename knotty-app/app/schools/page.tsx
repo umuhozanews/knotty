@@ -17,6 +17,7 @@ import {
   type EducationLevelRow,
   type ClassSectionRow,
 } from "@/lib/supabase/services";
+import { supabaseCardService } from "@/lib/supabase/services/cardService";
 import { getSafeBrowserClient } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
@@ -553,6 +554,8 @@ export default function SchoolsPage() {
     } finally {
       setDeletingStaff(null);
     }
+    // Revoke any active NFC/card assignments so the physical card stops working immediately
+    supabaseCardService.revokeStaffCards(targetSchoolId, s.id).catch(() => {});
     setStaff((prev) => prev.filter((x) => x.id !== s.id));
     show(`${s.name} has been removed.`, "success");
   }

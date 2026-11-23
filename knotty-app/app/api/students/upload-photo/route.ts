@@ -1,11 +1,19 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { createClient as createServerClient } from "@/lib/supabase/server";
 
 function clean(s: string): string {
   return s.replace(/﻿/g, "").replace(/​/g, "").replace(/‌/g, "").replace(/‍/g, "").replace(/­/g, "").trim();
 }
 
 export async function POST(req: NextRequest) {
+  // Require an authenticated session
+  const supabaseSession = await createServerClient();
+  const { data: { user: sessionUser } } = await supabaseSession.auth.getUser();
+  if (!sessionUser) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { student_id, school_id, photo_base64, content_type } = await req.json();
 
   if (!student_id || !school_id || !photo_base64) {

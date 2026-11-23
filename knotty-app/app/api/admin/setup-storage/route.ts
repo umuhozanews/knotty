@@ -1,11 +1,17 @@
 import { createClient } from "@supabase/supabase-js";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 function clean(s: string): string {
   return s.replace(/﻿/g, "").replace(/​/g, "").replace(/‌/g, "").replace(/‍/g, "").replace(/­/g, "").trim();
 }
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  // Require PLATFORM_SETUP_KEY to prevent unauthorized bucket manipulation
+  const { setup_key } = await req.json().catch(() => ({}));
+  const expectedKey = process.env.PLATFORM_SETUP_KEY;
+  if (!expectedKey || setup_key !== expectedKey) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
   const serviceRoleKey = clean(process.env.SUPABASE_SERVICE_ROLE_KEY || "");
   const supabaseUrl = clean(process.env.NEXT_PUBLIC_SUPABASE_URL || "");
 

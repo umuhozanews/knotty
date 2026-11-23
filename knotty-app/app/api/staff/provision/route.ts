@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { createClient as createServerClient } from "@/lib/supabase/server";
 
 function clean(s: string): string {
   return s
@@ -38,6 +39,13 @@ export async function POST(req: NextRequest) {
 
   if (!school_id || !legal_name || !email || !role_key || !actor_auth_user_id) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+  }
+
+  // Verify the caller's session matches the declared actor
+  const supabaseSession = await createServerClient();
+  const { data: { user: sessionUser } } = await supabaseSession.auth.getUser();
+  if (!sessionUser || sessionUser.id !== actor_auth_user_id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const serviceRoleKey = clean(process.env.SUPABASE_SERVICE_ROLE_KEY || "");

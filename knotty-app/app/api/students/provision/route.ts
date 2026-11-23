@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { createClient as createServerClient } from "@/lib/supabase/server";
 
 // Strip BOM (U+FEFF) and common invisible Unicode characters from any string
 function clean(s: string): string {
@@ -22,6 +23,13 @@ export async function POST(req: NextRequest) {
 
   if (!school_id || !contact || !admission_number || !legal_name || !actor_auth_user_id) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+  }
+
+  // Verify the caller's session matches the declared actor
+  const supabaseSession = await createServerClient();
+  const { data: { user: sessionUser } } = await supabaseSession.auth.getUser();
+  if (!sessionUser || sessionUser.id !== actor_auth_user_id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   // Strip BOM from env vars (can occur if key was pasted from a document)
